@@ -293,8 +293,9 @@ async function makeSignedHelloAsync(opts){
   const ts = Math.floor(Date.now() / 1000);
   const nonceA = crypto.getRandomValues(new Uint32Array(1))[0];
 
-  // Offer payload: lean — no type/v fields (saves ~27 chars).
+  // Offer payload: v added to signed payload (Fix #1 — version now inside signature).
   const offerPayload = {
+    v: 2,
     lat,
     lon,
     acc,
@@ -345,6 +346,8 @@ async function verifyHelloOfferAsync(helloObj, opts){
   const now = Math.floor(Date.now() / 1000);
   const ts = Number(offer.payload.ts);
   if (!Number.isFinite(ts)) throw new Error("HELLO offer timestamp missing.");
+  // Fix #2: Reject timestamps significantly in the future (allows 5s clock skew).
+  if (ts > now + 5) throw new Error("HELLO offer timestamp is in the future (" + (ts - now) + "s ahead).");
   const dt = Math.abs(now - ts);
   if (dt > tsTolS) throw new Error("HELLO offer timestamp outside tolerance (" + dt + "s > " + tsTolS + "s).");
 
@@ -384,8 +387,9 @@ async function makeReturnForHelloAsync(helloB64url, opts){
   const ts = Math.floor(Date.now() / 1000);
   const nonceB = crypto.getRandomValues(new Uint32Array(1))[0];
 
-  // Deploy 76: no type/v in payload (saves ~22 chars).
+  // Fix #1: v added to signed payload (version now inside signature).
   const payload = {
+    v: 2,
     helloHash,
     offerHash: offerInfo.offerHash || undefined,
     lat,
@@ -462,6 +466,8 @@ async function processScannedResponse(otherRespObj, opts){
   const now = Math.floor(Date.now() / 1000);
   const ts = Number(other.payload.ts);
   if (!Number.isFinite(ts)) throw new Error("Response timestamp missing.");
+  // Fix #2: Reject timestamps significantly in the future (allows 5s clock skew).
+  if (ts > now + 5) throw new Error("Response timestamp is in the future (" + (ts - now) + "s ahead).");
   const dt = Math.abs(now - ts);
   if (dt > tsTolS) {
     throw new Error("Timestamp outside tolerance (" + dt + "s > " + tsTolS + "s).");

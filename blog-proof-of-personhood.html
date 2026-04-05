@@ -162,15 +162,14 @@
   "ts": 1743750000,
   "offer": {
     "payload": {
-      "v": 1,
-      "type": "offerPayload",
+      "v": 2,
       "lat": 51.509865,
       "lon": -0.118092,
       "acc": 8.3,
       "ts": 1743750000,
       "nonce": 3847261049
     },
-    "hash": "base64url(SHA-256(canonical(offerPayload)))",
+    "hash": "base64url(SHA-256(JSON.stringify(offerPayload)))",
     "sig":  "base64url(ECDSA_P256_sign(hash, A_privKey))"
   }
 }</code></pre>
@@ -188,8 +187,7 @@
   "v": 2,
   "type": "response",
   "payload": {
-    "v": 1,
-    "type": "payload",
+    "v": 2,
     "helloHash":  "base64url(SHA-256(HELLO_bytes))",
     "offerHash":  "base64url(SHA-256(offerPayload_bytes))",
     "lat": 51.509871,
@@ -281,7 +279,7 @@
 
   <p><strong>JSON malleability.</strong> JSON permits whitespace variation that produces different byte sequences for semantically identical structures. Hashing raw JSON therefore has edge cases. A <code>canonical()</code> function is already defined in the codebase and sorts keys alphabetically — however it is not currently used in the hashing path, which uses <code>JSON.stringify()</code> directly. In practice the payload objects are always constructed with a consistent key order, limiting the real-world risk, but formal canonicalisation is not specified and wiring in <code>canonical()</code> is planned for a future revision.</p>
 
-  <p><strong>Fields outside the signature.</strong> The version number, message type, and public key sit outside the signed payload. In practice the public key cannot be swapped without breaking signature verification, and message type is explicitly validated before any cryptographic check. Only the version field is genuinely unchecked, leaving a theoretical downgrade attack vector. A future protocol revision should cover all envelope fields within the signed payload.</p>
+  <p><strong>Fields outside the signature.</strong> The message type and public key sit outside the signed payload at the envelope level. In practice the public key cannot be swapped without breaking signature verification, and message type is explicitly validated before any cryptographic check. The version field is now included inside both signed payloads (offer and response), closing the theoretical downgrade attack vector. A future protocol revision should formally cover all remaining envelope fields within the signed payload.</p>
 
   <p><strong>Previously addressed: nonce/timestamp duplication.</strong> An earlier version of the protocol included the nonce and timestamp redundantly at both the top level of the HELLO and inside the signed offer payload. This was removed in Deploy 76 — they now appear only inside the signed payload where they are covered by the signature.</p>
 
