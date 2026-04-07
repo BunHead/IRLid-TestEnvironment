@@ -946,11 +946,19 @@
   //  HASH PARSING
   // =========================
 
-  function parseFromHash(){
+  async function parseFromHash(){
     const h = location.hash || "";
     const mReceipt = h.match(/receipt=([A-Za-z0-9\-_]+)/);
     if (mReceipt) return { kind: "server", hash: mReceipt[1] };
 
+    const mCombZ = h.match(/COMB_Z=([A-Za-z0-9\-_]+)/);
+    if (mCombZ) {
+      // Compressed + stripped combined receipt
+      try {
+        const obj = await irlidDecompressFromB64url(mCombZ[1]);
+        return { kind: "comb", raw: mCombZ[1], obj };
+      } catch { return { kind: "comb", raw: mCombZ[1], obj: null }; }
+    }
     const mComb = h.match(/COMB=([A-Za-z0-9\-_]+)/);
     if (mComb) {
       try { return { kind: "comb", raw: mComb[1], obj: irlidDecodeB64urlJson(mComb[1]) }; }
@@ -1422,7 +1430,7 @@
   (async () => {
     if (typeof refreshNav === "function") await refreshNav();
 
-    const fromHash = parseFromHash();
+    const fromHash = await parseFromHash();
 
     // ---- DETAIL: server receipt by hash ----
     if (fromHash && fromHash.kind === "server") {
@@ -1456,7 +1464,7 @@
 
   // Handle hash changes (back button, clicking items)
   window.addEventListener("hashchange", async () => {
-    const fromHash = parseFromHash();
+    const fromHash = await parseFromHash();
 
     if (fromHash && fromHash.kind === "server") {
       await loadServerReceiptByHash(fromHash.hash);

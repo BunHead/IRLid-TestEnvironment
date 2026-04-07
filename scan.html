@@ -731,8 +731,15 @@
 
     // Fallback only if upload genuinely failed
     if (!receiptUrl) {
-      receiptUrl = "receipt.html#COMB=" + irlidEncodeJsonToB64url(irlidStripCombinedForEncoding(out.combined));
-      dbg("Using local COMB fallback (upload failed) — stripped for compact QR");
+      const stripped = irlidStripCombinedForEncoding(out.combined);
+      if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
+        const compressed = await irlidCompressToB64url(stripped);
+        receiptUrl = "receipt.html#COMB_Z=" + compressed;
+        dbg("Using local COMB_Z fallback (compressed + stripped)");
+      } else {
+        receiptUrl = "receipt.html#COMB=" + irlidEncodeJsonToB64url(stripped);
+        dbg("Using local COMB fallback (stripped, no compression available)");
+      }
     }
 
     // Clear the HELLO — handshake is complete

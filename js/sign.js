@@ -333,14 +333,16 @@ async function verifyHelloOfferAsync(helloObj, opts){
   if (!helloObj.offer) return { ok: true, mode: "unsigned-v1", offerHash: null };
 
   const offer = helloObj.offer;
-  if (!offer || !offer.payload || !offer.hash || !offer.sig) {
+  if (!offer || !offer.payload || !offer.sig) {
     throw new Error("Invalid HELLO (bad offer structure).");
   }
 
   const computed = await hashPayloadToB64url(offer.payload);
-  if (computed !== offer.hash) throw new Error("HELLO offer hash mismatch.");
+  // offer.hash may be stripped in compact receipts — if present, verify it matches.
+  if (offer.hash && computed !== offer.hash) throw new Error("HELLO offer hash mismatch.");
+  const hashToVerify = offer.hash || computed;
 
-  const sigOk = await verifySig(offer.hash, offer.sig, helloObj.pub);
+  const sigOk = await verifySig(hashToVerify, offer.sig, helloObj.pub);
   if (!sigOk) throw new Error("HELLO offer signature invalid.");
 
   const now = Math.floor(Date.now() / 1000);
