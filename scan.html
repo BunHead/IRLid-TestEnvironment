@@ -731,8 +731,8 @@
 
     // Fallback only if upload genuinely failed
     if (!receiptUrl) {
-      receiptUrl = "receipt.html#COMB=" + irlidEncodeJsonToB64url(out.combined);
-      dbg("Using local COMB fallback (upload failed)");
+      receiptUrl = "receipt.html#COMB=" + irlidEncodeJsonToB64url(irlidStripCombinedForEncoding(out.combined));
+      dbg("Using local COMB fallback (upload failed) — stripped for compact QR");
     }
 
     // Clear the HELLO — handshake is complete

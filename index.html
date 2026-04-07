@@ -156,7 +156,8 @@
         if (!cachedHello) {
           cachedHello = await generateHello();
 
-          const baseUrl = location.origin + (location.pathname.includes("/IRLid") ? "/IRLid" : "");
+          // Derive base from actual page location — works for live site, TestEnvironment, and localhost.
+          const baseUrl = location.origin + location.pathname.replace(/\/[^/]*$/, "");
           if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
             const compressed = await irlidCompressToB64url(cachedHello);
             cachedHelloUrl = `${baseUrl}/accept.html#HZ=${compressed}`;

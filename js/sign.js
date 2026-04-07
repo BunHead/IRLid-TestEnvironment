@@ -424,6 +424,33 @@ async function makeReturnForHelloAsync(helloB64url, opts){
 
 
 
+// Returns a lean copy of the combined receipt for QR/URL encoding.
+// Strips fields that can be recomputed during verification:
+//   hello.offer.hash  — SHA-256 of offer.payload (recomputable)
+//   a.hash            — SHA-256 of a.payload (recomputable)
+//   a.pub             — identical to hello.pub (redundant)
+//   b.hash            — SHA-256 of b.payload (recomputable)
+// Savings: ~220 chars uncompressed, reducing QR density.
+function irlidStripCombinedForEncoding(combined) {
+  if (!combined) return combined;
+  const c = Object.assign({}, combined);
+  if (c.hello && c.hello.offer) {
+    c.hello = Object.assign({}, c.hello);
+    c.hello.offer = Object.assign({}, c.hello.offer);
+    delete c.hello.offer.hash;
+  }
+  if (c.a) {
+    c.a = Object.assign({}, c.a);
+    delete c.a.hash;
+    delete c.a.pub;
+  }
+  if (c.b) {
+    c.b = Object.assign({}, c.b);
+    delete c.b.hash;
+  }
+  return c;
+}
+
 async function processScannedResponse(otherRespObj, opts){
   const helloB64url = opts && opts.hello ? opts.hello : null;
   const tsTolS = (opts && Number.isFinite(opts.tsTolS)) ? opts.tsTolS : 90;

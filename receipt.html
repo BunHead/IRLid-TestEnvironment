@@ -677,7 +677,8 @@
   // =========================
 
   async function resolvePartyInfo(comb, serverPartyInfo){
-    const pubA = comb.a && comb.a.pub ? comb.a.pub : null;
+    // a.pub may be stripped (redundant — same as hello.pub). Fall back gracefully.
+    const pubA = (comb.a && comb.a.pub) ? comb.a.pub : (comb.hello && comb.hello.pub ? comb.hello.pub : null);
     const pubB = comb.b && comb.b.pub ? comb.b.pub : null;
 
     // Get this device's local public key to identify which side is "me"
@@ -882,16 +883,21 @@
   //  VALIDATION
   // =========================
 
-  async function validateResponse(resp){
+  // fallbackPub: used when resp.pub has been stripped (a.pub removed — same as hello.pub).
+  // hash is recomputed from payload if missing (stripped for compact receipt encoding).
+  async function validateResponse(resp, fallbackPub){
     const results = { okStructure: false, okHash: false, okSig: false, computedHash: null };
-    if (!resp || resp.type !== "response" || !resp.payload || !resp.hash || !resp.sig || !resp.pub) return results;
+    const pub = (resp && resp.pub) ? resp.pub : (fallbackPub || null);
+    if (!resp || resp.type !== "response" || !resp.payload || !resp.sig || !pub) return results;
     results.okStructure = true;
+    let hashToUse;
     try {
       const computed = await hashPayloadToB64url(resp.payload);
       results.computedHash = computed;
-      results.okHash = (computed === resp.hash);
+      results.okHash = resp.hash ? (computed === resp.hash) : true; // if stripped, recomputed is authoritative
+      hashToUse = computed;
     } catch { results.okHash = false; }
-    try { results.okSig = await verifySig(resp.hash, resp.sig, resp.pub); } catch { results.okSig = false; }
+    try { results.okSig = await verifySig(hashToUse, resp.sig, pub); } catch { results.okSig = false; }
     return results;
   }
 
@@ -1244,9 +1250,13 @@
       setPersonPanel(aCoords, aTime, aAcc, respA, mapsUrl);
       setPersonPanel(bCoords, bTime, bAcc, respB, mapsUrl);
 
+      // Hoist helloObj so it's available as fallback pub for validateResponse below.
+      const helloObj = comb.hello || null;
+
       // ---- Signature & structure checks ----
       if (respA) {
-        const vr = await validateResponse(respA);
+        // Pass hello.pub as fallback — a.pub is stripped in compact receipts (same key).
+        const vr = await validateResponse(respA, helloObj && helloObj.pub ? helloObj.pub : null);
         addCheck("Self: structure", vr.okStructure);
         addCheck("Self: hash", vr.okHash, vr.okHash ? "" : "computed=" + (vr.computedHash || "?"));
         addCheck("Self: signature", vr.okSig);
@@ -1264,7 +1274,6 @@
       }
 
       // --- Protocol v2 checks: HELLO offer ---
-      const helloObj = comb.hello || null;
       if (helloObj) {
         try {
           const offerInfo = await verifyHelloOfferAsync(helloObj, { tsTolS: 999999999 });
@@ -1277,8 +1286,11 @@
           const helloHash = await irlidHelloHashB64url(helloObj);
           if (respA && respA.payload) addCheck("Self binds HELLO", respA.payload.helloHash === helloHash);
           if (respB && respB.payload) addCheck("Guest binds HELLO", respB.payload.helloHash === helloHash);
-          if (helloObj.offer && helloObj.offer.hash) {
-            const oh = helloObj.offer.hash;
+          // offer.hash may be stripped — recompute from offer.payload if missing.
+          if (helloObj.offer && helloObj.offer.payload) {
+            const oh = helloObj.offer.hash
+              ? helloObj.offer.hash
+              : await hashPayloadToB64url(helloObj.offer.payload);
             if (respA && respA.payload) addCheck("Self binds offer", respA.payload.offerHash === oh);
             if (respB && respB.payload) addCheck("Guest binds offer", respB.payload.offerHash === oh);
           }

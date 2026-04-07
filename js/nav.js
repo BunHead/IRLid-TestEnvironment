@@ -88,7 +88,28 @@
     }
   }
 
+  function injectTestBanner() {
+    var host = window.location.hostname;
+    var path = window.location.pathname;
+    var isTest = host.includes("github.io") || path.includes("IRLid-TestEnvironment");
+    if (!isTest) return;
+    var banner = document.createElement("div");
+    banner.id = "test-env-banner";
+    banner.textContent = "⚠ TEST ENVIRONMENT — not the live site";
+    banner.style.cssText = [
+      "position:fixed", "top:0", "left:0", "right:0", "z-index:9999",
+      "background:#e65c00", "color:#fff", "text-align:center",
+      "font-size:13px", "font-weight:700", "letter-spacing:0.04em",
+      "padding:5px 8px", "pointer-events:none"
+    ].join(";");
+    document.body.insertBefore(banner, document.body.firstChild);
+    // Push page content down so banner doesn't overlap nav
+    document.body.style.paddingTop = (document.body.style.paddingTop
+      ? parseInt(document.body.style.paddingTop) + 28 : 28) + "px";
+  }
+
   function initNav() {
+    injectTestBanner();
     renderAccountNav(isLoggedIn());
     wireDropdownCloseBehavior();
   }
