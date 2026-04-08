@@ -190,8 +190,8 @@ body{
 @media (max-width: 720px){
   .home-qr canvas,
   .home-qr img{
-    max-width: 55vw;
-    max-height: 55vw;
+    width: 55vw !important;
+    height: 55vw !important;
   }
 }
 

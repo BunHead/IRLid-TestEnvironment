@@ -102,6 +102,27 @@
       margin: 0 auto;
     }
 
+    /* --- Receipt hash chip (copyable, below QR) --- */
+    .receipt-hash-chip{
+      display: inline-flex; align-items: center; gap: 8px;
+      margin: 8px auto 0; padding: 6px 12px;
+      background: #f5f5f5; border: 1px solid #ddd; border-radius: 20px;
+      font-size: 12px; font-family: monospace; color: #444;
+      cursor: pointer; user-select: all; max-width: min(92vw, 420px);
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    .receipt-hash-chip:active{ background: #e0e0e0; }
+    .receipt-hash-chip .copy-icon{ flex-shrink: 0; opacity: 0.5; font-size: 14px; }
+
+    /* --- v3 version badge top-right of QR --- */
+    .qr-version-wrap{ position: relative; display: inline-block; }
+    .qr-version-badge{
+      position: absolute; top: 4px; right: 4px;
+      background: #000; color: #fff;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.05em;
+      padding: 2px 5px; border-radius: 4px; pointer-events: none;
+    }
+
     /* --- Confirmation bar --- */
     .confirm-bar{
       width: 100%;
@@ -1254,6 +1275,42 @@
       if (qrUrl) {
         receiptQrUrl = qrUrl;  // save for fullscreen
         if (typeof makeQR === "function") makeQR("topQr", qrUrl, qrSize());
+
+        // Extract the receipt key (COMB_Z or receipt= hash) for the copyable chip
+        const hashMatch = qrUrl.match(/[#&](?:COMB_Z=|receipt=)([A-Za-z0-9\-_]+)/);
+        const chipKey = hashMatch ? hashMatch[1] : null;
+
+        // Wrap QR canvas in a relative-positioned div and add v3 badge
+        const topQrEl = document.getElementById("topQr");
+        const canvas = topQrEl.querySelector("canvas, img");
+        if (canvas && !topQrEl.querySelector(".qr-version-wrap")) {
+          const wrap = document.createElement("div");
+          wrap.className = "qr-version-wrap";
+          canvas.parentNode.insertBefore(wrap, canvas);
+          wrap.appendChild(canvas);
+          const badge = document.createElement("div");
+          badge.className = "qr-version-badge";
+          badge.textContent = "v" + (comb.v || "3");
+          wrap.appendChild(badge);
+        }
+
+        // Add copyable hash chip below QR
+        const existingChip = topQrEl.querySelector(".receipt-hash-chip");
+        if (chipKey && !existingChip) {
+          const chip = document.createElement("div");
+          chip.className = "receipt-hash-chip";
+          chip.title = "Tap to copy receipt key";
+          chip.innerHTML = '<span class="copy-icon">&#128203;</span><span>' + chipKey.substring(0, 32) + "…" + '</span>';
+          chip.addEventListener("click", () => {
+            navigator.clipboard.writeText(chipKey).then(() => {
+              chip.innerHTML = '<span class="copy-icon">&#10003;</span><span>Copied!</span>';
+              setTimeout(() => {
+                chip.innerHTML = '<span class="copy-icon">&#128203;</span><span>' + chipKey.substring(0, 32) + "…" + '</span>';
+              }, 1500);
+            }).catch(() => { chip.style.userSelect = "all"; });
+          });
+          topQrEl.appendChild(chip);
+        }
       }
 
       rawJson.textContent = JSON.stringify(comb, null, 2);
