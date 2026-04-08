@@ -186,12 +186,12 @@ body{
   height:auto;
 }
 
-/* Mobile: cap QR at 55vw so "How it works" is visible below the fold */
+/* Mobile: cap QR at 72vw so "How it works" is visible below the fold */
 @media (max-width: 720px){
   .home-qr canvas,
   .home-qr img{
-    width: 55vw !important;
-    height: 55vw !important;
+    width: 72vw !important;
+    height: 72vw !important;
   }
 }
 

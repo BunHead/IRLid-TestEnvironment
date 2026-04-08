@@ -123,9 +123,11 @@ function roundGps(n) {
    (No backend; used by scan.html and receipt.html)
    ========================================================= */
 
-async function hashPayloadToB64url(payloadObj) {
-  // v3: use canonical() so hash is independent of property insertion order.
-  const payloadBytes = new TextEncoder().encode(canonical(payloadObj));
+async function hashPayloadToB64url(payloadObj, protocolV) {
+  // v3+: canonical() — order-independent. v2 and below: JSON.stringify (backward compat).
+  const v = (protocolV != null) ? Number(protocolV) : ((payloadObj && payloadObj.v) ? Number(payloadObj.v) : 3);
+  const str = (v >= 3) ? canonical(payloadObj) : JSON.stringify(payloadObj);
+  const payloadBytes = new TextEncoder().encode(str);
   const hashBuf = await crypto.subtle.digest("SHA-256", payloadBytes);
   return b64urlEncode(new Uint8Array(hashBuf));
 }
@@ -213,9 +215,11 @@ async function irlidDecompressFromB64url(b64url) {
   return JSON.parse(new TextDecoder().decode(out));
 }
 
-async function irlidHelloHashB64url(helloObj){
-  // v3: canonical() ensures hash is independent of property insertion order.
-  const bytes = new TextEncoder().encode(canonical(helloObj));
+async function irlidHelloHashB64url(helloObj, protocolV){
+  // v3+: canonical(). v2 and below: JSON.stringify (backward compat for old receipts).
+  const v = (protocolV != null) ? Number(protocolV) : ((helloObj && helloObj.v) ? Number(helloObj.v) : 3);
+  const str = (v >= 3) ? canonical(helloObj) : JSON.stringify(helloObj);
+  const bytes = new TextEncoder().encode(str);
   const hashBuf = await crypto.subtle.digest("SHA-256", bytes);
   return b64urlEncode(new Uint8Array(hashBuf));
 }

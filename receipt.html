@@ -922,7 +922,7 @@
     results.okStructure = true;
     let hashToUse;
     try {
-      const computed = await hashPayloadToB64url(resp.payload);
+      const computed = await hashPayloadToB64url(resp.payload, resp.v || comb && comb.v);
       results.computedHash = computed;
       results.okHash = resp.hash ? (computed === resp.hash) : true; // if stripped, recomputed is authoritative
       hashToUse = computed;
@@ -1357,14 +1357,13 @@
         }
 
         try {
-          // v3: canonical() makes helloHash independent of property order, so
-          // no reconstruction needed — hash HELLO as received.
-          const helloHash = await irlidHelloHashB64url(helloObj);
+          // Pass helloObj.v so v2 receipts use JSON.stringify, v3 use canonical().
+          const helloHash = await irlidHelloHashB64url(helloObj, helloObj.v);
           if (respA && respA.payload) addCheck("Self binds HELLO", respA.payload.helloHash === helloHash);
           if (respB && respB.payload) addCheck("Guest binds HELLO", respB.payload.helloHash === helloHash);
           // offer.hash not stored in HELLO (v3) — recompute from offer.payload for binding check.
           if (helloObj.offer && helloObj.offer.payload) {
-            const oh = await hashPayloadToB64url(helloObj.offer.payload);
+            const oh = await hashPayloadToB64url(helloObj.offer.payload, helloObj.v);
             if (respA && respA.payload) addCheck("Self binds offer", respA.payload.offerHash === oh);
             if (respB && respB.payload) addCheck("Guest binds offer", respB.payload.offerHash === oh);
           }
