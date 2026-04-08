@@ -627,8 +627,17 @@
     return baseReceiptUrl() + "#RESP=" + irlidEncodeJsonToB64url(resp);
   }
 
-  function makeReceiptUrlForCombined(comb){
-    return baseReceiptUrl() + "#COMB=" + irlidEncodeJsonToB64url(comb);
+  async function makeReceiptUrlForCombined(comb){
+    const stripped = (typeof irlidStripCombinedForEncoding === "function")
+      ? irlidStripCombinedForEncoding(comb) : comb;
+    if (typeof irlidHasCompression === "function" && irlidHasCompression() &&
+        typeof irlidCompressToB64url === "function") {
+      try {
+        const compressed = await irlidCompressToB64url(stripped);
+        return baseReceiptUrl() + "#COMB_Z=" + compressed;
+      } catch(_) {}
+    }
+    return baseReceiptUrl() + "#COMB=" + irlidEncodeJsonToB64url(stripped);
   }
 
   function makeReceiptUrlForHash(hash){
@@ -1238,7 +1247,7 @@
 
       // Fallback only if upload genuinely failed (e.g. network error)
       if (!qrUrl) {
-        qrUrl = makeReceiptUrlForCombined(comb);
+        qrUrl = await makeReceiptUrlForCombined(comb);
       }
 
       const topQrEl = document.getElementById("topQr");
@@ -1291,14 +1300,21 @@
         }
 
         try {
-          const helloHash = await irlidHelloHashB64url(helloObj);
+          // If offer.hash was stripped from the receipt, reconstruct it before hashing the HELLO,
+          // because responses were signed against the full HELLO (with offer.hash present).
+          let helloForHashing = helloObj;
+          if (helloObj.offer && helloObj.offer.payload && !helloObj.offer.hash) {
+            const recomputedOfferHash = await hashPayloadToB64url(helloObj.offer.payload);
+            helloForHashing = Object.assign({}, helloObj, {
+              offer: Object.assign({}, helloObj.offer, { hash: recomputedOfferHash })
+            });
+          }
+          const helloHash = await irlidHelloHashB64url(helloForHashing);
           if (respA && respA.payload) addCheck("Self binds HELLO", respA.payload.helloHash === helloHash);
           if (respB && respB.payload) addCheck("Guest binds HELLO", respB.payload.helloHash === helloHash);
           // offer.hash may be stripped — recompute from offer.payload if missing.
           if (helloObj.offer && helloObj.offer.payload) {
-            const oh = helloObj.offer.hash
-              ? helloObj.offer.hash
-              : await hashPayloadToB64url(helloObj.offer.payload);
+            const oh = helloForHashing.offer.hash;
             if (respA && respA.payload) addCheck("Self binds offer", respA.payload.offerHash === oh);
             if (respB && respB.payload) addCheck("Guest binds offer", respB.payload.offerHash === oh);
           }
