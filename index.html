@@ -46,6 +46,31 @@
     </div>
   </main>
 
+  <!-- How it works -->
+  <section class="page-content" style="max-width:680px; margin:0 auto; padding:2rem 1.2rem 1rem;">
+    <h2 style="margin-bottom:0.5rem;">How it works</h2>
+    <p style="margin-bottom:1.2rem;">Proving you met in person shouldn't be a hassle. IRLid makes it a three-step handshake using nothing but your phone's browser.</p>
+
+    <ol style="padding-left:1.4rem; line-height:1.8;">
+      <li><strong>Generate a Code</strong> — Open IRLid on your phone. It instantly creates a unique QR code containing an unforgeable digital signature. This code is time-sensitive and expires quickly so it can't be reused.</li>
+      <li><strong>Scan and Accept</strong> — The second person scans your code with their camera. IRLid opens automatically in their browser; they tap Accept, and their phone generates a signed response QR code.</li>
+      <li><strong>Seal the Receipt</strong> — You scan their response code. Both phones now hold a tamper-proof digital receipt confirming both devices completed the handshake in real-time.</li>
+    </ol>
+
+    <h3 style="margin-top:1.6rem;">Why no app?</h3>
+    <p>IRLid runs entirely in your browser because it's safer and faster. No install means no background tracking, no intrusive permissions, and no personal data handed to an app store.</p>
+
+    <h3 style="margin-top:1.6rem;">Frequently Asked Questions</h3>
+    <p><strong>Can someone fake a receipt?</strong><br>
+    Every receipt is protected by a unique digital seal that breaks if even a single character is altered. The codes expire within seconds, making it extremely difficult to convincingly fake a meeting — a screenshot or recording won't work.</p>
+
+    <p><strong>Does IRLid store my data?</strong><br>
+    Nothing is stored because there's no database. All the handshaking happens directly between the two phones — privacy by design, not just by a promise.</p>
+
+    <p><strong>What does the receipt actually prove?</strong><br>
+    It's mathematical proof that two specific devices completed the handshake in real-time. It creates a verifiable record that neither party can alter after the fact.</p>
+  </section>
+
   <script src="js/auth.js"></script>
   <script src="js/backend.js"></script>
   <script src="js/nav.js"></script>
@@ -156,8 +181,7 @@
         if (!cachedHello) {
           cachedHello = await generateHello();
 
-          // Derive base from actual page location — works for live site, TestEnvironment, and localhost.
-          const baseUrl = location.origin + location.pathname.replace(/\/[^/]*$/, "");
+          const baseUrl = location.origin + (location.pathname.includes("/IRLid") ? "/IRLid" : "");
           if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
             const compressed = await irlidCompressToB64url(cachedHello);
             cachedHelloUrl = `${baseUrl}/accept.html#HZ=${compressed}`;

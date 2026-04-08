@@ -28,11 +28,14 @@ function b64urlDecode(str) {
   return Uint8Array.from(bin, c => c.charCodeAt(0));
 }
 
-function canonical(obj) {
-  const keys = Object.keys(obj).sort();
-  const o = {};
-  for (const k of keys) o[k] = obj[k];
-  return JSON.stringify(o);
+// v3: Fully recursive canonical JSON serialiser.
+// Sorts object keys at every level of nesting so hashes are independent
+// of property insertion order. Arrays preserve their order.
+function canonical(val) {
+  if (val === null || typeof val !== "object") return JSON.stringify(val);
+  if (Array.isArray(val)) return "[" + val.map(canonical).join(",") + "]";
+  const keys = Object.keys(val).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + canonical(val[k])).join(",") + "}";
 }
 
 async function sha256Bytes(str) {
@@ -121,7 +124,8 @@ function roundGps(n) {
    ========================================================= */
 
 async function hashPayloadToB64url(payloadObj) {
-  const payloadBytes = new TextEncoder().encode(JSON.stringify(payloadObj));
+  // v3: use canonical() so hash is independent of property insertion order.
+  const payloadBytes = new TextEncoder().encode(canonical(payloadObj));
   const hashBuf = await crypto.subtle.digest("SHA-256", payloadBytes);
   return b64urlEncode(new Uint8Array(hashBuf));
 }
@@ -210,8 +214,8 @@ async function irlidDecompressFromB64url(b64url) {
 }
 
 async function irlidHelloHashB64url(helloObj){
-  // Deterministic hash of the original HELLO object as encoded by index.html
-  const bytes = new TextEncoder().encode(JSON.stringify(helloObj));
+  // v3: canonical() ensures hash is independent of property insertion order.
+  const bytes = new TextEncoder().encode(canonical(helloObj));
   const hashBuf = await crypto.subtle.digest("SHA-256", bytes);
   return b64urlEncode(new Uint8Array(hashBuf));
 }
@@ -293,9 +297,9 @@ async function makeSignedHelloAsync(opts){
   const ts = Math.floor(Date.now() / 1000);
   const nonceA = crypto.getRandomValues(new Uint32Array(1))[0];
 
-  // Offer payload: v added to signed payload (Fix #1 — version now inside signature).
+  // Offer payload: v=3 inside signature ensures cross-version mixing is detectable.
   const offerPayload = {
-    v: 2,
+    v: 3,
     lat,
     lon,
     acc,
@@ -307,15 +311,15 @@ async function makeSignedHelloAsync(opts){
   const offerHash = await hashPayloadToB64url(offerPayload);
   const offerSig = await signHashB64url(offerHash);
 
-  // Hello: no top-level nonce/ts (they're in offer.payload, saves ~30 chars).
+  // v3: offer.hash removed from HELLO — verifier recomputes it from offer.payload.
+  // Saves ~88 chars. hash still used to sign (offerSig), just not transmitted.
   // JWK stripped of ext/key_ops (saves ~25 chars).
   const hello = {
-    v: 2,
+    v: 3,
     type: "hello",
     pub: compactJwk(pub),
     offer: {
       payload: offerPayload,
-      hash: offerHash,
       sig: offerSig
     }
   };
@@ -337,23 +341,24 @@ async function verifyHelloOfferAsync(helloObj, opts){
     throw new Error("Invalid HELLO (bad offer structure).");
   }
 
+  // v3: offer.hash not stored in HELLO — always recompute from offer.payload.
+  // Back-compat: if offer.hash is present (v2), verify it matches the computed value.
   const computed = await hashPayloadToB64url(offer.payload);
-  // offer.hash may be stripped in compact receipts — if present, verify it matches.
   if (offer.hash && computed !== offer.hash) throw new Error("HELLO offer hash mismatch.");
-  const hashToVerify = offer.hash || computed;
 
-  const sigOk = await verifySig(hashToVerify, offer.sig, helloObj.pub);
+  const sigOk = await verifySig(computed, offer.sig, helloObj.pub);
   if (!sigOk) throw new Error("HELLO offer signature invalid.");
 
   const now = Math.floor(Date.now() / 1000);
   const ts = Number(offer.payload.ts);
   if (!Number.isFinite(ts)) throw new Error("HELLO offer timestamp missing.");
-  // Fix #2: Reject timestamps significantly in the future (allows 5s clock skew).
   if (ts > now + 5) throw new Error("HELLO offer timestamp is in the future (" + (ts - now) + "s ahead).");
   const dt = Math.abs(now - ts);
   if (dt > tsTolS) throw new Error("HELLO offer timestamp outside tolerance (" + dt + "s > " + tsTolS + "s).");
 
-  return { ok: true, mode: "signed-v2", offerHash: offer.hash };
+  // Always return the computed hash so response builder can bind to it,
+  // regardless of whether offer.hash was transmitted.
+  return { ok: true, mode: "signed-v3", offerHash: computed };
 }
 
 
@@ -389,9 +394,9 @@ async function makeReturnForHelloAsync(helloB64url, opts){
   const ts = Math.floor(Date.now() / 1000);
   const nonceB = crypto.getRandomValues(new Uint32Array(1))[0];
 
-  // Fix #1: v added to signed payload (version now inside signature).
+  // v3: version inside signature, canonical() hashing.
   const payload = {
-    v: 2,
+    v: 3,
     helloHash,
     offerHash: offerInfo.offerHash || undefined,
     lat,
@@ -410,7 +415,7 @@ async function makeReturnForHelloAsync(helloB64url, opts){
 
   // Deploy 76: stripped JWK (saves ~25 chars).
   const resp = {
-    v: 2,
+    v: 3,
     type: "response",
     payload,
     hash,
@@ -428,19 +433,14 @@ async function makeReturnForHelloAsync(helloB64url, opts){
 
 // Returns a lean copy of the combined receipt for QR/URL encoding.
 // Strips fields that can be recomputed during verification:
-//   hello.offer.hash  — SHA-256 of offer.payload (recomputable)
-//   a.hash            — SHA-256 of a.payload (recomputable)
-//   a.pub             — identical to hello.pub (redundant)
-//   b.hash            — SHA-256 of b.payload (recomputable)
-// Savings: ~220 chars uncompressed, reducing QR density.
+//   a.hash  — SHA-256 of a.payload (recomputable)
+//   a.pub   — identical to hello.pub (redundant)
+//   b.hash  — SHA-256 of b.payload (recomputable)
+// v3: hello.offer.hash is no longer transmitted (removed from protocol).
+// Savings: ~130 chars uncompressed, reducing QR density.
 function irlidStripCombinedForEncoding(combined) {
   if (!combined) return combined;
   const c = Object.assign({}, combined);
-  if (c.hello && c.hello.offer) {
-    c.hello = Object.assign({}, c.hello);
-    c.hello.offer = Object.assign({}, c.hello.offer);
-    delete c.hello.offer.hash;
-  }
   if (c.a) {
     c.a = Object.assign({}, c.a);
     delete c.a.hash;
@@ -516,7 +516,7 @@ async function processScannedResponse(otherRespObj, opts){
   }
 
   const combined = {
-    v: 2,
+    v: 3,
     type: "combined",
     tol: { dist_m: distTolM, ts_s: tsTolS },
     hello: helloObj,

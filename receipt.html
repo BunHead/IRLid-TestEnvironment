@@ -1294,33 +1294,20 @@
       if (helloObj) {
         try {
           const offerInfo = await verifyHelloOfferAsync(helloObj, { tsTolS: 999999999 });
-          addCheck("HELLO offer", true, offerInfo.mode === "signed-v2" ? "signed" : "unsigned (v1)");
+          addCheck("HELLO offer", true, offerInfo.mode === "signed-v3" ? "signed (v3)" : offerInfo.mode === "signed-v2" ? "signed (v2)" : "unsigned (v1)");
         } catch(e) {
           addCheck("HELLO offer", false, String(e));
         }
 
         try {
-          // If offer.hash was stripped from the receipt, reconstruct it before hashing the HELLO,
-          // because responses were signed against the full HELLO (with offer.hash present).
-          let helloForHashing = helloObj;
-          if (helloObj.offer && helloObj.offer.payload && !helloObj.offer.hash) {
-            const recomputedOfferHash = await hashPayloadToB64url(helloObj.offer.payload);
-            // Reconstruct offer with the SAME property order as the original
-            // (payload, hash, sig) so JSON.stringify produces the identical string.
-            helloForHashing = Object.assign({}, helloObj, {
-              offer: {
-                payload: helloObj.offer.payload,
-                hash: recomputedOfferHash,
-                sig: helloObj.offer.sig
-              }
-            });
-          }
-          const helloHash = await irlidHelloHashB64url(helloForHashing);
+          // v3: canonical() makes helloHash independent of property order, so
+          // no reconstruction needed — hash HELLO as received.
+          const helloHash = await irlidHelloHashB64url(helloObj);
           if (respA && respA.payload) addCheck("Self binds HELLO", respA.payload.helloHash === helloHash);
           if (respB && respB.payload) addCheck("Guest binds HELLO", respB.payload.helloHash === helloHash);
-          // offer.hash may be stripped — recompute from offer.payload if missing.
+          // offer.hash not stored in HELLO (v3) — recompute from offer.payload for binding check.
           if (helloObj.offer && helloObj.offer.payload) {
-            const oh = helloForHashing.offer.hash;
+            const oh = await hashPayloadToB64url(helloObj.offer.payload);
             if (respA && respA.payload) addCheck("Self binds offer", respA.payload.offerHash === oh);
             if (respB && respB.payload) addCheck("Guest binds offer", respB.payload.offerHash === oh);
           }
