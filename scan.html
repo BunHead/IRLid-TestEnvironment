@@ -289,6 +289,7 @@
     const rxHelloZ  = /(?:^|[#&])HZ=([^&]+)/;
     const rxHello   = /(?:^|[#&])HELLO=([^&]+)/;
     const rxResp    = /(?:^|[#&])RESP=([A-Za-z0-9\-_]+)/;
+    const rxCombZ   = /(?:^|[#&])COMB_Z=([A-Za-z0-9\-_]+)/;
     const rxComb    = /(?:^|[#&])COMB=([A-Za-z0-9\-_]+)/;
     const rxReceipt = /(?:^|[#&])receipt=([A-Za-z0-9\-_]+)/;
 
@@ -299,6 +300,7 @@
     for (const s of sources) {
       m = s.match(rxHelloZ);  if (m) return { kind:"HELLO_Z", v:m[1] };
       m = s.match(rxHello);   if (m) return { kind:"HELLO",   v:m[1] };
+      m = s.match(rxCombZ);   if (m) return { kind:"COMB_Z",  v:m[1] };
       m = s.match(rxComb);    if (m) return { kind:"COMB",    v:m[1] };
       m = s.match(rxResp);    if (m) return { kind:"RESP",    v:m[1] };
       m = s.match(rxReceipt); if (m) return { kind:"RECEIPT", v:m[1] };
@@ -806,7 +808,14 @@
           return;
         }
 
-        // Combined receipt → open receipt page
+        // Combined receipt (compressed) → open receipt page
+        if (c.kind === "COMB_Z") {
+          setStatus("Receipt detected. Opening\u2026");
+          location.href = "receipt.html#COMB_Z=" + (c.v || "");
+          return;
+        }
+
+        // Combined receipt (uncompressed) → open receipt page
         if (c.kind === "COMB") {
           setStatus("Receipt detected. Opening\u2026");
           location.href = "receipt.html#COMB=" + (c.v || "");

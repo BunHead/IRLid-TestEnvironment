@@ -1305,8 +1305,14 @@
           let helloForHashing = helloObj;
           if (helloObj.offer && helloObj.offer.payload && !helloObj.offer.hash) {
             const recomputedOfferHash = await hashPayloadToB64url(helloObj.offer.payload);
+            // Reconstruct offer with the SAME property order as the original
+            // (payload, hash, sig) so JSON.stringify produces the identical string.
             helloForHashing = Object.assign({}, helloObj, {
-              offer: Object.assign({}, helloObj.offer, { hash: recomputedOfferHash })
+              offer: {
+                payload: helloObj.offer.payload,
+                hash: recomputedOfferHash,
+                sig: helloObj.offer.sig
+              }
             });
           }
           const helloHash = await irlidHelloHashB64url(helloForHashing);
