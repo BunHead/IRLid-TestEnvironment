@@ -186,6 +186,15 @@ body{
   height:auto;
 }
 
+/* Mobile: cap QR at 55vw so "How it works" is visible below the fold */
+@media (max-width: 720px){
+  .home-qr canvas,
+  .home-qr img{
+    max-width: 55vw;
+    max-height: 55vw;
+  }
+}
+
 #qrError{
   display:none;
   margin: 8px var(--side-pad) 0 var(--side-pad);

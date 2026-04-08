@@ -199,7 +199,7 @@
 
   <div class="scan-below">
     <div class="scan-controls">
-      <button class="btn" id="scanBtn">Scan</button>
+      <button class="btn" id="scanBtn">Start Camera</button>
       <button class="btn active-scan" id="stopBtn" style="display:none;">Stop</button>
       <select id="cameraSelect" aria-label="Camera"></select>
     </div>
@@ -925,15 +925,15 @@
     if (dc) dc.style.display = "block";
   }
 
-  // Pre-load cameras
-  (async () => { try { await listCamerasAndSelectDefault(); } catch {} })();
-
-  // Auto-start scanner if coming from Home page (HELLO is in localStorage)
+  // Pre-load cameras then auto-start — no need to press a second button.
   (async () => {
-    const hasHello = localStorage.getItem("irlid_last_hello_b64");
-    if (hasHello) {
-      dbg("HELLO found in localStorage — ready to scan Accept QR");
-      setStatus("Ready to scan the other person's Accept QR.");
+    try {
+      await listCamerasAndSelectDefault();
+      await startScanner();
+    } catch(e) {
+      // Camera permission denied or unavailable — show button so user can retry.
+      setStatus("Tap 'Start Camera' to begin scanning.");
+      dbg("Auto-start failed: " + e);
     }
   })();
 </script>
