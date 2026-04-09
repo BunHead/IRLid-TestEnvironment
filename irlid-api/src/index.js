@@ -49,8 +49,11 @@ function randomCode6() {
 //  CRYPTO
 // =====================
 
-async function hashPayloadToB64url(payloadObj) {
-  const bytes = new TextEncoder().encode(JSON.stringify(payloadObj));
+async function hashPayloadToB64url(payloadObj, protocolV) {
+  // v3+: canonical() — order-independent. v2 and below: JSON.stringify (backward compat).
+  const v = (protocolV != null) ? Number(protocolV) : ((payloadObj && payloadObj.v) ? Number(payloadObj.v) : 3);
+  const str = (v >= 3) ? canonical(payloadObj) : JSON.stringify(payloadObj);
+  const bytes = new TextEncoder().encode(str);
   const hashBuf = await crypto.subtle.digest("SHA-256", bytes);
   return b64urlEncode(new Uint8Array(hashBuf));
 }
@@ -123,27 +126,33 @@ async function verifyReceipt(comb) {
   const a = comb.a;
   if (a && a.payload && a.hash && a.sig && a.pub) {
     checks.a_structure = true;
-    checks.a_hash = (await hashPayloadToB64url(a.payload)) === a.hash;
+    // Pass a.v so v2 uses JSON.stringify, v3+ uses canonical().
+    checks.a_hash = (await hashPayloadToB64url(a.payload, a.v)) === a.hash;
     checks.a_sig = await verifySig(a.hash, a.sig, a.pub);
   } else { checks.a_structure = false; checks.a_hash = false; checks.a_sig = false; }
 
   const b = comb.b;
   if (b && b.payload && b.hash && b.sig && b.pub) {
     checks.b_structure = true;
-    checks.b_hash = (await hashPayloadToB64url(b.payload)) === b.hash;
+    checks.b_hash = (await hashPayloadToB64url(b.payload, b.v)) === b.hash;
     checks.b_sig = await verifySig(b.hash, b.sig, b.pub);
   } else { checks.b_structure = false; checks.b_hash = false; checks.b_sig = false; }
 
   const hello = comb.hello;
-  if (hello && hello.offer && hello.offer.payload && hello.offer.hash && hello.offer.sig && hello.pub) {
-    checks.hello_hash = (await hashPayloadToB64url(hello.offer.payload)) === hello.offer.hash;
-    checks.hello_sig = await verifySig(hello.offer.hash, hello.offer.sig, hello.pub);
+  if (hello && hello.offer && hello.offer.payload && hello.offer.sig && hello.pub) {
+    // Offer hash uses the offer payload's own version (offer.payload.v).
+    const computedOfferHash = await hashPayloadToB64url(hello.offer.payload);
+    if (hello.offer.hash) checks.hello_hash = computedOfferHash === hello.offer.hash; // back-compat v2
+    checks.hello_sig = await verifySig(computedOfferHash, hello.offer.sig, hello.pub);
   }
 
   if (hello) {
-    const helloBytes = new TextEncoder().encode(JSON.stringify(hello));
-    const helloHashBuf = await crypto.subtle.digest("SHA-256", helloBytes);
-    const helloHash = b64urlEncode(new Uint8Array(helloHashBuf));
+    // v3+: canonical(). v2 and below: JSON.stringify (backward compat).
+    const hv = (hello && hello.v) ? Number(hello.v) : 3;
+    const helloStr = (hv >= 3) ? canonical(hello) : JSON.stringify(hello);
+    const helloHash = b64urlEncode(new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(helloStr))
+    ));
     if (a && a.payload) checks.a_binds_hello = a.payload.helloHash === helloHash;
     if (b && b.payload) checks.b_binds_hello = b.payload.helloHash === helloHash;
   }
@@ -645,12 +654,8 @@ async function getReceipt(request, env, receiptHash) {
   try { combined = JSON.parse(row.receipt_json); } catch {}
   let partyInfo = null;
   try { if (row.party_info) partyInfo = JSON.parse(row.party_info); } catch {}
-  // Strip GPS coords from public response (Deploy 116)
-  // Coords stay in DB untouched — re-verification still works.
-  // check.html and receipt links are unaffected (they never display raw coords).
-  if (combined?.a?.payload) { delete combined.a.payload.lat; delete combined.a.payload.lon; delete combined.a.payload.acc; }
-  if (combined?.b?.payload) { delete combined.b.payload.lat; delete combined.b.payload.lon; delete combined.b.payload.acc; }
-  if (combined?.hello?.offer?.payload) { delete combined.hello.offer.payload.lat; delete combined.hello.offer.payload.lon; delete combined.hello.offer.payload.acc; }
+  // GPS coords are required for client-side hash/signature re-verification.
+  // Stripping them breaks client verification. Do not strip.
   return json({ receipt_id: row.id, receipt_hash: row.receipt_hash, pub_key_a: row.pub_key_a, pub_key_b: row.pub_key_b, ts_a: row.ts_a, ts_b: row.ts_b, verified: !!row.verified, created_at: row.created_at, combined, party_info: partyInfo });
 }
 
