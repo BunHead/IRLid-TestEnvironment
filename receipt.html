@@ -1294,8 +1294,8 @@
           wrap.appendChild(badge);
         }
 
-        // Add copyable hash chip below QR
-        const existingChip = topQrEl.querySelector(".receipt-hash-chip");
+        // Add copyable hash chip between QR box and confirm bar
+        const existingChip = document.querySelector(".receipt-hash-chip");
         if (chipKey && !existingChip) {
           const chip = document.createElement("div");
           chip.className = "receipt-hash-chip";
@@ -1309,7 +1309,8 @@
               }, 1500);
             }).catch(() => { chip.style.userSelect = "all"; });
           });
-          topQrEl.appendChild(chip);
+          // Insert after the QR box, before the confirm bar
+          topQrEl.insertAdjacentElement("afterend", chip);
         }
       }
 
