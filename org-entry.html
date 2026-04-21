@@ -4,106 +4,172 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IRLid Entry</title>
-
 <style>
-  body {
-    margin: 0;
-    font-family: system-ui, sans-serif;
-    background: #000;
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
+  :root{
+    --bg:#000;
+    --fg:#fff;
+    --muted:rgba(255,255,255,0.78);
+    --green:#00e676;
+    --amber:#ffb300;
+    --red:#ff3b30;
   }
 
-  .container {
-    text-align: center;
-    padding: 20px;
-    max-width: 500px;
+  * { box-sizing: border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--fg);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
   }
 
-  .icon {
-    font-size: 120px;
-    margin-bottom: 20px;
+  .wrap{
+    width:min(92vw, 920px);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 20px;
   }
 
-  .title {
-    font-size: 32px;
-    font-weight: bold;
-    margin-bottom: 10px;
+  .card{
+    width:100%;
+    text-align:center;
+    transform:translateY(-4vh);
   }
 
-  .subtitle {
-    font-size: 18px;
-    color: #ccc;
+  .icon{
+    line-height:1;
+    font-weight:800;
+    font-size:clamp(140px, 23vw, 280px);
+    margin:0 0 clamp(26px, 4.5vh, 54px);
+    display:block;
   }
 
-  .allow { color: #00c853; }
-  .review { color: #ff9800; }
-  .deny { color: #d32f2f; }
+  .title{
+    margin:0;
+    font-size:clamp(34px, 6vw, 72px);
+    line-height:1.08;
+    font-weight:800;
+    letter-spacing:-0.02em;
+  }
+
+  .subtitle{
+    margin:clamp(16px, 2.5vh, 24px) 0 0;
+    font-size:clamp(22px, 3.2vw, 34px);
+    line-height:1.35;
+    color:var(--muted);
+    font-weight:500;
+  }
+
+  .meta{
+    margin-top:18px;
+    font-size:14px;
+    color:rgba(255,255,255,0.42);
+    letter-spacing:0.02em;
+  }
+
+  .allow .icon{ color:var(--green); }
+  .review .icon{ color:var(--amber); }
+  .deny .icon{ color:var(--red); }
+
+  @media (max-width: 700px){
+    .card{
+      transform:translateY(-6vh);
+    }
+    .subtitle{
+      max-width:16ch;
+      margin-left:auto;
+      margin-right:auto;
+    }
+  }
 </style>
 </head>
-
 <body>
-
-<div class="container">
-  <div id="icon" class="icon">✔</div>
-  <div id="title" class="title">Welcome</div>
-  <div id="subtitle" class="subtitle">Processing...</div>
-</div>
+  <div class="wrap">
+    <div class="card allow" id="stateCard">
+      <div class="icon" id="icon">✓</div>
+      <h1 class="title" id="title">Welcome to IRLid Event</h1>
+      <div class="subtitle" id="subtitle">You’re checked in</div>
+      <div class="meta" id="meta"></div>
+    </div>
+  </div>
 
 <script>
   const params = new URLSearchParams(window.location.search);
+  const type = (params.get("type") || "").trim().toLowerCase();
+  const org = (params.get("org") || "").trim().toLowerCase();
+  const eventName = (params.get("event") || "IRLid Event").trim();
 
-  const type = params.get("type");     // venue | doorman
-  const org  = params.get("org");
-
-  // --- DEMO MODE ONLY (no DB yet) ---
-  function render({ status, type }) {
+  function render(state) {
+    const card = document.getElementById("stateCard");
     const icon = document.getElementById("icon");
     const title = document.getElementById("title");
     const subtitle = document.getElementById("subtitle");
+    const meta = document.getElementById("meta");
 
-    if (status === "allow") {
-      icon.textContent = "✔";
-      icon.className = "icon allow";
-
-      if (type === "venue") {
-        title.textContent = "Welcome to IRLid Event";
-        subtitle.textContent = "You’re checked in";
-      } else {
-        title.textContent = "Alice Smith";
-        subtitle.textContent = "Expected guest";
-      }
-
-    } else if (status === "review") {
-      icon.textContent = "?";
-      icon.className = "icon review";
-
-      title.textContent = "Needs review";
-      subtitle.textContent = "Please see staff";
-
-    } else {
-      icon.textContent = "✖";
-      icon.className = "icon deny";
-
-      title.textContent = "Not allowed";
-      subtitle.textContent = "Not on list";
-    }
+    card.className = "card " + state.status;
+    icon.textContent = state.icon;
+    title.textContent = state.title;
+    subtitle.textContent = state.subtitle || "";
+    meta.textContent = state.meta || "";
   }
 
-  // --- ENTRY MODE LOGIC ---
+  function renderVenue() {
+    render({
+      status: "allow",
+      icon: "✓",
+      title: `Welcome to ${eventName}`,
+      subtitle: "You’re checked in"
+    });
+  }
+
+  function renderDoormanMock() {
+    if (org === "warn") {
+      render({
+        status: "review",
+        icon: "?",
+        title: "Needs review",
+        subtitle: "Please check this attendee manually"
+      });
+      return;
+    }
+
+    if (org === "fail") {
+      render({
+        status: "deny",
+        icon: "✕",
+        title: "Not allowed",
+        subtitle: "Not on list"
+      });
+      return;
+    }
+
+    render({
+      status: "allow",
+      icon: "✓",
+      title: "Alice Smith",
+      subtitle: "Expected guest"
+    });
+  }
+
   if (type === "venue") {
-    render({ status: "allow", type: "venue" });
-
+    renderVenue();
   } else if (type === "doorman") {
-    render({ status: "allow", type: "doorman" });
-
+    renderDoormanMock();
   } else {
-    render({ status: "deny" });
+    render({
+      status: "deny",
+      icon: "✕",
+      title: "Not allowed",
+      subtitle: "Missing entry type"
+    });
   }
 </script>
-
 </body>
 </html>
