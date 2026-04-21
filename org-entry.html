@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRLid Entry</title>
+
+<style>
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    background: #000;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+
+  .container {
+    text-align: center;
+    padding: 20px;
+    max-width: 500px;
+  }
+
+  .icon {
+    font-size: 120px;
+    margin-bottom: 20px;
+  }
+
+  .title {
+    font-size: 32px;
+    font-weight: bold;
+    margin-bottom: 10px;
+  }
+
+  .subtitle {
+    font-size: 18px;
+    color: #ccc;
+  }
+
+  .allow { color: #00c853; }
+  .review { color: #ff9800; }
+  .deny { color: #d32f2f; }
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <div id="icon" class="icon">✔</div>
+  <div id="title" class="title">Welcome</div>
+  <div id="subtitle" class="subtitle">Processing...</div>
+</div>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+
+  const type = params.get("type");     // venue | doorman
+  const org  = params.get("org");
+
+  // --- DEMO MODE ONLY (no DB yet) ---
+  function render({ status, type }) {
+    const icon = document.getElementById("icon");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+
+    if (status === "allow") {
+      icon.textContent = "✔";
+      icon.className = "icon allow";
+
+      if (type === "venue") {
+        title.textContent = "Welcome to IRLid Event";
+        subtitle.textContent = "You’re checked in";
+      } else {
+        title.textContent = "Alice Smith";
+        subtitle.textContent = "Expected guest";
+      }
+
+    } else if (status === "review") {
+      icon.textContent = "?";
+      icon.className = "icon review";
+
+      title.textContent = "Needs review";
+      subtitle.textContent = "Please see staff";
+
+    } else {
+      icon.textContent = "✖";
+      icon.className = "icon deny";
+
+      title.textContent = "Not allowed";
+      subtitle.textContent = "Not on list";
+    }
+  }
+
+  // --- ENTRY MODE LOGIC ---
+  if (type === "venue") {
+    render({ status: "allow", type: "venue" });
+
+  } else if (type === "doorman") {
+    render({ status: "allow", type: "doorman" });
+
+  } else {
+    render({ status: "deny" });
+  }
+</script>
+
+</body>
+</html>
