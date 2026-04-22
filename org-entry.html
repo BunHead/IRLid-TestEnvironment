@@ -105,6 +105,9 @@
   const type = (params.get("type") || "").trim().toLowerCase();
   const org = (params.get("org") || "").trim().toLowerCase();
   const eventName = (params.get("event") || "IRLid Event").trim();
+  const welcomeMessage = (params.get("welcome") || "").trim();
+  const redirectUrl = (params.get("redirect") || "").trim();
+  const logoUrl = (params.get("logo") || "").trim();
 
   function render(state) {
     const card = document.getElementById("stateCard");
@@ -125,7 +128,7 @@
       status: "allow",
       icon: "✓",
       title: `Welcome to ${eventName}`,
-      subtitle: "You’re checked in"
+      subtitle: welcomeMessage || "You’re checked in"
     });
   }
 
@@ -150,14 +153,25 @@
       return;
     }
 
+    if (org === "paid") {
+      render({
+        status: "allow",
+        icon: "✓",
+        title: "Paid guest",
+        subtitle: "Subscription verified"
+      });
+      return;
+    }
+
+    // default success
     render({
       status: "allow",
       icon: "✓",
       title: "Alice Smith",
       subtitle: "Expected guest"
     });
-  }
-
+    }
+    
   if (type === "venue") {
     renderVenue();
   } else if (type === "doorman") {
