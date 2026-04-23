@@ -302,56 +302,73 @@
   }
 
   function renderDoormanMock() {
-    if (org === "warn") {
-      render({
-        status: "review",
-        title: "Needs review",
-        subtitle: "Please check this attendee manually",
-        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
-      });
-      return;
-    }
+  if (mode === "review") {
+    render({
+      status: "review",
+      title: "Needs review",
+      subtitle: "Please check this attendee manually",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
 
-    if (org === "fail") {
-      render({
-        status: "deny",
-        title: "Not allowed",
-        subtitle: "Not on list",
-        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
-      });
-      return;
-    }
+  if (mode === "deny") {
+    render({
+      status: "deny",
+      title: "Not allowed",
+      subtitle: "Not on list",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
 
-    if (org === "paid") {
-      render({
-        status: "allow",
-        title: "Paid guest",
-        subtitle: "Subscription verified",
-        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
-      });
-      return;
-    }
-
+  if (mode === "allow") {
     render({
       status: "allow",
       title: "Alice Smith",
       subtitle: "Expected guest",
       meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
     });
+    return;
   }
 
-  if (type === "venue") {
-    renderVenue();
-  } else if (type === "doorman") {
-    renderDoormanMock();
-  } else {
+  if (org === "warn") {
+    render({
+      status: "review",
+      title: "Needs review",
+      subtitle: "Please check this attendee manually",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  if (org === "fail") {
     render({
       status: "deny",
       title: "Not allowed",
-      subtitle: "Missing entry type",
-      meta: "Configuration required"
+      subtitle: "Not on list",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
     });
+    return;
   }
+
+  if (org === "paid") {
+    render({
+      status: "allow",
+      title: "Paid guest",
+      subtitle: "Subscription verified",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  render({
+    status: "allow",
+    title: "Alice Smith",
+    subtitle: "Expected guest",
+    meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+  });
+}
 </script>
 </body>
 </html>
