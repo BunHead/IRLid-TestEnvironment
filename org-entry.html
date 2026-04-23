@@ -6,27 +6,34 @@
 <title>IRLid Entry</title>
 <style>
   :root{
-    --bg:#000;
-    --fg:#fff;
-    --muted:rgba(255,255,255,0.78);
-    --green:#00e676;
+    --bg:#000000;
+    --fg:#ffffff;
+    --muted:rgba(255,255,255,0.82);
+    --green:#12da73;
     --amber:#ffb300;
-    --red:#ff3b30;
+    --red:#ff4b4b;
   }
 
   * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
 
   body{
     margin:0;
     min-height:100vh;
     background:var(--bg);
     color:var(--fg);
-    font-family: "Segoe UI", system-ui, sans-serif;
+    font-family:"Segoe UI", system-ui, sans-serif;
     display:flex;
     align-items:center;
     justify-content:center;
     overflow:hidden;
+    transition: background-color 480ms ease;
   }
+
+  body.status-allow { background: var(--green); }
+  body.status-review { background: var(--amber); }
+  body.status-deny { background: var(--red); }
 
   .wrap{
     width:min(92vw, 920px);
@@ -40,23 +47,69 @@
   .card{
     width:100%;
     text-align:center;
-    transform:translateY(-4vh);
+    transform:translateY(-3vh);
+    opacity:0;
+    transition: opacity 320ms ease 120ms, transform 320ms ease 120ms;
   }
 
-  .icon{
-    line-height:1;
-    font-weight:800;
-    font-size:clamp(140px, 23vw, 280px);
-    margin:0 0 clamp(26px, 4.5vh, 54px);
-    display:block;
+  body.ready .card{
+    opacity:1;
+    transform:translateY(-5vh);
+  }
+
+  .logo{
+    display:none;
+    width:clamp(72px, 12vw, 122px);
+    max-height:122px;
+    object-fit:contain;
+    margin:0 auto 20px;
+    filter:drop-shadow(0 8px 18px rgba(0,0,0,0.18));
+  }
+
+  .logo.show{ display:block; }
+
+  .icon-shell{
+    width:min(42vw, 270px);
+    height:min(42vw, 270px);
+    margin:0 auto clamp(22px, 4vh, 42px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .icon-svg{
+    width:100%;
+    height:100%;
+    overflow:visible;
+  }
+
+  .icon-path{
+    fill:none;
+    stroke:#ffffff;
+    stroke-width:16;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+    filter:drop-shadow(0 10px 18px rgba(0,0,0,0.18));
+  }
+
+  .draw{
+    stroke-dasharray:1;
+    stroke-dashoffset:1;
+    animation: drawMark 700ms ease forwards 180ms;
+  }
+
+  @keyframes drawMark {
+    to { stroke-dashoffset: 0; }
   }
 
   .title{
     margin:0;
     font-size:clamp(34px, 6vw, 72px);
-    line-height:1.08;
+    line-height:1.06;
     font-weight:800;
     letter-spacing:-0.02em;
+    text-shadow:0 6px 16px rgba(0,0,0,0.12);
   }
 
   .subtitle{
@@ -65,25 +118,37 @@
     line-height:1.35;
     color:var(--muted);
     font-weight:500;
+    text-shadow:0 4px 12px rgba(0,0,0,0.08);
   }
 
   .meta{
     margin-top:18px;
     font-size:14px;
-    color:rgba(255,255,255,0.42);
+    color:rgba(255,255,255,0.62);
     letter-spacing:0.02em;
   }
 
-  .allow .icon{ color:var(--green); }
-  .review .icon{ color:var(--amber); }
-  .deny .icon{ color:var(--red); }
+  .hint{
+    margin-top:14px;
+    font-size:12px;
+    color:rgba(255,255,255,0.58);
+    opacity:0;
+    transition:opacity 200ms ease 650ms;
+  }
+
+  body.ready .hint { opacity:1; }
 
   @media (max-width: 700px){
-    .card{
-      transform:translateY(-6vh);
+    body.ready .card{
+      transform:translateY(-7vh);
     }
-    .subtitle{
+    .subtitle, .title{
       max-width:16ch;
+      margin-left:auto;
+      margin-right:auto;
+    }
+    .hint{
+      max-width:20ch;
       margin-left:auto;
       margin-right:auto;
     }
@@ -92,11 +157,13 @@
 </head>
 <body>
   <div class="wrap">
-    <div class="card allow" id="stateCard">
-      <div class="icon" id="icon">✓</div>
+    <div class="card" id="stateCard">
+      <img id="logo" class="logo" alt="Organisation logo">
+      <div class="icon-shell" id="iconShell"></div>
       <h1 class="title" id="title">Welcome to IRLid Event</h1>
       <div class="subtitle" id="subtitle">You’re checked in</div>
       <div class="meta" id="meta"></div>
+      <div class="hint" id="hint"></div>
     </div>
   </div>
 
@@ -108,27 +175,100 @@
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
   const logoUrl = (params.get("logo") || "").trim();
+  const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
+  const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());
+
+  let returnTimer = null;
+  let lastTapAt = 0;
+
+  function defaultReturnTarget() {
+    return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
+  }
+
+  function iconMarkup(status) {
+    if (status === "allow") {
+      return `
+        <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+          <path class="icon-path draw" pathLength="1" d="M58 118 L97 158 L162 70"></path>
+        </svg>
+      `;
+    }
+    if (status === "review") {
+      return `
+        <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+          <path class="icon-path draw" pathLength="1" d="M92 74c0-16 12-28 30-28 16 0 29 10 29 26 0 13-7 20-19 29-12 8-18 15-18 31"></path>
+          <path class="icon-path draw" pathLength="1" d="M112 168 L112 170"></path>
+        </svg>
+      `;
+    }
+    return `
+      <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+        <path class="icon-path draw" pathLength="1" d="M68 68 L152 152"></path>
+        <path class="icon-path draw" pathLength="1" d="M152 68 L68 152"></path>
+      </svg>
+    `;
+  }
+
+  function scheduleReturn(target) {
+    clearTimeout(returnTimer);
+    if (!target) return;
+    returnTimer = setTimeout(() => {
+      window.location.href = target;
+    }, timeoutMs);
+  }
+
+  function enableDoormanDoubleTap(target) {
+    if (type !== "doorman") return;
+    const hint = document.getElementById("hint");
+    hint.textContent = "Double tap to return faster";
+    document.body.addEventListener("pointerup", () => {
+      const now = Date.now();
+      if (now - lastTapAt < 340) {
+        clearTimeout(returnTimer);
+        window.location.href = target;
+      }
+      lastTapAt = now;
+    });
+  }
 
   function render(state) {
-    const card = document.getElementById("stateCard");
-    const icon = document.getElementById("icon");
+    const body = document.body;
+    const iconShell = document.getElementById("iconShell");
     const title = document.getElementById("title");
     const subtitle = document.getElementById("subtitle");
     const meta = document.getElementById("meta");
+    const logo = document.getElementById("logo");
 
-    card.className = "card " + state.status;
-    icon.textContent = state.icon;
+    body.className = "";
+    body.classList.add("status-" + state.status);
+
+    iconShell.innerHTML = iconMarkup(state.status);
     title.textContent = state.title;
     subtitle.textContent = state.subtitle || "";
     meta.textContent = state.meta || "";
+
+    if (logoUrl) {
+      logo.src = logoUrl;
+      logo.classList.add("show");
+    } else {
+      logo.removeAttribute("src");
+      logo.classList.remove("show");
+    }
+
+    requestAnimationFrame(() => body.classList.add("ready"));
+
+    const target = redirectUrl || defaultReturnTarget();
+    scheduleReturn(target);
+    enableDoormanDoubleTap(target);
   }
 
   function renderVenue() {
+    const meta = returnAllowed ? "Re-entry allowed" : "Re-entry not allowed";
     render({
       status: "allow",
-      icon: "✓",
       title: `Welcome to ${eventName}`,
-      subtitle: welcomeMessage || "You’re checked in"
+      subtitle: welcomeMessage || "You’re checked in",
+      meta
     });
   }
 
@@ -136,9 +276,9 @@
     if (org === "warn") {
       render({
         status: "review",
-        icon: "?",
         title: "Needs review",
-        subtitle: "Please check this attendee manually"
+        subtitle: "Please check this attendee manually",
+        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
       });
       return;
     }
@@ -146,9 +286,9 @@
     if (org === "fail") {
       render({
         status: "deny",
-        icon: "✕",
         title: "Not allowed",
-        subtitle: "Not on list"
+        subtitle: "Not on list",
+        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
       });
       return;
     }
@@ -156,22 +296,21 @@
     if (org === "paid") {
       render({
         status: "allow",
-        icon: "✓",
         title: "Paid guest",
-        subtitle: "Subscription verified"
+        subtitle: "Subscription verified",
+        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
       });
       return;
     }
 
-    // default success
     render({
       status: "allow",
-      icon: "✓",
       title: "Alice Smith",
-      subtitle: "Expected guest"
+      subtitle: "Expected guest",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
     });
-    }
-    
+  }
+
   if (type === "venue") {
     renderVenue();
   } else if (type === "doorman") {
@@ -179,9 +318,9 @@
   } else {
     render({
       status: "deny",
-      icon: "✕",
       title: "Not allowed",
-      subtitle: "Missing entry type"
+      subtitle: "Missing entry type",
+      meta: "Configuration required"
     });
   }
 </script>
