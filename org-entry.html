@@ -369,6 +369,19 @@
     meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
   });
 }
+
+if (type === "venue") {
+    renderVenue();
+  } else if (type === "doorman") {
+    renderDoormanMock();
+  } else {
+    render({
+      status: "deny",
+      title: "Not allowed",
+      subtitle: "Missing entry type",
+      meta: "Configuration required"
+    });
+  }
 </script>
 </body>
 </html>
