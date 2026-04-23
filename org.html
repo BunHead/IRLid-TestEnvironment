@@ -986,7 +986,8 @@ function buildOutcomeUrl(mode) {
   if (orgCode) url.searchParams.set('org', orgCode);
   if (eventCode) url.searchParams.set('event', eventCode);
 
-  // Keep the parameters that the entry test flow is most likely to care about.
+  url.searchParams.set('mode', mode);   // <-- ADD THIS
+
   url.searchParams.set('returnAllowed', portalState.returnAllowed ? 'true' : 'false');
   url.searchParams.set('returnTo', SCAN_URL);
 
