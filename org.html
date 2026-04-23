@@ -731,9 +731,9 @@ function buildVenuePayload() {
   const type = (currentMode === 'doorman_scan') ? 'doorman' : 'venue';
   const qp = new URLSearchParams({
     type,
-    org: (portalState.orgCode || 'test').trim(),
-    event: (portalState.eventCode || 'demo-night').trim(),
-    returnAllowed: settings.returnAllowed ? 'true' : 'false'
+    org: currentOrg?.api_key || 'demo',
+    event: currentOrg?.name || 'IRLid Event',
+    returnAllowed: settings.returnAllowed ? '1' : '0'
   });
   if (settings.welcomeMessage) qp.set('welcome', settings.welcomeMessage);
   if (settings.redirectUrl) qp.set('redirect', settings.redirectUrl);
@@ -753,7 +753,7 @@ function applySettingsToUI() {
 }
 function collectSettingsFromCanonical() {
   return {
-    minScore: parseInt(document.getElementById('settingsScoreSlider')?.value || 50, 10),
+    minScore: parseInt(document.getElementById('minimumTrustScore')?.value || 50, 10),
     bioRequired: document.getElementById('settingsTogBio')?.classList.contains('on') ?? false,
     privacyMode: document.getElementById('settingsTogPrivacy')?.classList.contains('on') ?? true,
     checkoutEnabled: document.getElementById('settingsTogCheckout')?.classList.contains('on') ?? true,
@@ -837,7 +837,7 @@ function renderTable(rows) {
 function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
   venueQrPayload = buildVenuePayload(); box.innerHTML = '';
-  new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
+  new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
 function selectMode(mode) {
@@ -979,50 +979,29 @@ function copyText(text) { if (!text) return; navigator.clipboard?.writeText(text
 function appendOptional(url, key, value) { if (!value) return; url.searchParams.set(key, value); }
 function buildOutcomeUrl(mode) {
   const url = new URL(OUTCOME_BASES[mode]);
-
-  const orgCode = (portalState.orgCode || 'test').trim();
-  const eventCode = (portalState.eventCode || '').trim();
-
-  if (orgCode) url.searchParams.set('org', orgCode);
-  if (eventCode) url.searchParams.set('event', eventCode);
-
-  url.searchParams.set('mode', mode);   // <-- ADD THIS
-
-  url.searchParams.set('returnAllowed', portalState.returnAllowed ? 'true' : 'false');
+  url.searchParams.set('orgCode', (portalState.orgCode || 'test').trim());
+  url.searchParams.set('event', (portalState.eventCode || '').trim());
+  url.searchParams.set('returnAllowed', String(!!portalState.returnAllowed));
   url.searchParams.set('returnTo', SCAN_URL);
-
+  url.searchParams.set('minimumTrustScore', String(portalState.minimumTrustScore || 0));
+  url.searchParams.set('privacyMode', String(!!portalState.privacyMode));
+  url.searchParams.set('anonymousMode', String(!!portalState.anonymousMode));
+  url.searchParams.set('checkoutRequired', String(!!portalState.checkoutRequired));
+  url.searchParams.set('biometricRequired', String(!!portalState.biometricRequired));
+  url.searchParams.set('allowSelfSelection', String(!!portalState.allowSelfSelection));
+  url.searchParams.set('requireDoormanConfirmation', String(!!portalState.requireDoormanConfirmation));
+  url.searchParams.set('requireAdditionalProof', String(!!portalState.requireAdditionalProof));
+  url.searchParams.set('allowProofRecording', String(!!portalState.allowProofRecording));
+  url.searchParams.set('enableIdPhotoCapture', String(!!portalState.enableIdPhotoCapture));
   appendOptional(url, 'welcome', (portalState.welcomeMessage || '').trim());
   appendOptional(url, 'redirect', (portalState.redirectUrl || '').trim());
   appendOptional(url, 'logo', (portalState.logoUrl || '').trim());
-
   return url.toString();
 }
-function renderQr(targetId, text, size, colorLight = '#ffffff', correctLevel = null) {
-  const target = document.getElementById(targetId);
-  if (!target) return;
-
-  target.innerHTML = '';
-
-  if (typeof QRCode === 'undefined') {
-    target.innerHTML = '<div style="color:#111;font-size:12px;padding:10px">QR library failed to load</div>';
-    return;
-  }
-
-  const safeLevel = correctLevel || QRCode.CorrectLevel.L;
-
-  try {
-    new QRCode(target, {
-      text,
-      width: size,
-      height: size,
-      colorDark: '#000000',
-      colorLight,
-      correctLevel: safeLevel
-    });
-  } catch (e) {
-    console.error('QR failed:', e);
-    target.innerHTML = '<div style="color:#111;font-size:12px;padding:10px">QR failed to render</div>';
-  }
+function renderQr(targetId, text, size, colorLight='#ffffff', correctLevel=null) {
+  const target = document.getElementById(targetId); if (!target) return; target.innerHTML = '';
+  if (typeof QRCode === 'undefined') { target.textContent = 'QR unavailable'; return; }
+  new QRCode(target, { text, width: size, height: size, colorDark: '#000000', colorLight, correctLevel: correctLevel || QRCode.CorrectLevel.M });
 }
 function buildPortalSummaryText() {
   return [
@@ -1108,37 +1087,8 @@ function renderPortalVisuals() {
 }
 function renderPortalSummary() {
   const summaryEl = document.getElementById('settingsSummary');
-  if (!summaryEl) return;
-
-  const items = [
-    ['Org code', portalState.orgCode || ''],
-    ['Event code', portalState.eventCode || ''],
-    ['Minimum Trust Score', String(portalState.minimumTrustScore || '')],
-    ['Bio-metric Required', portalState.biometricRequired ? 'Yes' : 'No'],
-    ['Privacy Mode', portalState.privacyMode ? 'Yes' : 'No'],
-    ['Anonymous Mode', portalState.anonymousMode ? 'Yes' : 'No'],
-    ['Check-out Required', portalState.checkoutRequired ? 'Yes' : 'No'],
-    ['Return Allowed', portalState.returnAllowed ? 'Yes' : 'No'],
-    ['Allow attendee self-selection', portalState.allowSelfSelection ? 'Yes' : 'No'],
-    ['Require doorman confirmation', portalState.requireDoormanConfirmation ? 'Yes' : 'No'],
-    ['Require additional proof if unmatched', portalState.requireAdditionalProof ? 'Yes' : 'No'],
-    ['Allow proof recording', portalState.allowProofRecording ? 'Yes' : 'No'],
-    ['Enable ID photo capture', portalState.enableIdPhotoCapture ? 'Yes' : 'No'],
-    ['Logo image URL', portalState.logoUrl || '(none)'],
-    ['Custom welcome message', portalState.welcomeMessage || '(none)'],
-    ['Post-accept redirect URL', portalState.redirectUrl || '(none)']
-  ];
-
-  summaryEl.innerHTML =
-    `<strong style="display:block;margin-bottom:8px;color:#dfe7ff;">Live settings snapshot</strong>` +
-    `<div class="settings-summary-grid">` +
-    items.map(([label, value]) =>
-      `<div class="settings-summary-item">
-        <span class="settings-summary-label">${escapeHtml(label)}</span>
-        <span class="settings-summary-value" title="${escapeHtml(String(value))}">${escapeHtml(String(value))}</span>
-      </div>`
-    ).join('') +
-    `</div>`;
+  const items = buildPortalSummaryItems().map(([label, value]) => `<div class="settings-summary-item"><span class="settings-summary-label">${escapeHtml(label)}</span><span class="settings-summary-value" title="${escapeHtml(value)}">${escapeHtml(value)}</span></div>`).join('');
+  summaryEl.innerHTML = `<strong style="display:block;margin-bottom:8px;color:#dfe7ff;">Live settings snapshot</strong><div class="settings-summary-grid">${items}</div>`;
 }
 function renderPortalScanQr() {
   document.getElementById('scanUrlBox').textContent = SCAN_URL;
@@ -1147,28 +1097,29 @@ function renderPortalScanQr() {
 function renderPortalOutcomeQr() {
   const url = buildOutcomeUrl(portalState.activeMode);
   const outcomeLine = document.getElementById('outcomeUrlLine');
-
-  if (outcomeLine) {
-    outcomeLine.value = url;
-    outcomeLine.title = url;
-  }
-
-  const lightMap = {
-    allow: '#f2fff6',
-    review: '#fff8dc',
-    deny: '#fff1f1'
-  };
-
-  renderQr(
-    'outcomeQr',
-    url,
-    208,
-    lightMap[portalState.activeMode] || '#ffffff',
-    QRCode.CorrectLevel.L
-  );
+  if (outcomeLine) { outcomeLine.value = url; outcomeLine.title = url; }
+  const lightMap = { allow: '#f2fff6', review: '#fff8dc', deny: '#fff1f1' };
+  renderQr('outcomeQr', url, 196, '#ffffff', QRCode.CorrectLevel.L);
 }
 function renderPortalAll() { renderPortalButtons(); renderPortalVisuals(); renderPortalSummary(); renderPortalScanQr(); renderPortalOutcomeQr(); savePortalState(); }
 function escapeHtml(value) { return String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;'); }
+function buildPortalSummaryItems() {
+  return [
+    ['Org code',        portalState.orgCode || ''],
+    ['Event code',      portalState.eventCode || ''],
+    ['Min score',       (portalState.minimumTrustScore ?? 70) + '%'],
+    ['Bio-metric',      portalState.biometricRequired ? 'Yes' : 'No'],
+    ['Privacy mode',    portalState.privacyMode ? 'Yes' : 'No'],
+    ['Anonymous',       portalState.anonymousMode ? 'Yes' : 'No'],
+    ['Check-out',       portalState.checkoutRequired ? 'Yes' : 'No'],
+    ['Return allowed',  portalState.returnAllowed ? 'Yes' : 'No'],
+    ['Self-select',     portalState.allowSelfSelection ? 'Yes' : 'No'],
+    ['Doorman confirm', portalState.requireDoormanConfirmation ? 'Yes' : 'No'],
+    ['Extra proof',     portalState.requireAdditionalProof ? 'Yes' : 'No'],
+    ['Proof recording', portalState.allowProofRecording ? 'Yes' : 'No'],
+    ['ID photo',        portalState.enableIdPhotoCapture ? 'Yes' : 'No'],
+  ];
+}
 function wirePortalFields() {
   PORTAL_IDS.forEach((id) => {
     const el = document.getElementById(id); if (!el) return;
