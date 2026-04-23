@@ -836,7 +836,7 @@ function renderTable(rows) {
 }
 function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
-  venueQrPayload = ; box.innerHTML = '';
+  venueQrPayload = buildVenuePayload(); box.innerHTML = '';
   new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
