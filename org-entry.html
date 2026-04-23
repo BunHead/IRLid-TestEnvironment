@@ -94,10 +94,30 @@
   }
 
   .draw{
-    stroke-dasharray:1;
-    stroke-dashoffset:1;
-    animation: drawMark 700ms ease forwards 180ms;
-  }
+	  stroke-dasharray:1;
+	  stroke-dashoffset:1;
+	  animation: drawMark 620ms ease forwards;
+	}
+
+	.draw-1{
+	  animation-delay: 180ms;
+	}
+
+	.draw-2{
+	  animation-delay: 300ms;
+	}
+
+	.icon-svg{
+	  transform: scale(0.96);
+	  transform-origin: 50% 50%;
+	  animation: iconSettle 260ms ease-out forwards 760ms;
+	}
+
+	@keyframes iconSettle {
+	  0% { transform: scale(0.96); }
+	  70% { transform: scale(1.03); }
+	  100% { transform: scale(1); }
+	}
 
   @keyframes drawMark {
     to { stroke-dashoffset: 0; }
@@ -181,33 +201,40 @@
   let returnTimer = null;
   let lastTapAt = 0;
 
-  function defaultReturnTarget() {
-    return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
-  }
+  const returnTo = (params.get("returnTo") || "").trim();
+
+	function defaultReturnTarget() {
+	  if (returnTo) return returnTo;
+	  if (location.protocol === "file:") {
+		return "https://bunhead.github.io/IRLid-TestEnvironment/scan.html";
+	  }
+	  return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
+	}
 
   function iconMarkup(status) {
-    if (status === "allow") {
-      return `
-        <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
-          <path class="icon-path draw" pathLength="1" d="M58 118 L97 158 L162 70"></path>
-        </svg>
-      `;
-    }
-    if (status === "review") {
-      return `
-        <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
-          <path class="icon-path draw" pathLength="1" d="M92 74c0-16 12-28 30-28 16 0 29 10 29 26 0 13-7 20-19 29-12 8-18 15-18 31"></path>
-          <path class="icon-path draw" pathLength="1" d="M112 168 L112 170"></path>
-        </svg>
-      `;
-    }
-    return `
-      <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
-        <path class="icon-path draw" pathLength="1" d="M68 68 L152 152"></path>
-        <path class="icon-path draw" pathLength="1" d="M152 68 L68 152"></path>
-      </svg>
-    `;
-  }
+	  if (status === "allow") {
+		return `
+		  <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+			<path class="icon-path draw draw-1" pathLength="1" d="M58 118 L97 158"></path>
+			<path class="icon-path draw draw-2" pathLength="1" d="M97 158 L162 70"></path>
+		  </svg>
+		`;
+	  }
+	  if (status === "review") {
+		return `
+		  <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+			<path class="icon-path draw draw-1" pathLength="1" d="M92 70c0-18 14-31 33-31 18 0 32 12 32 29 0 14-7 22-21 31-12 8-18 15-18 31"></path>
+			<path class="icon-path draw draw-2" pathLength="1" d="M113 162 L113 170"></path>
+		  </svg>
+		`;
+	  }
+	  return `
+		<svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+		  <path class="icon-path draw draw-1" pathLength="1" d="M60 30 L160 130"></path>
+		  <path class="icon-path draw draw-2" pathLength="1" d="M160 30 L60 130"></path>
+		</svg>
+	  `;
+	}
 
   function scheduleReturn(target) {
     clearTimeout(returnTimer);
