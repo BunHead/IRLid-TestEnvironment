@@ -6,7 +6,9 @@
 (function () {
   "use strict";
 
-  var BACKEND_URL = "https://irlid-api.irlid-bunhead.workers.dev";
+  var BACKEND_URL =
+    window.IRLID_BACKEND_URL ||
+    "https://irlid-api-test.irlid-bunhead.workers.dev";
   var LS_TOKEN = "irlid_session_token";
   var LS_USER_ID = "irlid_user_id";
   var LS_DISPLAY_NAME = "irlid_display_name";
