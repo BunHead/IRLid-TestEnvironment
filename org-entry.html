@@ -192,6 +192,7 @@
   const params = new URLSearchParams(window.location.search);
   const type = (params.get("type") || "").trim().toLowerCase();
   const org = (params.get("org") || "").trim().toLowerCase();
+  const mode = (params.get("mode") || "").trim().toLowerCase();
   const eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
