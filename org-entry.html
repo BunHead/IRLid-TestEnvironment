@@ -71,7 +71,8 @@
   .icon-shell{
     width:min(42vw, 270px);
     height:min(42vw, 270px);
-    margin:0 auto clamp(22px, 4vh, 42px);
+    margin:0 auto clamp(0px, 1.2vh, 10px);
+    transform: translateY(-42px);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -229,11 +230,11 @@
 		`;
 	  }
 	  return `
-		<svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
-		  <path class="icon-path draw draw-1" pathLength="1" d="M60 30 L160 130"></path>
-		  <path class="icon-path draw draw-2" pathLength="1" d="M160 30 L60 130"></path>
-		</svg>
-	  `;
+		  <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+			<path class="icon-path draw draw-1" pathLength="1" d="M60 14 L160 114"></path>
+			<path class="icon-path draw draw-2" pathLength="1" d="M160 14 L60 114"></path>
+		  </svg>
+		`;
 	}
 
   function scheduleReturn(target) {

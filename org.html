@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRLid — Organisation Portal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --panel-2: #1f2937;
+  --line: #30363d;
+  --line-soft: #21262d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --blue: #58a6ff;
+  --green: #3fb950;
+  --orange: #d29922;
+  --red: #f85149;
+  --radius: 10px;
+  --allow-pad: #d9f2e6;
+  --review-pad: #fff0b8;
+  --deny-pad: #ffd6d6;
+  --scan-pad: #e6eef9;
+}
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; overflow: hidden; }
+.sidebar { width: 220px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: center; align-items: center; min-height: 76px; }
+.sidebar-logo img { width: 54px; filter: brightness(0) invert(1); opacity: 0.95; }
+.sidebar-fallback { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
+.org-badge { margin: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.org-badge .org-name { font-size: 13px; font-weight: 600; }
+.org-badge .org-plan { font-size: 11px; color: var(--blue); margin-top: 2px; }
+.nav-main { padding: 6px 0; }
+.nav-bottom { margin-top: auto; padding: 6px 0 8px; border-top: 1px solid var(--line-soft); }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; font-size: 13px; color: var(--muted); cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; }
+.nav-item:hover, .nav-item.active { background: var(--panel-2); color: var(--text); }
+.nav-item.active { color: var(--blue); border-left-color: var(--blue); }
+.hidden { display: none !important; }
+.sidebar-footer { padding: 8px 16px 12px; font-size: 9px; color: #6e7681; line-height: 1.4; }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.topbar-title { font-size: 16px; font-weight: 600; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.content { padding: 20px 20px 18px; overflow-y: auto; flex: 1; }
+.panel { display: none; }
+.panel.active { display: block; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; }
+.card-header { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.card-title { font-size: 14px; font-weight: 600; }
+.card-body { padding: 18px; }
+.setup-card { max-width: 540px; margin: 40px auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 32px; }
+.setup-card h2 { font-size: 20px; margin-bottom: 8px; }
+.setup-card p { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.6; }
+.input-group { margin-bottom: 16px; }
+.input-group label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+.input-group input, .input-group textarea, .input-group select {
+  width: 100%; background: #0b1220; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; color: var(--text); font-size: 14px; outline: none;
+}
+.input-group input:focus, .input-group textarea:focus, .input-group select:focus { border-color: var(--blue); }
+.api-key-box { background: #0b1220; border: 1px solid #238636; border-radius: 6px; padding: 12px; font-family: monospace; font-size: 12px; color: #7ee787; word-break: break-all; margin: 16px 0; }
+.key-notice { font-size: 11px; color: var(--orange); margin-top: 8px; }
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+.stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+.stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+.stat-value.green { color: var(--green); }
+.stat-value.blue { color: var(--blue); }
+.stat-value.orange { color: var(--orange); }
+.stat-value.purple { color: #bc8cff; }
+.stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.two-col { display: grid; grid-template-columns: 1.2fr 340px; gap: 18px; }
+.mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.mode-card { border: 2px solid var(--line); border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s; background: #0b1220; }
+.mode-card.selected { border-color: var(--blue); background: var(--panel-2); box-shadow: 0 0 0 1px rgba(88,166,255,0.12) inset; }
+.mode-icon { font-size: 24px; margin-bottom: 8px; }
+.mode-title { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.mode-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.mode-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.mode-badge.on { background: #1f6feb33; color: var(--blue); border: 1px solid #1f6feb; }
+.mode-badge.off { background: #30363d33; color: var(--muted); border: 1px solid var(--line); }
+.qr-wrap { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; align-items: center; gap: 18px; }
+.qr-box { width: 170px; height: 170px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.25); overflow: hidden; }
+.qr-box > div, .qr-box canvas, .qr-box img { max-width: 150px; max-height: 150px; }
+.qr-info { flex: 1; }
+.qr-info h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.qr-info p { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+.qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.qr-payload-preview { margin-top: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0a0f15; font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
+.scan-panel { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.scan-panel-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.scan-panel-sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+.expected-list { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #11161d; overflow: hidden; }
+.expected-head { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.expected-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
+.expected-item:last-child { border-bottom: none; }
+.expected-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.expected-pill { font-size: 10px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); }
+.expected-pill.ok { border-color: #238636; color: var(--green); background: #1a4731; }
+.expected-pill.warn { border-color: var(--orange); color: var(--orange); background: #2d2a0f; }
+.match-panel { margin-top: 14px; background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.match-panel h5 { font-size: 13px; margin-bottom: 6px; }
+.match-panel p, .mini-help { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.warning-note { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #2d2a0f; border: 1px solid var(--orange); color: var(--orange); font-size: 11px; line-height: 1.45; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+.toggle-row:last-child { border-bottom: none; }
+.toggle-info .tname { font-size: 13px; font-weight: 500; }
+.toggle-info .tdesc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.toggle { width: 34px; height: 18px; border-radius: 9px; cursor: pointer; position: relative; flex-shrink: 0; transition: background 0.2s; }
+.toggle.on { background: var(--green); }
+.toggle.off { background: var(--line); }
+.toggle::after { content: ''; position: absolute; width: 12px; height: 12px; background: #fff; border-radius: 50%; top: 3px; transition: left 0.2s; }
+.toggle.on::after { left: 19px; }
+.toggle.off::after { left: 3px; }
+.section-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; margin-top: 16px; }
+.section-label:first-child { margin-top: 0; }
+.slider-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; }
+.slider-label span { color: var(--green); font-weight: 600; }
+input[type=range] { width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--blue) 60%, var(--line) 60%); outline: none; margin-bottom: 4px; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--blue); border-radius: 50%; cursor: pointer; }
+.att-table { width: 100%; border-collapse: collapse; }
+.att-table th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.att-table td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.att-table tr:last-child td { border-bottom: none; }
+.att-table tr:hover td { background: var(--panel-2); }
+.score-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.score-high { background: #1a4731; color: var(--green); }
+.score-med { background: #2d2a0f; color: var(--orange); }
+.score-low { background: #3d1c1c; color: var(--red); }
+.status-in { color: var(--green); font-size: 10px; font-weight: 600; }
+.status-out { color: var(--muted); font-size: 10px; }
+.bio-tag { color: #bc8cff; font-size: 10px; }
+.empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+.btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
+.btn-primary { background: #238636; color: #fff; }
+.btn-primary:hover { background: #2ea043; }
+.btn-secondary { background: var(--line-soft); color: var(--text); border: 1px solid var(--line); }
+.btn-secondary:hover { background: var(--line); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 5px; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+.toast { position: fixed; bottom: 24px; right: 24px; background: #238636; color: #fff; padding: 12px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
+.toast.show { opacity: 1; }
+.alert { padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-bottom: 14px; }
+.alert-warn { background: #2d2a0f; border: 1px solid var(--orange); color: var(--orange); }
+.alert-info { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }
+.debug-banner { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: #2d2a0f; border: 1px solid var(--orange); color: var(--orange); }
+.section-anchor { scroll-margin-top: 24px; }
+
+/* New settings panel */
+.settings-shell { display: grid; grid-template-columns: minmax(0, 1.32fr) minmax(350px, 0.62fr); gap: 16px; align-items: start; }
+.settings-stack { display: grid; gap: 14px; }
+.settings-card { background: linear-gradient(180deg, rgba(25,36,64,0.92), rgba(19,28,49,0.96)); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.settings-card-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.settings-card-header h3 { font-size: 15px; margin-bottom: 4px; }
+.settings-card-header p { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.settings-card-body { padding: 14px; }
+.settings-group { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+.settings-group:last-child { margin-bottom: 0; }
+.settings-group h4 { margin-bottom: 10px; font-size: 13px; }
+.settings-grid-3, .settings-grid-2 { display: grid; gap: 10px; }
+.settings-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.settings-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.settings-field span { font-size: 12px; color: #dbe6ff; }
+.settings-field input, .settings-field textarea { width: 100%; border: 1px solid rgba(255,255,255,0.12); background: rgba(5,10,20,0.45); color: var(--text); border-radius: 10px; padding: 10px 11px; outline: none; font: inherit; }
+.settings-field textarea { min-height: 52px; resize: vertical; }
+.settings-field input:focus, .settings-field textarea:focus { border-color: rgba(105,168,255,0.6); box-shadow: 0 0 0 3px rgba(105,168,255,0.12); }
+.switch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.switch-tile { display: flex; flex-direction: column; justify-content: space-between; min-height: 84px; gap: 8px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); }
+.switch-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.switch-top strong { font-size: 12px; font-weight: 500; color: #e6edf3; }
+.switch-hint { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.switch-wrap { position: relative; width: 46px; height: 26px; flex: 0 0 auto; }
+.switch-wrap input { opacity: 0; width: 0; height: 0; }
+.switch-slider { position: absolute; inset: 0; border-radius: 999px; cursor: pointer; background: rgba(255,255,255,0.16); transition: 0.2s ease; }
+.switch-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 4px; top: 4px; border-radius: 50%; background: #fff; transition: 0.2s ease; }
+.switch-wrap input:checked + .switch-slider { background: linear-gradient(90deg, #72e6b8, #69a8ff); }
+.switch-wrap input:checked + .switch-slider::before { transform: translateX(20px); }
+.qr-tools-card { background: linear-gradient(180deg, rgba(25,36,64,0.92), rgba(19,28,49,0.96)); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.qr-tools-header { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
+.qr-tools-header h3 { font-size: 15px; margin-bottom: 4px; }
+.qr-tools-header p { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.qr-tools-body { padding: 14px; display: grid; gap: 12px; }
+.qr-tool-block { border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 12px; }
+.qr-tool-block.scan-block { background: linear-gradient(180deg, rgba(88,166,255,0.1), rgba(255,255,255,0.02)); }
+.qr-tool-block.allow-mode { background: linear-gradient(180deg, rgba(63,185,80,0.16), rgba(255,255,255,0.02)); }
+.qr-tool-block.review-mode { background: linear-gradient(180deg, rgba(210,153,34,0.18), rgba(255,255,255,0.02)); }
+.qr-tool-block.deny-mode { background: linear-gradient(180deg, rgba(248,81,73,0.18), rgba(255,255,255,0.02)); }
+.qr-tool-block h4 { font-size: 13px; margin-bottom: 5px; }
+.qr-tool-block p { font-size: 11px; line-height: 1.35; color: var(--muted); margin-bottom: 10px; }
+.qr-pad { border-radius: 12px; min-height: 150px; padding: 8px; display: grid; place-items: center; border: 1px solid rgba(0,0,0,0.06); }
+.qr-pad.scan { background: var(--scan-pad); }
+.qr-pad.allow { background: var(--allow-pad); }
+.qr-pad.review { background: var(--review-pad); }
+.qr-pad.deny { background: var(--deny-pad); }
+.qr-pad.active-pad { min-height: 268px; padding: 14px; }
+.mini-actions { margin-top: 6px; display: flex; justify-content: flex-start; }
+.qr-box-small { width: 132px; height: 132px; background: #fff; border-radius: 8px; display: grid; place-items: center; overflow: hidden; }
+.qr-box-small canvas, .qr-box-small img, .qr-box-small > div { max-width: 118px; max-height: 118px; }
+.qr-box-large { width: 228px; height: 228px; background: #fff; border-radius: 10px; display: grid; place-items: center; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+.qr-box-large canvas, .qr-box-large img, .qr-box-large > div { max-width: 208px; max-height: 208px; }
+.scan-toggle { border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; overflow: hidden; background: linear-gradient(180deg, rgba(88,166,255,0.08), rgba(255,255,255,0.02)); }
+.scan-toggle summary { list-style: none; cursor: pointer; padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.scan-toggle summary::-webkit-details-marker { display: none; }
+.scan-toggle summary h4 { margin: 0; font-size: 13px; }
+.scan-toggle summary p { margin: 4px 0 0; font-size: 11px; color: var(--muted); line-height: 1.35; }
+.scan-toggle-icon { color: var(--blue); font-size: 16px; transition: transform 0.2s ease; }
+.scan-toggle[open] .scan-toggle-icon { transform: rotate(180deg); }
+.scan-toggle-body { padding: 0 12px 12px; display: grid; gap: 8px; }
+.mode-chip { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 7px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+.mode-chip.allow { background: #1f7a5a; color: #eafff3; }
+.mode-chip.review { background: #a67c00; color: #fff8dc; }
+.mode-chip.deny { background: #a63a3a; color: #fff0f0; }
+.mode-buttons { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.mode-btn { padding: 7px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; }
+.mode-btn.active { transform: scale(1.04); box-shadow: 0 0 0 2px rgba(255,255,255,0.16); }
+.mode-btn.allow.active { background: rgba(63,185,80,0.22); }
+.mode-btn.review.active { background: rgba(210,153,34,0.22); }
+.mode-btn.deny.active { background: rgba(248,81,73,0.22); }
+.compact-url { margin-top: 8px; padding: 7px 9px; background: rgba(5,10,20,0.45); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; font-size: 11px; color: #dfe7ff; line-height: 1.35; word-break: break-word; cursor: pointer; }
+.url-inline-row { margin-top: 8px; }
+.url-inline-input { width: 100%; background: rgba(5,10,20,0.45); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 10px; color: #dfe7ff; font-size: 11px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.url-inline-input:focus { outline: none; border-color: rgba(88,166,255,0.55); }
+.settings-summary { background: #0b1220; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 11px; color: var(--muted); line-height: 1.45; }
+.settings-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 18px; }
+.settings-summary-item { min-width: 0; }
+.settings-summary-label { display: block; font-size: 10px; color: #8fa0c3; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+.settings-summary-value { display: block; color: #dff6ff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.settings-summary code { color: #dff6ff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.settings-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.small-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
+
+@media (max-width: 1380px) {
+  .settings-shell { grid-template-columns: 1fr; }
+}
+@media (max-width: 1100px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .two-col { grid-template-columns: 1fr; }
+  .switch-grid, .settings-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body { overflow: auto; }
+  .sidebar { width: 78px; }
+  .sidebar-logo img { width: 40px; }
+  .org-badge, .sidebar-footer, .nav-item span { display: none; }
+  .content { padding: 14px; }
+  .settings-grid-2, .settings-grid-3, .switch-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <img src="logo.png" alt="IRLid logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+    <div class="sidebar-fallback" style="display:none;">IRL</div>
+  </div>
+
+  <div class="org-badge">
+    <div class="org-name" id="sidebarOrgName">Not signed in</div>
+    <div class="org-plan" id="sidebarOrgPlan">Load or register an organisation</div>
+  </div>
+
+  <nav class="nav-main">
+    <div class="nav-item" id="navOrganisation" onclick="showPanel('setup', this)">◈ <span>Organisation</span></div>
+    <div class="nav-item hidden" id="navDashboard" onclick="showPanel('dashboard', this)">⊞ <span>Dashboard</span></div>
+    <div class="nav-item hidden" id="navCheckin" onclick="showPanel('checkin', this)">✓ <span>Check-in</span></div>
+  </nav>
+
+  <div class="nav-bottom">
+    <div class="nav-item" id="navSettings" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">Organisation</div>
+    <div class="topbar-actions">
+      <span id="liveStatus"><span class="live-dot"></span>Debug</span>
+      <button class="btn btn-secondary btn-sm" id="refreshBtn" onclick="refreshAttendance()">↻ Refresh</button>
+      <button class="btn btn-secondary btn-sm" id="csvBtn" onclick="exportCSV()">↓ CSV</button>
+      <button class="btn btn-secondary btn-sm" id="csvUploadBtn" onclick="triggerCsvUpload()">↑ CSV</button>
+      <button class="btn btn-secondary btn-sm" id="signOutBtn" onclick="signOutOrg()">Sign out</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="panel" id="panel-setup">
+      <div class="setup-card">
+        <h2>Organisation Setup <span class="debug-banner">debug</span></h2>
+        <p>Register or load an organisation locally. This version simulates the backend offline so we can work on layout and flow safely without touching the live site or any remote backend.</p>
+
+        <div class="alert alert-info">
+          In DEV mode, a debug organisation is auto-loaded and the portal opens directly on the dashboard for faster iteration.
+        </div>
+
+        <div id="setupForm">
+          <div class="input-group">
+            <label>Organisation Name</label>
+            <input type="text" id="orgNameInput" placeholder="e.g. Acme Conference Ltd" />
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="registerOrg()">Register Organisation</button>
+        </div>
+
+        <div id="setupResult" style="display:none;">
+          <div class="alert alert-warn">Save your debug API key now — this one exists only locally in your browser.</div>
+          <div class="api-key-box" id="apiKeyDisplay"></div>
+          <div class="key-notice">Stored locally for safe debug iteration.</div>
+          <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="saveKeyAndContinue()">Continue with this organisation →</button>
+        </div>
+
+        <div id="existingKeyForm" style="margin-top:24px;padding-top:24px;border-top:1px solid #30363d;">
+          <p style="margin-bottom:12px;">Already have a local debug key? Enter it below:</p>
+          <div class="input-group">
+            <input type="text" id="existingKeyInput" placeholder="org_..." />
+          </div>
+          <button class="btn btn-secondary" style="width:100%" onclick="loadExistingKey()">Load Organisation</button>
+        </div>
+
+        <div id="setupMessage" style="margin-top:14px;font-size:12px;"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-dashboard">
+      <div class="stats-row" id="statsRow">
+        <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="statIn">12</div><div class="stat-sub" id="statInSub">18 total today</div></div>
+        <div class="stat-card"><div class="stat-label">Checked Out</div><div class="stat-value blue" id="statOut">6</div></div>
+        <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value orange" id="statScore">84%</div><div class="stat-sub">Min threshold: <span id="statMin">50%</span></div></div>
+        <div class="stat-card"><div class="stat-label">Bio-metric Verified</div><div class="stat-value purple" id="statBio">7</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><span class="live-dot"></span>Attendance — Today</div>
+          <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Debug data loaded</div>
+        </div>
+        <div id="attendanceBody" style="overflow-x:auto;">
+          <table class="att-table">
+            <thead>
+              <tr>
+                <th>Attendee</th>
+                <th>In</th>
+                <th>Out</th>
+                <th>Score</th>
+                <th>Bio</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="attendanceRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-checkin">
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Check-in Mode</div>
+              <div style="font-size:11px;color:#8b949e;">Operational screen</div>
+            </div>
+            <div class="card-body">
+              <div class="mode-selector">
+                <div class="mode-card selected" id="modeAttendee" onclick="selectMode('attendee_scan')">
+                  <div class="mode-icon">📱</div>
+                  <div class="mode-title">Attendee Scans Venue QR</div>
+                  <div class="mode-desc">Display a large QR at the entrance. Attendees scan it to self-check-in.</div>
+                  <div class="mode-badge on">✓ Active at door</div>
+                </div>
+                <div class="mode-card" id="modeDoorman" onclick="selectMode('doorman_scan')">
+                  <div class="mode-icon">🚪</div>
+                  <div class="mode-title">Doorman Scans Attendee</div>
+                  <div class="mode-desc">Staff scan each attendee HELLO code or record them manually.</div>
+                  <div class="mode-badge off">Switch to this</div>
+                </div>
+              </div>
+
+              <div id="venueQRWrap" class="qr-wrap">
+                <div class="qr-box" id="venueQrBox"></div>
+                <div class="qr-info">
+                  <h4>Venue Check-in QR</h4>
+                  <p>This QR is generated from a local debug URL. It is safe to test visually and generic camera scanning should treat it as a link rather than raw JSON.</p>
+                  <div class="qr-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="loadVenueQR()">↻ Refresh QR</button>
+                    <button class="btn btn-primary btn-sm" onclick="fullscreenQR()">⛶ Fullscreen</button>
+                    <button class="btn btn-secondary btn-sm" onclick="copyText(venueQrPayload)">Copy URL</button>
+                  </div>
+                  <div class="qr-payload-preview" id="qrPayloadPreview"></div>
+                </div>
+              </div>
+
+              <div id="doormanWrap" style="display:none;">
+                <div class="scan-panel">
+                  <div class="scan-panel-title">Doorman Console</div>
+                  <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
+
+                  <div class="input-group" style="margin-bottom:10px;">
+                    <label>Manual check-in (attendee label)</label>
+                    <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
+                  </div>
+                  <button class="btn btn-primary" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
+
+                  <div class="expected-list">
+                    <div class="expected-head">Expected attendees (debug list)</div>
+                    <div id="expectedAttendeeList"></div>
+                  </div>
+
+                  <div class="match-panel">
+                    <h5>When identity is unclear</h5>
+                    <p>If the attendee is not already linked, the intended flow is to send them to an assisted identity screen where they can select themselves from the expected list and provide any additional proof required by organisation policy.</p>
+                    <div class="mini-help">
+                      Preferred path:
+                      <br>1. reuse normal IRLid scanner
+                      <br>2. detect HELLO vs venue QR
+                      <br>3. if unmatched, go to assisted identity flow
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="background:#1a1f29;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                <div>
+                  <div style="font-size:13px;font-weight:500;" id="checkoutLabel">✓ Check-out enabled</div>
+                  <div style="font-size:11px;color:#8b949e;margin-top:2px;">Records departure time and duration</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="openSettingsTo('settings-checkout')">Configure</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-header"><div class="card-title">⚙ Quick Settings</div></div>
+            <div class="card-body">
+              <div class="section-label">Min Trust Score</div>
+              <div class="slider-label">Threshold <span id="sliderVal">50% — Standard</span></div>
+              <input type="range" min="20" max="100" value="50" id="scoreSlider" oninput="updateSlider(this)">
+
+              <div class="section-label">Options</div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="tname">Bio-metric Required</div><div class="tdesc">Face ID / fingerprint mandatory</div></div>
+                <div class="toggle off" id="togBio" onclick="togToggle('bio')"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="tname">Privacy Mode</div><div class="tdesc">Store GPS as SHA-256 hash only</div></div>
+                <div class="toggle on" id="togPrivacy" onclick="togToggle('privacy')"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="tname">Check-out Required</div><div class="tdesc">Record departure time</div></div>
+                <div class="toggle on" id="togCheckout" onclick="togToggle('checkout')"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="tname">Return Allowed</div><div class="tdesc">Permit attendee re-entry after leaving</div></div>
+                <div class="toggle on" id="togReturnAllowed" onclick="togToggle('returnAllowed')"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="toggle-info"><div class="tname">Anonymous Mode</div><div class="tdesc">Count only — no names stored</div></div>
+                <div class="toggle off" id="togAnon" onclick="togToggle('anon')"></div>
+              </div>
+
+              <button class="btn btn-primary" style="width:100%;margin-top:18px;" onclick="saveSettings()">Save Quick Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-settings">
+      <div class="settings-shell">
+        <div class="settings-stack">
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Organisation settings</h3>
+              <p>Compact desktop settings screen with the old app nav restored. Local-only test mode. No Cloudflare writes.</p>
+            </div>
+            <div class="settings-card-body">
+              <div class="settings-group">
+                <h4>Basic test identity</h4>
+                <div class="settings-grid-3">
+                  <label class="settings-field"><span>Org code</span><input id="orgCode" type="text" value="test"></label>
+                  <label class="settings-field"><span>Event code</span><input id="eventCode" type="text" value="demo-night"></label>
+                  <label class="settings-field"><span>Minimum Trust Score</span><input id="minimumTrustScore" type="number" min="0" max="100" step="1" value="70"></label>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <h4>Core gates and policy</h4>
+                <div class="switch-grid">
+                  <label class="switch-tile"><div class="switch-top"><strong>Bio-metric Required</strong><label class="switch-wrap"><input id="biometricRequired" type="checkbox"><span class="switch-slider"></span></label></div><div class="switch-hint">Use when a face or biometric step is required before allow.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Privacy Mode</strong><label class="switch-wrap"><input id="privacyMode" type="checkbox"><span class="switch-slider"></span></label></div><div class="switch-hint">Prefer reduced personal detail in the entry flow.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Anonymous Mode</strong><label class="switch-wrap"><input id="anonymousMode" type="checkbox"><span class="switch-slider"></span></label></div><div class="switch-hint">Permit anonymous-style handling where appropriate.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Check-out Required</strong><label class="switch-wrap"><input id="checkoutRequired" type="checkbox"><span class="switch-slider"></span></label></div><div class="switch-hint">Marks the event as requiring an exit/check-out flow later.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Return Allowed</strong><label class="switch-wrap"><input id="returnAllowed" type="checkbox" checked><span class="switch-slider"></span></label></div><div class="switch-hint">Passed into the test URL so entry pages can show re-entry policy.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Allow attendee self-selection</strong><label class="switch-wrap"><input id="allowSelfSelection" type="checkbox" checked><span class="switch-slider"></span></label></div><div class="switch-hint">Placeholder setting for attendee-led selection before confirmation.</div></label>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <h4>Assisted identity and proof rules</h4>
+                <div class="switch-grid">
+                  <label class="switch-tile"><div class="switch-top"><strong>Require doorman confirmation</strong><label class="switch-wrap"><input id="requireDoormanConfirmation" type="checkbox" checked><span class="switch-slider"></span></label></div><div class="switch-hint">Keeps the doorman step active even if a match looks strong.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Require additional proof if unmatched</strong><label class="switch-wrap"><input id="requireAdditionalProof" type="checkbox" checked><span class="switch-slider"></span></label></div><div class="switch-hint">Use a second proof path when there is no confident match.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Allow proof recording</strong><label class="switch-wrap"><input id="allowProofRecording" type="checkbox"><span class="switch-slider"></span></label></div><div class="switch-hint">UI setting only for now. Does not enable any backend storage.</div></label>
+                  <label class="switch-tile"><div class="switch-top"><strong>Enable ID photo capture</strong><label class="switch-wrap"><input id="enableIdPhotoCapture" type="checkbox"><span class="switch-slider"></span></label></div><div class="switch-hint">Placeholder switch for later camera or proof-capture work.</div></label>
+                </div>
+              </div>
+
+              <div class="settings-group">
+                <h4>Branding and post-accept behaviour</h4>
+                <div class="settings-grid-3">
+                  <label class="settings-field"><span>Logo image URL</span><input id="logoUrl" type="url" placeholder="https://example.com/logo.png"></label>
+                  <label class="settings-field"><span>Post-accept redirect URL</span><input id="redirectUrl" type="url" placeholder="https://example.com/welcome"></label>
+                  <label class="settings-field"><span>Custom welcome message</span><textarea id="welcomeMessage" placeholder="Welcome to the venue."></textarea></label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-stack">
+          <div class="qr-tools-card">
+            <div class="qr-tools-header">
+              <h3>QR test tools</h3>
+              <p>Hosted scan QR tucked below, with a larger active outcome QR above for easier scanning.</p>
+            </div>
+            <div class="qr-tools-body">
+              <div class="qr-tool-block allow-mode" id="activeOutcomeBlock">
+                <div class="mode-chip allow" id="modeChip">ACTIVE MODE: ALLOW</div>
+                <h4>Active outcome QR</h4>
+                <p>Switch between Allow, Review, and Deny. Only the selected outcome QR is shown.</p>
+                <div class="mode-buttons">
+                  <button type="button" class="mode-btn allow active" data-mode="allow">Allow</button>
+                  <button type="button" class="mode-btn review" data-mode="review">Review</button>
+                  <button type="button" class="mode-btn deny" data-mode="deny">Deny</button>
+                </div>
+                <div class="qr-pad allow active-pad" id="outcomePad"><div class="qr-box-large" id="outcomeQr"></div></div>
+                <div class="url-inline-row">
+                  <input class="url-inline-input" id="outcomeUrlLine" readonly title="Active outcome URL">
+                </div>
+                <div class="mini-actions">
+                  <button class="btn btn-secondary btn-sm" type="button" id="copyOutcomeMiniBtn">Copy active URL</button>
+                </div>
+              </div>
+
+              <details class="scan-toggle">
+                <summary>
+                  <div>
+                    <h4>Hosted scan page</h4>
+                    <p>Less-used debug helper. Expand when you want the phone pointed at the hosted scanner.</p>
+                  </div>
+                  <span class="scan-toggle-icon">⌄</span>
+                </summary>
+                <div class="scan-toggle-body">
+                  <div class="qr-pad scan"><div class="qr-box-small" id="scanQr"></div></div>
+                  <div class="compact-url" id="scanUrlBox" onclick="copyText(SCAN_URL)" title="Click to copy"></div>
+                </div>
+              </details>
+
+              <div class="settings-summary" id="settingsSummary"></div>
+              <div class="settings-actions">
+                <button class="btn btn-primary" type="button" id="savePortalSettingsBtn">Save All Settings</button>
+                <button class="btn btn-secondary" type="button" id="copyOutcomeUrlBtn">Copy active outcome URL</button>
+                <button class="btn btn-secondary" type="button" id="copySettingsBtn">Copy settings summary</button>
+                <button class="btn btn-secondary" type="button" id="copyScanUrlBtn">Copy hosted scan URL</button>
+                <button class="btn btn-secondary" type="button" id="resetPortalSettingsBtn">Reset to defaults</button>
+              </div>
+              <div class="small-note">This page only prepares and previews test URLs. It does not perform Cloudflare writes or any production attendance action.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="csvFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" style="display:none">
+
+<script>
+const DEV_AUTO_LOGIN = true;
+const DEV_ORG_NAME = "IRLid";
+const STORAGE_KEY_ORG = "irlid_mock_org";
+const STORAGE_KEY_ATT = "irlid_mock_attendance";
+const STORAGE_KEY_SETTINGS = "irlid_mock_settings";
+const STORAGE_KEY_EXPECTED = "irlid_mock_expected_attendees";
+const STORAGE_KEY_PORTAL = 'irlid_portal_full_v1';
+const SCAN_URL = 'https://bunhead.github.io/IRLid-TestEnvironment/scan.html';
+const OUTCOME_BASES = {
+  allow: 'https://bunhead.github.io/IRLid-TestEnvironment/org-entry.html?type=doorman&org=test',
+  review: 'https://bunhead.github.io/IRLid-TestEnvironment/org-entry.html?type=doorman&org=warn',
+  deny: 'https://bunhead.github.io/IRLid-TestEnvironment/org-entry.html?type=doorman&org=fail'
+};
+const MODE_LABELS = { allow: 'ALLOW', review: 'REVIEW', deny: 'DENY' };
+const PORTAL_DEFAULTS = {
+  orgCode: 'test',
+  eventCode: 'demo-night',
+  minimumTrustScore: 70,
+  biometricRequired: false,
+  privacyMode: false,
+  anonymousMode: false,
+  checkoutRequired: false,
+  returnAllowed: true,
+  allowSelfSelection: true,
+  requireDoormanConfirmation: true,
+  requireAdditionalProof: true,
+  allowProofRecording: false,
+  enableIdPhotoCapture: false,
+  logoUrl: '',
+  redirectUrl: '',
+  welcomeMessage: '',
+  activeMode: 'allow'
+};
+const PORTAL_IDS = [
+  'orgCode','eventCode','minimumTrustScore','biometricRequired','privacyMode','anonymousMode','checkoutRequired','returnAllowed',
+  'allowSelfSelection','requireDoormanConfirmation','requireAdditionalProof','allowProofRecording','enableIdPhotoCapture','logoUrl','redirectUrl','welcomeMessage'
+];
+let currentOrg = null;
+let currentMode = 'attendee_scan';
+let settings = {
+  minScore: 50,
+  bioRequired: false,
+  privacyMode: true,
+  checkoutEnabled: true,
+  returnAllowed: true,
+  anonymousMode: false,
+  logoUrl: '',
+  welcomeMessage: 'Welcome. Please review and confirm your check-in.',
+  redirectUrl: '',
+  allowSelfSelect: true,
+  requireDoormanConfirm: true,
+  requireProof: true,
+  allowProofRecording: true,
+  allowIdPhotoCapture: false
+};
+let portalState = loadPortalState();
+let attendanceData = [];
+let venueQrPayload = null;
+
+function mockGenerateKey() { return 'org_' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
+function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
+function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+function defaultAttendance() {
+  const now = Math.floor(Date.now() / 1000);
+  return [
+    { id: 'a1', mode: 'attendee_scan', attendee_label: 'Alice', attendee_key_id: 'key_alice_123', score: 92, bio_verified: 1, checkin_at: now - 7200, checkout_at: null, duration_s: null },
+    { id: 'a2', mode: 'doorman_scan', attendee_label: 'Bob', attendee_key_id: 'key_bob_456', score: 77, bio_verified: 0, checkin_at: now - 6800, checkout_at: now - 1800, duration_s: 5000 },
+    { id: 'a3', mode: 'attendee_scan', attendee_label: 'Charlie', attendee_key_id: 'key_charlie_789', score: 84, bio_verified: 1, checkin_at: now - 3600, checkout_at: null, duration_s: null },
+    { id: 'a4', mode: 'doorman_scan', attendee_label: '', attendee_key_id: 'anon_2244', score: 48, bio_verified: 0, checkin_at: now - 2400, checkout_at: now - 600, duration_s: 1800 }
+  ];
+}
+function defaultExpectedAttendees() {
+  return [
+    { id: 'e1', name: 'Alice Morgan', paid: true, subscription: true, linked: true },
+    { id: 'e2', name: 'Bob Clarke', paid: true, subscription: false, linked: true },
+    { id: 'e3', name: 'Charlie West', paid: false, subscription: false, linked: false },
+    { id: 'e4', name: 'Dana Hughes', paid: true, subscription: false, linked: false }
+  ];
+}
+function ensureDevOrg() {
+  let stored = loadJson(STORAGE_KEY_ORG, null);
+  if (!stored) {
+    stored = { name: DEV_ORG_NAME, api_key: mockGenerateKey(), created_at: Date.now(), mode: 'offline-debug-dev' };
+    saveJson(STORAGE_KEY_ORG, stored);
+  }
+  return stored;
+}
+function ensureDevAttendance() { let stored = loadJson(STORAGE_KEY_ATT, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultAttendance(); saveJson(STORAGE_KEY_ATT, stored); } return stored; }
+function ensureExpectedAttendees() { let stored = loadJson(STORAGE_KEY_EXPECTED, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultExpectedAttendees(); saveJson(STORAGE_KEY_EXPECTED, stored); } return stored; }
+function loadPortalState() { try { const raw = localStorage.getItem(STORAGE_KEY_PORTAL); return { ...PORTAL_DEFAULTS, ...(raw ? JSON.parse(raw) : {}) }; } catch (e) { return { ...PORTAL_DEFAULTS }; } }
+function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.stringify(portalState)); }
+
+function showPanel(name, el) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  else {
+    const target = { setup: 'navOrganisation', dashboard: 'navDashboard', checkin: 'navCheckin', settings: 'navSettings' }[name];
+    if (target) document.getElementById(target).classList.add('active');
+  }
+  const titles = { dashboard: 'Dashboard', checkin: 'Check-in', settings: 'Settings', setup: 'Organisation' };
+  document.getElementById('topbarTitle').textContent = titles[name] || name;
+}
+function setSignedInUI(isSignedIn) {
+  document.getElementById('navDashboard').classList.toggle('hidden', !isSignedIn);
+  document.getElementById('navCheckin').classList.toggle('hidden', !isSignedIn);
+  document.getElementById('refreshBtn').disabled = !isSignedIn;
+  document.getElementById('csvBtn').disabled = !isSignedIn;
+  document.getElementById('signOutBtn').disabled = !isSignedIn;
+  if (isSignedIn && currentOrg) {
+    document.getElementById('sidebarOrgName').textContent = currentOrg.name;
+    document.getElementById('sidebarOrgPlan').textContent = DEV_AUTO_LOGIN ? 'Signed in locally (DEV auto-login)' : 'Signed in locally';
+  } else {
+    document.getElementById('sidebarOrgName').textContent = 'Not signed in';
+    document.getElementById('sidebarOrgPlan').textContent = 'Load or register an organisation';
+  }
+}
+function registerOrg() {
+  const name = document.getElementById('orgNameInput').value.trim();
+  if (!name) return showToast('Enter an organisation name', true);
+  const org = { name, api_key: mockGenerateKey(), created_at: Date.now(), mode: 'offline-debug' };
+  saveJson(STORAGE_KEY_ORG, org);
+  currentOrg = org;
+  document.getElementById('apiKeyDisplay').textContent = org.api_key;
+  document.getElementById('existingKeyInput').value = org.api_key;
+  document.getElementById('setupForm').style.display = 'none';
+  document.getElementById('setupResult').style.display = 'block';
+  showSetupMessage('Debug organisation created locally.', false);
+}
+function saveKeyAndContinue() {
+  if (!currentOrg) return showToast('No organisation ready to continue with', true);
+  setSignedInUI(true); refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded locally');
+}
+function loadExistingKey() {
+  const k = document.getElementById('existingKeyInput').value.trim();
+  if (!k.startsWith('org_')) return showToast('Key must start with org_', true);
+  const stored = loadJson(STORAGE_KEY_ORG, null);
+  if (!stored) return showToast('No locally stored debug organisation found', true);
+  if (stored.api_key !== k) return showToast('That key does not match the local debug organisation', true);
+  currentOrg = stored; document.getElementById('orgNameInput').value = currentOrg.name || ''; setSignedInUI(true); refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded locally');
+}
+function signOutOrg() { currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
+function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
+function buildVenuePayload() {
+  const baseUrl = 'https://bunhead.github.io/IRLid-TestEnvironment';
+  const type = (currentMode === 'doorman_scan') ? 'doorman' : 'venue';
+  const qp = new URLSearchParams({
+    type,
+    org: currentOrg?.api_key || 'demo',
+    event: currentOrg?.name || 'IRLid Event',
+    returnAllowed: settings.returnAllowed ? '1' : '0'
+  });
+  if (settings.welcomeMessage) qp.set('welcome', settings.welcomeMessage);
+  if (settings.redirectUrl) qp.set('redirect', settings.redirectUrl);
+  if (settings.logoUrl) qp.set('logo', settings.logoUrl);
+  return `${baseUrl}/org-entry.html?${qp.toString()}`;
+}
+function applySettingsToUI() {
+  if (document.getElementById('scoreSlider')) { document.getElementById('scoreSlider').value = settings.minScore || 50; updateSlider(document.getElementById('scoreSlider')); }
+  if (document.getElementById('settingsScoreSlider')) { document.getElementById('settingsScoreSlider').value = settings.minScore || 50; updateSettingsSlider(document.getElementById('settingsScoreSlider')); }
+  setToggle('togBio', !!settings.bioRequired); setToggle('togPrivacy', settings.privacyMode !== false); setToggle('togCheckout', settings.checkoutEnabled !== false); setToggle('togReturnAllowed', settings.returnAllowed !== false); setToggle('togAnon', !!settings.anonymousMode);
+  setToggle('settingsTogBio', !!settings.bioRequired); setToggle('settingsTogPrivacy', settings.privacyMode !== false); setToggle('settingsTogCheckout', settings.checkoutEnabled !== false); setToggle('settingsTogReturnAllowed', settings.returnAllowed !== false); setToggle('settingsTogAnon', !!settings.anonymousMode);
+  setToggle('settingsTogSelfSelect', settings.allowSelfSelect !== false); setToggle('settingsTogDoormanConfirm', settings.requireDoormanConfirm !== false); setToggle('settingsTogRequireProof', settings.requireProof !== false); setToggle('settingsTogAllowProofRecording', settings.allowProofRecording !== false); setToggle('settingsTogAllowIdPhoto', !!settings.allowIdPhotoCapture);
+  const logo = document.getElementById('settingsLogoUrl'); const welcome = document.getElementById('settingsWelcome'); const redirect = document.getElementById('settingsRedirectUrl');
+  if (logo) logo.value = settings.logoUrl || ''; if (welcome) welcome.value = settings.welcomeMessage || ''; if (redirect) redirect.value = settings.redirectUrl || '';
+  if (document.getElementById('statMin')) document.getElementById('statMin').textContent = (settings.minScore || 50) + '%';
+  if (document.getElementById('checkoutLabel')) document.getElementById('checkoutLabel').textContent = (settings.checkoutEnabled !== false) ? '✓ Check-out enabled' : 'Check-out disabled';
+}
+function collectSettingsFromCanonical() {
+  return {
+    minScore: parseInt(document.getElementById('settingsScoreSlider')?.value || 50, 10),
+    bioRequired: document.getElementById('settingsTogBio')?.classList.contains('on') ?? false,
+    privacyMode: document.getElementById('settingsTogPrivacy')?.classList.contains('on') ?? true,
+    checkoutEnabled: document.getElementById('settingsTogCheckout')?.classList.contains('on') ?? true,
+    returnAllowed: document.getElementById('settingsTogReturnAllowed')?.classList.contains('on') ?? true,
+    anonymousMode: document.getElementById('settingsTogAnon')?.classList.contains('on') ?? false,
+    logoUrl: document.getElementById('settingsLogoUrl')?.value.trim() || '',
+    welcomeMessage: document.getElementById('settingsWelcome')?.value.trim() || '',
+    redirectUrl: document.getElementById('settingsRedirectUrl')?.value.trim() || '',
+    allowSelfSelect: document.getElementById('settingsTogSelfSelect')?.classList.contains('on') ?? true,
+    requireDoormanConfirm: document.getElementById('settingsTogDoormanConfirm')?.classList.contains('on') ?? true,
+    requireProof: document.getElementById('settingsTogRequireProof')?.classList.contains('on') ?? true,
+    allowProofRecording: document.getElementById('settingsTogAllowProofRecording')?.classList.contains('on') ?? true,
+    allowIdPhotoCapture: document.getElementById('settingsTogAllowIdPhoto')?.classList.contains('on') ?? false
+  };
+}
+function collectSettingsFromQuick() {
+  return {
+    ...settings,
+    minScore: parseInt(document.getElementById('scoreSlider')?.value || 50, 10),
+    bioRequired: document.getElementById('togBio')?.classList.contains('on') ?? false,
+    privacyMode: document.getElementById('togPrivacy')?.classList.contains('on') ?? true,
+    checkoutEnabled: document.getElementById('togCheckout')?.classList.contains('on') ?? true,
+    returnAllowed: document.getElementById('togReturnAllowed')?.classList.contains('on') ?? true,
+    anonymousMode: document.getElementById('togAnon')?.classList.contains('on') ?? false
+  };
+}
+function syncAllSettingsFrom(source) {
+  settings = source === 'canonical' ? collectSettingsFromCanonical() : collectSettingsFromQuick();
+  saveJson(STORAGE_KEY_SETTINGS, settings);
+  applySettingsToUI();
+  syncPortalFromLegacy();
+  renderPortalAll();
+  generateVenueQR();
+}
+function saveSettings() { syncAllSettingsFrom(document.getElementById('panel-settings').classList.contains('active') ? 'canonical' : 'quick'); showToast('Settings saved locally'); }
+function resetSettingsToDefaults() {
+  settings = { minScore: 50, bioRequired: false, privacyMode: true, checkoutEnabled: true, returnAllowed: true, anonymousMode: false, logoUrl: '', welcomeMessage: 'Welcome. Please review and confirm your check-in.', redirectUrl: '', allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true, allowProofRecording: true, allowIdPhotoCapture: false };
+  saveJson(STORAGE_KEY_SETTINGS, settings); applySettingsToUI(); syncPortalFromLegacy(); renderPortalAll(); generateVenueQR(); showToast('Settings reset to defaults');
+}
+function renderExpectedAttendees() {
+  const root = document.getElementById('expectedAttendeeList'); if (!root) return;
+  const rows = ensureExpectedAttendees();
+  root.innerHTML = rows.map(r => {
+    const pill = r.linked ? '<span class="expected-pill ok">linked</span>' : '<span class="expected-pill warn">assist</span>';
+    const meta = `${r.paid ? 'paid' : 'unpaid'} · ${r.subscription ? 'subscriber' : 'no sub'}`;
+    return `<div class="expected-item"><div><div>${r.name}</div><div class="expected-meta">${meta}</div></div>${pill}</div>`;
+  }).join('');
+}
+function refreshAttendance() {
+  if (!currentOrg) return;
+  attendanceData = loadJson(STORAGE_KEY_ATT, defaultAttendance());
+  renderStats(attendanceData); renderTable(attendanceData); document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+function renderStats(rows) {
+  const currentlyIn = rows.filter(r => !r.checkout_at).length;
+  const checkedOut = rows.filter(r => !!r.checkout_at).length;
+  const avgScore = rows.length ? Math.round(rows.reduce((s, r) => s + (r.score || 0), 0) / rows.length) : 0;
+  const bioCount = rows.filter(r => !!r.bio_verified).length;
+  document.getElementById('statIn').textContent = currentlyIn;
+  document.getElementById('statOut').textContent = checkedOut;
+  document.getElementById('statScore').textContent = avgScore ? avgScore + '%' : '—';
+  document.getElementById('statBio').textContent = bioCount;
+  document.getElementById('statInSub').textContent = rows.length ? `${rows.length} total today` : 'No attendance yet';
+}
+function renderTable(rows) {
+  if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No check-ins yet today</div>'; return; }
+  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Attendee</th><th>In</th><th>Out</th><th>Score</th><th>Bio</th><th>Status</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
+  const liveTbody = document.getElementById('attendanceRows');
+  liveTbody.innerHTML = rows.map(r => {
+    const scoreClass = r.score >= 80 ? 'score-high' : r.score >= 50 ? 'score-med' : 'score-low';
+    const scoreStr = r.score != null ? `<span class="score-pill ${scoreClass}">${r.score}%</span>` : '—';
+    const bioStr = r.bio_verified ? '<span class="bio-tag">👁 Verified</span>' : '<span style="color:#8b949e;font-size:10px;">None</span>';
+    const inTime = r.checkin_at ? new Date(r.checkin_at * 1000).toLocaleTimeString() : '—';
+    const outTime = r.checkout_at ? new Date(r.checkout_at * 1000).toLocaleTimeString() : '—';
+    const status = r.checkout_at ? '<span class="status-out">◯ OUT</span>' : '<span class="status-in">● IN</span>';
+    const label = r.attendee_label || (r.attendee_key_id ? r.attendee_key_id.slice(0, 8) + '…' : 'Anonymous');
+    const modeStr = r.mode === 'attendee_scan' ? '📱' : '🚪';
+    return `<tr><td>${modeStr} ${label}</td><td>${inTime}</td><td>${outTime}</td><td>${scoreStr}</td><td>${bioStr}</td><td>${status}</td></tr>`;
+  }).join('');
+}
+function generateVenueQR() {
+  const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
+  venueQrPayload = buildVenuePayload(); box.innerHTML = '';
+  new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
+  document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
+}
+function selectMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeAttendee').classList.toggle('selected', mode === 'attendee_scan');
+  document.getElementById('modeDoorman').classList.toggle('selected', mode === 'doorman_scan');
+  document.querySelector('#modeAttendee .mode-badge').className = 'mode-badge ' + (mode === 'attendee_scan' ? 'on' : 'off');
+  document.querySelector('#modeAttendee .mode-badge').textContent = mode === 'attendee_scan' ? '✓ Active at door' : 'Switch to this';
+  document.querySelector('#modeDoorman .mode-badge').className = 'mode-badge ' + (mode === 'doorman_scan' ? 'on' : 'off');
+  document.querySelector('#modeDoorman .mode-badge').textContent = mode === 'doorman_scan' ? '✓ Active at door' : 'Switch to this';
+  document.getElementById('venueQRWrap').style.display = mode === 'attendee_scan' ? 'flex' : 'none';
+  document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
+  generateVenueQR();
+}
+function manualCheckin() {
+  const label = document.getElementById('manualLabel').value.trim();
+  const now = Math.floor(Date.now() / 1000);
+  const newRow = { id: 'm' + Math.random().toString(36).slice(2, 8), mode: 'doorman_scan', attendee_label: settings.anonymousMode ? '' : label, attendee_key_id: 'manual_' + Math.random().toString(36).slice(2, 10), score: settings.minScore || 50, bio_verified: settings.bioRequired ? 1 : 0, checkin_at: now, checkout_at: null, duration_s: null };
+  attendanceData.unshift(newRow); saveJson(STORAGE_KEY_ATT, attendanceData); document.getElementById('manualLabel').value = ''; refreshAttendance(); showToast('Debug check-in recorded');
+}
+function loadVenueQR() { generateVenueQR(); showToast('Debug QR refreshed'); }
+function fullscreenQR() {
+  const source = document.getElementById('venueQrBox'); const canvas = source.querySelector('canvas'); const img = source.querySelector('img');
+  const holder = document.createElement('div'); holder.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9999;';
+  if (canvas) { const clone = canvas.cloneNode(true); clone.style.cssText = 'width:min(85vw,85vh);height:min(85vw,85vh);'; holder.appendChild(clone); }
+  else if (img) { const clone = img.cloneNode(true); clone.style.cssText = 'width:min(85vw,85vh);height:min(85vw,85vh);'; holder.appendChild(clone); }
+  else { holder.textContent = 'QR unavailable'; holder.style.color = '#000'; }
+  holder.onclick = () => document.body.removeChild(holder); document.body.appendChild(holder);
+}
+function exportCSV() {
+  if (!attendanceData.length) return showToast('No data to export', true);
+  const headers = ['ID','Mode','Label','Key','Score','Bio','Check-in','Check-out','Duration(s)'];
+  const rows = attendanceData.map(r => [r.id, r.mode, r.attendee_label || '', r.attendee_key_id || '', r.score || '', r.bio_verified ? 'yes' : 'no', r.checkin_at ? new Date(r.checkin_at * 1000).toISOString() : '', r.checkout_at ? new Date(r.checkout_at * 1000).toISOString() : '', r.duration_s || ''].join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(csv); a.download = `irlid-attendance-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+}
+
+function triggerCsvUpload() {
+  const input = document.getElementById('csvFileInput');
+  if (!input) return;
+  input.value = '';
+  input.click();
+}
+function parseDelimitedLine(line, delimiter) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { cur += '"'; i += 1; }
+      else inQuotes = !inQuotes;
+    } else if (ch === delimiter && !inQuotes) {
+      out.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out.map(v => v.trim());
+}
+function parseDelimitedText(text) {
+  const lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(line => line.trim());
+  if (!lines.length) return [];
+  const delimiter = lines[0].includes('\t') ? '\t' : ',';
+  return lines.map(line => parseDelimitedLine(line, delimiter));
+}
+function importExpectedAttendeesFromFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const rows = parseDelimitedText(String(reader.result || ''));
+      if (!rows.length) return showToast('CSV was empty', true);
+      const header = rows[0].map(v => v.toLowerCase());
+      const dataRows = rows.slice(1);
+      const findIndex = (names, fallback) => {
+        const idx = header.findIndex(h => names.some(name => h.includes(name)));
+        return idx >= 0 ? idx : fallback;
+      };
+      const nameIdx = findIndex(['name', 'attendee', 'label', 'person'], 0);
+      const paidIdx = findIndex(['paid'], -1);
+      const subIdx = findIndex(['subscription', 'subscriber', 'member'], -1);
+      const linkedIdx = findIndex(['linked', 'matched'], -1);
+      const imported = dataRows.map((cols, i) => {
+        const name = (cols[nameIdx] || '').trim();
+        if (!name) return null;
+        const truthy = (val) => /^(1|true|yes|y|paid|linked)$/i.test((val || '').trim());
+        return {
+          id: 'imp_' + Date.now().toString(36) + '_' + i,
+          name,
+          paid: paidIdx >= 0 ? truthy(cols[paidIdx]) : true,
+          subscription: subIdx >= 0 ? truthy(cols[subIdx]) : false,
+          linked: linkedIdx >= 0 ? truthy(cols[linkedIdx]) : false
+        };
+      }).filter(Boolean);
+      if (!imported.length) return showToast('Could not find attendee names in that file', true);
+      saveJson(STORAGE_KEY_EXPECTED, imported);
+      renderExpectedAttendees();
+      showToast(`Imported ${imported.length} expected attendees`);
+    } catch (err) {
+      showToast('Could not read that CSV file', true);
+    }
+  };
+  reader.onerror = () => showToast('Could not read that CSV file', true);
+  reader.readAsText(file);
+}
+
+function updateSlider(el) {
+  const v = parseInt(el.value, 10); const label = v >= 80 ? 'High' : v >= 60 ? 'Good' : v >= 40 ? 'Standard' : 'Basic';
+  document.getElementById('sliderVal').textContent = `${v}% — ${label}`;
+  el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
+  if (document.getElementById('settingsScoreSlider')) { document.getElementById('settingsScoreSlider').value = v; updateSettingsSlider(document.getElementById('settingsScoreSlider')); }
+}
+function updateSettingsSlider(el) {
+  const v = parseInt(el.value, 10); const label = v >= 80 ? 'High' : v >= 60 ? 'Good' : v >= 40 ? 'Standard' : 'Basic';
+  document.getElementById('settingsSliderVal').textContent = `${v}% — ${label}`;
+  el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
+}
+function togToggle(key) {
+  const ids = { bio:'togBio', privacy:'togPrivacy', checkout:'togCheckout', returnAllowed:'togReturnAllowed', anon:'togAnon' };
+  const el = document.getElementById(ids[key]); if (!el) return;
+  el.classList.toggle('on'); el.classList.toggle('off');
+  const mirror = { bio: 'settingsTogBio', privacy: 'settingsTogPrivacy', checkout: 'settingsTogCheckout', returnAllowed: 'settingsTogReturnAllowed', anon: 'settingsTogAnon' }[key];
+  const mirrorEl = document.getElementById(mirror); if (mirrorEl) mirrorEl.className = el.className;
+}
+function togToggleById(id) { const el = document.getElementById(id); if (!el) return; el.classList.toggle('on'); el.classList.toggle('off'); }
+function setToggle(id, on) { const el = document.getElementById(id); if (!el) return; el.className = 'toggle ' + (on ? 'on' : 'off'); }
+function openSettingsTo(anchorId) {
+  showPanel('settings', document.getElementById('navSettings'));
+  requestAnimationFrame(() => {
+    const el = document.getElementById(anchorId); if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.style.outline = '1px solid rgba(88,166,255,0.6)'; el.style.borderRadius = '8px';
+    setTimeout(() => { el.style.outline = ''; el.style.borderRadius = ''; }, 1800);
+  });
+}
+function showToast(msg, isError=false) { const t = document.getElementById('toast'); t.textContent = msg; t.style.background = isError ? '#da3633' : '#238636'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+function copyText(text) { if (!text) return; navigator.clipboard?.writeText(text).then(() => showToast('Copied')).catch(() => window.prompt('Copy this text:', text)); }
+
+function appendOptional(url, key, value) { if (!value) return; url.searchParams.set(key, value); }
+function buildOutcomeUrl(mode) {
+  const url = new URL(OUTCOME_BASES[mode]);
+
+  const orgCode = (portalState.orgCode || 'test').trim();
+  const eventCode = (portalState.eventCode || '').trim();
+
+  if (orgCode) url.searchParams.set('org', orgCode);
+  if (eventCode) url.searchParams.set('event', eventCode);
+
+  // Keep the parameters that the entry test flow is most likely to care about.
+  url.searchParams.set('returnAllowed', portalState.returnAllowed ? 'true' : 'false');
+  url.searchParams.set('returnTo', SCAN_URL);
+
+  appendOptional(url, 'welcome', (portalState.welcomeMessage || '').trim());
+  appendOptional(url, 'redirect', (portalState.redirectUrl || '').trim());
+  appendOptional(url, 'logo', (portalState.logoUrl || '').trim());
+
+  return url.toString();
+}
+function renderQr(targetId, text, size, colorLight = '#ffffff', correctLevel = null) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+
+  target.innerHTML = '';
+
+  if (typeof QRCode === 'undefined') {
+    target.innerHTML = '<div style="color:#111;font-size:12px;padding:10px">QR library failed to load</div>';
+    return;
+  }
+
+  const safeLevel = correctLevel || QRCode.CorrectLevel.L;
+
+  try {
+    new QRCode(target, {
+      text,
+      width: size,
+      height: size,
+      colorDark: '#000000',
+      colorLight,
+      correctLevel: safeLevel
+    });
+  } catch (e) {
+    console.error('QR failed:', e);
+    target.innerHTML = '<div style="color:#111;font-size:12px;padding:10px">QR failed to render</div>';
+  }
+}
+function buildPortalSummaryText() {
+  return [
+    `Org code: ${portalState.orgCode || ''}`,
+    `Event code: ${portalState.eventCode || ''}`,
+    `Minimum Trust Score: ${portalState.minimumTrustScore || ''}`,
+    `Bio-metric Required: ${portalState.biometricRequired ? 'Yes' : 'No'}`,
+    `Privacy Mode: ${portalState.privacyMode ? 'Yes' : 'No'}`,
+    `Anonymous Mode: ${portalState.anonymousMode ? 'Yes' : 'No'}`,
+    `Check-out Required: ${portalState.checkoutRequired ? 'Yes' : 'No'}`,
+    `Return Allowed: ${portalState.returnAllowed ? 'Yes' : 'No'}`,
+    `Allow attendee self-selection: ${portalState.allowSelfSelection ? 'Yes' : 'No'}`,
+    `Require doorman confirmation: ${portalState.requireDoormanConfirmation ? 'Yes' : 'No'}`,
+    `Require additional proof if unmatched: ${portalState.requireAdditionalProof ? 'Yes' : 'No'}`,
+    `Allow proof recording: ${portalState.allowProofRecording ? 'Yes' : 'No'}`,
+    `Enable ID photo capture: ${portalState.enableIdPhotoCapture ? 'Yes' : 'No'}`,
+    `Logo image URL: ${portalState.logoUrl || '(none)'}`,
+    `Custom welcome message: ${portalState.welcomeMessage || '(none)'}`,
+    `Post-accept redirect URL: ${portalState.redirectUrl || '(none)'}`
+  ].join('\n');
+}
+function setPortalFieldValues() {
+  PORTAL_IDS.forEach((id) => {
+    const el = document.getElementById(id); if (!el) return;
+    if (el.type === 'checkbox') el.checked = !!portalState[id]; else el.value = portalState[id] ?? '';
+  });
+}
+function syncPortalFromLegacy() {
+  portalState.minimumTrustScore = settings.minScore || 50;
+  portalState.biometricRequired = !!settings.bioRequired;
+  portalState.privacyMode = !!settings.privacyMode;
+  portalState.anonymousMode = !!settings.anonymousMode;
+  portalState.checkoutRequired = !!settings.checkoutEnabled;
+  portalState.returnAllowed = !!settings.returnAllowed;
+  portalState.allowSelfSelection = !!settings.allowSelfSelect;
+  portalState.requireDoormanConfirmation = !!settings.requireDoormanConfirm;
+  portalState.requireAdditionalProof = !!settings.requireProof;
+  portalState.allowProofRecording = !!settings.allowProofRecording;
+  portalState.enableIdPhotoCapture = !!settings.allowIdPhotoCapture;
+  portalState.logoUrl = settings.logoUrl || '';
+  portalState.redirectUrl = settings.redirectUrl || '';
+  portalState.welcomeMessage = settings.welcomeMessage || '';
+  if (currentOrg?.name && (!portalState.orgCode || portalState.orgCode === 'test')) portalState.orgCode = currentOrg.name.toLowerCase().replace(/\s+/g, '-').slice(0, 24);
+  savePortalState();
+  setPortalFieldValues();
+}
+function syncLegacyFromPortal() {
+  settings.minScore = parseInt(portalState.minimumTrustScore || 50, 10);
+  settings.bioRequired = !!portalState.biometricRequired;
+  settings.privacyMode = !!portalState.privacyMode;
+  settings.anonymousMode = !!portalState.anonymousMode;
+  settings.checkoutEnabled = !!portalState.checkoutRequired;
+  settings.returnAllowed = !!portalState.returnAllowed;
+  settings.allowSelfSelect = !!portalState.allowSelfSelection;
+  settings.requireDoormanConfirm = !!portalState.requireDoormanConfirmation;
+  settings.requireProof = !!portalState.requireAdditionalProof;
+  settings.allowProofRecording = !!portalState.allowProofRecording;
+  settings.allowIdPhotoCapture = !!portalState.enableIdPhotoCapture;
+  settings.logoUrl = portalState.logoUrl || '';
+  settings.redirectUrl = portalState.redirectUrl || '';
+  settings.welcomeMessage = portalState.welcomeMessage || '';
+  saveJson(STORAGE_KEY_SETTINGS, settings);
+  applySettingsToUI();
+}
+function renderPortalButtons() {
+  document.querySelectorAll('.mode-btn').forEach((btn) => {
+    const mode = btn.dataset.mode;
+    btn.classList.remove('active');
+    if (mode === portalState.activeMode) btn.classList.add('active');
+  });
+}
+function renderPortalVisuals() {
+  const block = document.getElementById('activeOutcomeBlock');
+  const chip = document.getElementById('modeChip');
+  const pad = document.getElementById('outcomePad');
+  block.classList.remove('allow-mode','review-mode','deny-mode');
+  chip.classList.remove('allow','review','deny');
+  pad.classList.remove('allow','review','deny');
+  block.classList.add(`${portalState.activeMode}-mode`);
+  chip.classList.add(portalState.activeMode);
+  pad.classList.add(portalState.activeMode);
+  chip.textContent = `ACTIVE MODE: ${MODE_LABELS[portalState.activeMode]}`;
+}
+function renderPortalSummary() {
+  const summaryEl = document.getElementById('settingsSummary');
+  if (!summaryEl) return;
+
+  const items = [
+    ['Org code', portalState.orgCode || ''],
+    ['Event code', portalState.eventCode || ''],
+    ['Minimum Trust Score', String(portalState.minimumTrustScore || '')],
+    ['Bio-metric Required', portalState.biometricRequired ? 'Yes' : 'No'],
+    ['Privacy Mode', portalState.privacyMode ? 'Yes' : 'No'],
+    ['Anonymous Mode', portalState.anonymousMode ? 'Yes' : 'No'],
+    ['Check-out Required', portalState.checkoutRequired ? 'Yes' : 'No'],
+    ['Return Allowed', portalState.returnAllowed ? 'Yes' : 'No'],
+    ['Allow attendee self-selection', portalState.allowSelfSelection ? 'Yes' : 'No'],
+    ['Require doorman confirmation', portalState.requireDoormanConfirmation ? 'Yes' : 'No'],
+    ['Require additional proof if unmatched', portalState.requireAdditionalProof ? 'Yes' : 'No'],
+    ['Allow proof recording', portalState.allowProofRecording ? 'Yes' : 'No'],
+    ['Enable ID photo capture', portalState.enableIdPhotoCapture ? 'Yes' : 'No'],
+    ['Logo image URL', portalState.logoUrl || '(none)'],
+    ['Custom welcome message', portalState.welcomeMessage || '(none)'],
+    ['Post-accept redirect URL', portalState.redirectUrl || '(none)']
+  ];
+
+  summaryEl.innerHTML =
+    `<strong style="display:block;margin-bottom:8px;color:#dfe7ff;">Live settings snapshot</strong>` +
+    `<div class="settings-summary-grid">` +
+    items.map(([label, value]) =>
+      `<div class="settings-summary-item">
+        <span class="settings-summary-label">${escapeHtml(label)}</span>
+        <span class="settings-summary-value" title="${escapeHtml(String(value))}">${escapeHtml(String(value))}</span>
+      </div>`
+    ).join('') +
+    `</div>`;
+}
+function renderPortalScanQr() {
+  document.getElementById('scanUrlBox').textContent = SCAN_URL;
+  renderQr('scanQr', SCAN_URL, 118, '#eef4ff');
+}
+function renderPortalOutcomeQr() {
+  const url = buildOutcomeUrl(portalState.activeMode);
+  const outcomeLine = document.getElementById('outcomeUrlLine');
+
+  if (outcomeLine) {
+    outcomeLine.value = url;
+    outcomeLine.title = url;
+  }
+
+  const lightMap = {
+    allow: '#f2fff6',
+    review: '#fff8dc',
+    deny: '#fff1f1'
+  };
+
+  renderQr(
+    'outcomeQr',
+    url,
+    208,
+    lightMap[portalState.activeMode] || '#ffffff',
+    QRCode.CorrectLevel.L
+  );
+}
+function renderPortalAll() { renderPortalButtons(); renderPortalVisuals(); renderPortalSummary(); renderPortalScanQr(); renderPortalOutcomeQr(); savePortalState(); }
+function escapeHtml(value) { return String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;'); }
+function wirePortalFields() {
+  PORTAL_IDS.forEach((id) => {
+    const el = document.getElementById(id); if (!el) return;
+    const handler = () => { portalState[id] = el.type === 'checkbox' ? el.checked : el.value; syncLegacyFromPortal(); renderPortalAll(); generateVenueQR(); };
+    el.addEventListener('input', handler); el.addEventListener('change', handler);
+  });
+  document.querySelectorAll('.mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => { portalState.activeMode = btn.dataset.mode; renderPortalAll(); });
+  });
+  document.getElementById('savePortalSettingsBtn').addEventListener('click', () => { syncLegacyFromPortal(); renderPortalAll(); generateVenueQR(); showToast('Portal settings saved locally'); });
+  document.getElementById('copyOutcomeUrlBtn').addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
+  document.getElementById('copyScanUrlBtn').addEventListener('click', () => copyText(SCAN_URL));
+  document.getElementById('copySettingsBtn').addEventListener('click', () => copyText(buildPortalSummaryText()));
+  document.getElementById('resetPortalSettingsBtn').addEventListener('click', () => { portalState = { ...PORTAL_DEFAULTS }; setPortalFieldValues(); syncLegacyFromPortal(); renderPortalAll(); generateVenueQR(); showToast('Portal settings reset'); });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  settings = loadJson(STORAGE_KEY_SETTINGS, settings);
+  portalState = loadPortalState();
+  setPortalFieldValues();
+  wirePortalFields();
+  const csvFileInput = document.getElementById('csvFileInput');
+  if (csvFileInput) csvFileInput.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (file) importExpectedAttendeesFromFile(file);
+  });
+  const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
+  if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
+
+  if (DEV_AUTO_LOGIN) {
+    currentOrg = ensureDevOrg(); attendanceData = ensureDevAttendance(); ensureExpectedAttendees();
+    document.getElementById('orgNameInput').value = currentOrg.name || '';
+    document.getElementById('existingKeyInput').value = currentOrg.api_key || '';
+    document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
+    document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block';
+    setSignedInUI(true); applySettingsToUI(); syncPortalFromLegacy(); refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
+    return;
+  }
+  setSignedInUI(false); applySettingsToUI(); syncPortalFromLegacy(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
+  const stored = loadJson(STORAGE_KEY_ORG, null);
+  if (stored) {
+    currentOrg = stored; document.getElementById('orgNameInput').value = currentOrg.name || ''; document.getElementById('existingKeyInput').value = currentOrg.api_key || ''; document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
+    document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block'; showSetupMessage('Existing local debug organisation found. Load it to continue.', false);
+  }
+});
+</script>
+</body>
+</html>
