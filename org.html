@@ -731,9 +731,9 @@ function buildVenuePayload() {
   const type = (currentMode === 'doorman_scan') ? 'doorman' : 'venue';
   const qp = new URLSearchParams({
     type,
-    org: currentOrg?.api_key || 'demo',
-    event: currentOrg?.name || 'IRLid Event',
-    returnAllowed: settings.returnAllowed ? '1' : '0'
+    org: (portalState.orgCode || 'test').trim(),
+    event: (portalState.eventCode || 'demo-night').trim(),
+    returnAllowed: settings.returnAllowed ? 'true' : 'false'
   });
   if (settings.welcomeMessage) qp.set('welcome', settings.welcomeMessage);
   if (settings.redirectUrl) qp.set('redirect', settings.redirectUrl);
@@ -836,7 +836,7 @@ function renderTable(rows) {
 }
 function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
-  venueQrPayload = buildVenuePayload(); box.innerHTML = '';
+  venueQrPayload = ; box.innerHTML = '';
   new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
