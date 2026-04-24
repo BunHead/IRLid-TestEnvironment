@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRLid Entry</title>
+<style>
+  :root{
+    --bg:#000000;
+    --fg:#ffffff;
+    --muted:rgba(255,255,255,0.82);
+    --green:#12da73;
+    --amber:#ffb300;
+    --red:#ff4b4b;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { height: 100%; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    color:var(--fg);
+    font-family:"Segoe UI", system-ui, sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    transition: background-color 480ms ease;
+  }
+
+  body.status-allow { background: var(--green); }
+  body.status-review { background: var(--amber); }
+  body.status-deny { background: var(--red); }
+
+  .wrap{
+    width:min(92vw, 920px);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 20px;
+  }
+
+  .card{
+    width:100%;
+    text-align:center;
+    transform:translateY(-3vh);
+    opacity:0;
+    transition: opacity 320ms ease 120ms, transform 320ms ease 120ms;
+  }
+
+  body.ready .card{
+    opacity:1;
+    transform:translateY(-5vh);
+  }
+
+  .logo{
+    display:none;
+    width:clamp(72px, 12vw, 122px);
+    max-height:122px;
+    object-fit:contain;
+    margin:0 auto 20px;
+    filter:drop-shadow(0 8px 18px rgba(0,0,0,0.18));
+  }
+
+  .logo.show{ display:block; }
+
+  .icon-shell{
+    width:min(42vw, 270px);
+    height:min(42vw, 270px);
+    margin:0 auto clamp(0px, 1.2vh, 10px);
+    transform: translateY(-42px);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  .icon-svg{
+    width:100%;
+    height:100%;
+    overflow:visible;
+  }
+
+  .icon-path{
+    fill:none;
+    stroke:#ffffff;
+    stroke-width:16;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+    filter:drop-shadow(0 10px 18px rgba(0,0,0,0.18));
+  }
+
+  .draw{
+	  stroke-dasharray:1;
+	  stroke-dashoffset:1;
+	  animation: drawMark 620ms ease forwards;
+	}
+
+	.draw-1{
+	  animation-delay: 180ms;
+	}
+
+	.draw-2{
+	  animation-delay: 300ms;
+	}
+
+	.icon-svg{
+	  transform: scale(0.96);
+	  transform-origin: 50% 50%;
+	  animation: iconSettle 260ms ease-out forwards 760ms;
+	}
+
+	@keyframes iconSettle {
+	  0% { transform: scale(0.96); }
+	  70% { transform: scale(1.03); }
+	  100% { transform: scale(1); }
+	}
+
+  @keyframes drawMark {
+    to { stroke-dashoffset: 0; }
+  }
+
+  .title{
+    margin:0;
+    font-size:clamp(34px, 6vw, 72px);
+    line-height:1.06;
+    font-weight:800;
+    letter-spacing:-0.02em;
+    text-shadow:0 6px 16px rgba(0,0,0,0.12);
+  }
+
+  .subtitle{
+    margin:clamp(16px, 2.5vh, 24px) 0 0;
+    font-size:clamp(22px, 3.2vw, 34px);
+    line-height:1.35;
+    color:var(--muted);
+    font-weight:500;
+    text-shadow:0 4px 12px rgba(0,0,0,0.08);
+  }
+
+  .meta{
+    margin-top:18px;
+    font-size:14px;
+    color:rgba(255,255,255,0.62);
+    letter-spacing:0.02em;
+  }
+
+  .hint{
+    margin-top:14px;
+    font-size:12px;
+    color:rgba(255,255,255,0.58);
+    opacity:0;
+    transition:opacity 200ms ease 650ms;
+  }
+
+  body.ready .hint { opacity:1; }
+
+  @media (max-width: 700px){
+    body.ready .card{
+      transform:translateY(-7vh);
+    }
+    .subtitle, .title{
+      max-width:16ch;
+      margin-left:auto;
+      margin-right:auto;
+    }
+    .hint{
+      max-width:20ch;
+      margin-left:auto;
+      margin-right:auto;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="stateCard">
+      <img id="logo" class="logo" alt="Organisation logo">
+      <div class="icon-shell" id="iconShell"></div>
+      <h1 class="title" id="title">Welcome to IRLid Event</h1>
+      <div class="subtitle" id="subtitle">You’re checked in</div>
+      <div class="meta" id="meta"></div>
+      <div class="hint" id="hint"></div>
+    </div>
+  </div>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const type = (params.get("type") || "").trim().toLowerCase();
+  const org = (params.get("org") || "").trim().toLowerCase();
+  const mode = (params.get("mode") || "").trim().toLowerCase();
+  const eventName = (params.get("event") || "IRLid Event").trim();
+  const welcomeMessage = (params.get("welcome") || "").trim();
+  const redirectUrl = (params.get("redirect") || "").trim();
+  const logoUrl = (params.get("logo") || "").trim();
+  const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
+  const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());
+
+  let returnTimer = null;
+  let lastTapAt = 0;
+
+  const returnTo = (params.get("returnTo") || "").trim();
+
+	function defaultReturnTarget() {
+	  if (returnTo) return returnTo;
+	  if (location.protocol === "file:") {
+		return "https://bunhead.github.io/IRLid-TestEnvironment/scan.html";
+	  }
+	  return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
+	}
+
+  function iconMarkup(status) {
+	  if (status === "allow") {
+		return `
+		  <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+			<path class="icon-path draw draw-1" pathLength="1" d="M58 118 L97 158"></path>
+			<path class="icon-path draw draw-2" pathLength="1" d="M97 158 L162 70"></path>
+		  </svg>
+		`;
+	  }
+	  if (status === "review") {
+		return `
+		  <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+			<path class="icon-path draw draw-1" pathLength="1" d="M92 70c0-18 14-31 33-31 18 0 32 12 32 29 0 14-7 22-21 31-12 8-18 15-18 31"></path>
+			<path class="icon-path draw draw-2" pathLength="1" d="M113 162 L113 170"></path>
+		  </svg>
+		`;
+	  }
+	  return `
+		  <svg class="icon-svg" viewBox="0 0 220 220" aria-hidden="true">
+			<path class="icon-path draw draw-1" pathLength="1" d="M60 14 L160 114"></path>
+			<path class="icon-path draw draw-2" pathLength="1" d="M160 14 L60 114"></path>
+		  </svg>
+		`;
+	}
+
+  function scheduleReturn(target) {
+    clearTimeout(returnTimer);
+    if (!target) return;
+    returnTimer = setTimeout(() => {
+      window.location.href = target;
+    }, timeoutMs);
+  }
+
+  function enableDoormanDoubleTap(target) {
+    if (type !== "doorman") return;
+    const hint = document.getElementById("hint");
+    hint.textContent = "Double tap to return faster";
+    document.body.addEventListener("pointerup", () => {
+      const now = Date.now();
+      if (now - lastTapAt < 340) {
+        clearTimeout(returnTimer);
+        window.location.href = target;
+      }
+      lastTapAt = now;
+    });
+  }
+
+  function render(state) {
+    const body = document.body;
+    const iconShell = document.getElementById("iconShell");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const meta = document.getElementById("meta");
+    const logo = document.getElementById("logo");
+
+    body.className = "";
+    body.classList.add("status-" + state.status);
+
+    iconShell.innerHTML = iconMarkup(state.status);
+    title.textContent = state.title;
+    subtitle.textContent = state.subtitle || "";
+    meta.textContent = state.meta || "";
+
+    if (logoUrl) {
+      logo.src = logoUrl;
+      logo.classList.add("show");
+    } else {
+      logo.removeAttribute("src");
+      logo.classList.remove("show");
+    }
+
+    requestAnimationFrame(() => body.classList.add("ready"));
+
+    const target = redirectUrl || defaultReturnTarget();
+    scheduleReturn(target);
+    enableDoormanDoubleTap(target);
+  }
+
+  function renderVenue() {
+    const meta = returnAllowed ? "Re-entry allowed" : "Re-entry not allowed";
+    render({
+      status: "allow",
+      title: `Welcome to ${eventName}`,
+      subtitle: welcomeMessage || "You’re checked in",
+      meta
+    });
+  }
+
+  function renderDoormanMock() {
+  if (mode === "review") {
+    render({
+      status: "review",
+      title: "Needs review",
+      subtitle: "Please check this attendee manually",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  if (mode === "deny") {
+    render({
+      status: "deny",
+      title: "Not allowed",
+      subtitle: "Not on list",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  if (mode === "allow") {
+    render({
+      status: "allow",
+      title: "Alice Smith",
+      subtitle: "Expected guest",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  if (org === "warn") {
+    render({
+      status: "review",
+      title: "Needs review",
+      subtitle: "Please check this attendee manually",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  if (org === "fail") {
+    render({
+      status: "deny",
+      title: "Not allowed",
+      subtitle: "Not on list",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  if (org === "paid") {
+    render({
+      status: "allow",
+      title: "Paid guest",
+      subtitle: "Subscription verified",
+      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+    });
+    return;
+  }
+
+  render({
+    status: "allow",
+    title: "Alice Smith",
+    subtitle: "Expected guest",
+    meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+  });
+}
+
+if (type === "venue") {
+    renderVenue();
+  } else if (type === "doorman") {
+    renderDoormanMock();
+  } else {
+    render({
+      status: "deny",
+      title: "Not allowed",
+      subtitle: "Missing entry type",
+      meta: "Configuration required"
+    });
+  }
+</script>
+</body>
+</html>
