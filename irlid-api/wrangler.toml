@@ -1,12 +1,12 @@
-name = "irlid-api"
+name = "irlid-api-test"
 main = "src/index.js"
 compatibility_date = "2025-12-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-CORS_ORIGIN = "https://irlid.co.uk"
+CORS_ORIGIN = "https://bunhead.github.io"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "irlid-db"
-database_id = "6eb1c15e-a975-4ad4-bc18-fe36dd96f828"
+database_name = "irlid-db-test"
+database_id = "b7d7ccc9-a7b9-46e6-8690-385545d547f1"
