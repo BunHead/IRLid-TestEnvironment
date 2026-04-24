@@ -686,6 +686,119 @@ async function lookupByKey(request, env, pubKeyIdParam) {
 }
 
 // =====================
+//  ORGANISATION PORTAL
+// =====================
+
+async function orgRegister(request, env) {
+  let body;
+  try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const { name } = body;
+  if (!name || name.trim().length < 2) return err("name required (min 2 chars)");
+  const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const existing = await env.DB.prepare("SELECT id FROM organisations WHERE slug = ?").bind(slug).first();
+  if (existing) return err("Organisation name already taken");
+  const id = uuid();
+  const apiKey = "org_" + randomToken();
+  const t = now();
+  // Generate persistent venue keypair for attendee-scan mode
+  const venueKey = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pubJwk = await crypto.subtle.exportKey("jwk", venueKey.publicKey);
+  const prvJwk = await crypto.subtle.exportKey("jwk", venueKey.privateKey);
+  const defaultSettings = { minScore: 50, distanceM: 12, windowS: 90, bioRequired: false, privacyMode: true, checkoutEnabled: true, anonymousMode: false };
+  await env.DB.prepare(
+    "INSERT INTO organisations (id, name, slug, api_key, venue_pub_jwk, venue_prv_jwk, settings_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+  ).bind(id, name.trim(), slug, apiKey, JSON.stringify(pubJwk), JSON.stringify(prvJwk), JSON.stringify(defaultSettings), t, t).run();
+  return json({ id, name: name.trim(), slug, api_key: apiKey, settings: defaultSettings }, 201);
+}
+
+async function orgGetSettings(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  const settings = JSON.parse(org.settings_json || "{}");
+  return json({ id: org.id, name: org.name, slug: org.slug, settings });
+}
+
+async function orgUpdateSettings(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const allowed = ["minScore","distanceM","windowS","bioRequired","privacyMode","checkoutEnabled","anonymousMode"];
+  const current = JSON.parse(org.settings_json || "{}");
+  for (const k of allowed) { if (body[k] !== undefined) current[k] = body[k]; }
+  await env.DB.prepare("UPDATE organisations SET settings_json=?, updated_at=? WHERE id=?")
+    .bind(JSON.stringify(current), now(), org.id).run();
+  return json({ settings: current });
+}
+
+async function orgGetQR(request, env) {
+  // Returns the venue's public key + metadata for the attendee-scan QR
+  const org = await orgAuth(request, env); if (org.error) return org;
+  const pub = JSON.parse(org.venue_pub_jwk);
+  const settings = JSON.parse(org.settings_json || "{}");
+  const payload = { orgId: org.id, orgName: org.name, pub, ts: now(), mode: "checkin-venue", v: 1 };
+  return json({ payload, settings });
+}
+
+async function orgCheckin(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const { mode, helloPayload, helloHash, attendeeLabel, score, bioVerified, gps } = body;
+  if (!mode || !["attendee_scan","doorman_scan"].includes(mode)) return err("mode must be attendee_scan or doorman_scan");
+  const settings = JSON.parse(org.settings_json || "{}");
+  const minScore = settings.minScore || 50;
+  if (score !== undefined && score < minScore) return err(`Score ${score} below minimum ${minScore}`, 403);
+  const id = uuid();
+  const t = now();
+  let gpsHash = null;
+  if (gps && (settings.privacyMode !== false)) {
+    gpsHash = await sha256B64url(canonical({ lat: Math.round(gps.lat * 10000) / 10000, lon: Math.round(gps.lon * 10000) / 10000 }));
+  }
+  const attendeeKeyId = helloPayload?.pub ? await pubKeyId(helloPayload.pub) : null;
+  const label = settings.anonymousMode ? null : (attendeeLabel || null);
+  await env.DB.prepare(
+    "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+  ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t).run();
+  return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings });
+}
+
+async function orgCheckout(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const { checkin_id, attendee_key_id } = body;
+  if (!checkin_id && !attendee_key_id) return err("checkin_id or attendee_key_id required");
+  const row = checkin_id
+    ? await env.DB.prepare("SELECT * FROM org_checkins WHERE id=? AND org_id=?").bind(checkin_id, org.id).first()
+    : await env.DB.prepare("SELECT * FROM org_checkins WHERE attendee_key_id=? AND org_id=? AND checkout_at IS NULL ORDER BY checkin_at DESC LIMIT 1").bind(attendee_key_id, org.id).first();
+  if (!row) return err("Check-in record not found", 404);
+  if (row.checkout_at) return err("Already checked out");
+  const t = now();
+  const duration = t - row.checkin_at;
+  await env.DB.prepare("UPDATE org_checkins SET checkout_at=?, duration_s=? WHERE id=?").bind(t, duration, row.id).run();
+  return json({ checkin_id: row.id, checkout_at: t, duration_s: duration });
+}
+
+async function orgAttendance(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  const url = new URL(request.url);
+  const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 500);
+  const since = url.searchParams.get("since") ? parseInt(url.searchParams.get("since")) : (now() - 86400);
+  const rows = await env.DB.prepare(
+    "SELECT id,mode,attendee_label,attendee_key_id,score,bio_verified,gps_hash,checkin_at,checkout_at,duration_s FROM org_checkins WHERE org_id=? AND checkin_at>=? ORDER BY checkin_at DESC LIMIT ?"
+  ).bind(org.id, since, limit).all();
+  const total_in = rows.results.filter(r => !r.checkout_at).length;
+  const total_out = rows.results.filter(r => r.checkout_at).length;
+  const avg_score = rows.results.length ? Math.round(rows.results.reduce((s,r) => s+(r.score||0), 0) / rows.results.length) : 0;
+  const bio_count = rows.results.filter(r => r.bio_verified).length;
+  return json({ checkins: rows.results, stats: { total: rows.results.length, currently_in: total_in, checked_out: total_out, avg_score, bio_verified: bio_count } });
+}
+
+async function orgAuth(request, env) {
+  const key = request.headers.get("X-Org-Key") || new URL(request.url).searchParams.get("key");
+  if (!key) return err("X-Org-Key header required", 401);
+  const org = await env.DB.prepare("SELECT * FROM organisations WHERE api_key=?").bind(key).first();
+  if (!org) return err("Invalid API key", 401);
+  return org;
+}
+
+// =====================
 //  ROUTER
 // =====================
 
@@ -717,6 +830,15 @@ export default {
       else if (method === "POST" && path === "/receipts")            response = await uploadReceipt(request, env);
       else if (method === "GET"  && path === "/receipts")             response = await listReceipts(request, env);
       else if (method === "POST" && path === "/verify")              response = await verify(request, env);
+
+      // Org Portal
+      else if (method === "POST" && path === "/org/register")        response = await orgRegister(request, env);
+      else if (method === "GET"  && path === "/org/settings")        response = await orgGetSettings(request, env);
+      else if (method === "POST" && path === "/org/settings")        response = await orgUpdateSettings(request, env);
+      else if (method === "GET"  && path === "/org/qr")              response = await orgGetQR(request, env);
+      else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
+      else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
+      else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
 
       else {
         const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);

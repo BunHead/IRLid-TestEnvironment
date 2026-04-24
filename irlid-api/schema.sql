@@ -1,5 +1,5 @@
--- IRLid D1 Schema (Deploy 112)
--- Matches irlid-api/src/index.js v6
+-- IRLid D1 Schema (Deploy 112 + Org Portal)
+-- Matches irlid-api/src/index.js v6 + org endpoints
 
 CREATE TABLE IF NOT EXISTS users (
   id              TEXT PRIMARY KEY,
@@ -61,3 +61,39 @@ CREATE TABLE IF NOT EXISTS link_codes (
   expires_at    INTEGER NOT NULL,
   claimed       INTEGER DEFAULT 0
 );
+
+-- =====================
+--  ORGANISATION PORTAL
+-- =====================
+
+CREATE TABLE IF NOT EXISTS organisations (
+  id            TEXT PRIMARY KEY,
+  name          TEXT NOT NULL,
+  slug          TEXT NOT NULL UNIQUE,
+  api_key       TEXT NOT NULL UNIQUE,
+  venue_pub_jwk TEXT,                  -- persistent venue keypair for attendee-scan mode
+  venue_prv_jwk TEXT,                  -- stored encrypted; used to sign QR
+  settings_json TEXT NOT NULL DEFAULT '{}',
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_org_apikey ON organisations(api_key);
+CREATE INDEX IF NOT EXISTS idx_org_slug ON organisations(slug);
+
+CREATE TABLE IF NOT EXISTS org_checkins (
+  id              TEXT PRIMARY KEY,
+  org_id          TEXT NOT NULL REFERENCES organisations(id),
+  mode            TEXT NOT NULL,       -- 'attendee_scan' | 'doorman_scan'
+  attendee_label  TEXT,                -- display name if known
+  attendee_key_id TEXT,                -- pub_key_id from HELLO
+  hello_hash      TEXT,                -- SHA-256 of canonical HELLO payload
+  score           INTEGER,             -- trust score 0-100
+  bio_verified    INTEGER DEFAULT 0,   -- 1 if bioVerified:true in signed payload
+  gps_hash        TEXT,                -- SHA-256(canonical(GPS)) — privacy mode
+  checkin_at      INTEGER NOT NULL,
+  checkout_at     INTEGER,             -- NULL until checkout
+  duration_s      INTEGER,             -- populated on checkout
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_checkins_org ON org_checkins(org_id);
+CREATE INDEX IF NOT EXISTS idx_checkins_at ON org_checkins(org_id, checkin_at);
