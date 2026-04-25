@@ -740,7 +740,7 @@ async function orgGetQR(request, env) {
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
-  const { mode, helloPayload, helloHash, attendeeLabel, score, bioVerified, gps } = body;
+  const { mode, helloPayload, helloHash, attendeeLabel, name, score, bioVerified, gps } = body;
   if (!mode || !["attendee_scan","doorman_scan"].includes(mode)) return err("mode must be attendee_scan or doorman_scan");
   const settings = JSON.parse(org.settings_json || "{}");
   const minScore = settings.minScore || 50;
@@ -753,9 +753,10 @@ async function orgCheckin(request, env) {
   }
   const attendeeKeyId = helloPayload?.pub ? await pubKeyId(helloPayload.pub) : null;
   const label = settings.anonymousMode ? null : (attendeeLabel || null);
+  const displayName = settings.anonymousMode ? null : ((name || attendeeLabel || "").trim() || null);
   await env.DB.prepare(
-    "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
-  ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t).run();
+    "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at,name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
+  ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t, displayName).run();
   return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings });
 }
 
@@ -781,7 +782,7 @@ async function orgAttendance(request, env) {
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 500);
   const since = url.searchParams.get("since") ? parseInt(url.searchParams.get("since")) : (now() - 86400);
   const rows = await env.DB.prepare(
-    "SELECT id,mode,attendee_label,attendee_key_id,score,bio_verified,gps_hash,checkin_at,checkout_at,duration_s FROM org_checkins WHERE org_id=? AND checkin_at>=? ORDER BY checkin_at DESC LIMIT ?"
+    "SELECT id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,checkout_at,duration_s,name FROM org_checkins WHERE org_id=? AND checkin_at>=? ORDER BY checkin_at DESC LIMIT ?"
   ).bind(org.id, since, limit).all();
   const total_in = rows.results.filter(r => !r.checkout_at).length;
   const total_out = rows.results.filter(r => r.checkout_at).length;

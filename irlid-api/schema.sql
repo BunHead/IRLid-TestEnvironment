@@ -97,3 +97,7 @@ CREATE TABLE IF NOT EXISTS org_checkins (
 );
 CREATE INDEX IF NOT EXISTS idx_checkins_org ON org_checkins(org_id);
 CREATE INDEX IF NOT EXISTS idx_checkins_at ON org_checkins(org_id, checkin_at);
+
+-- Batch 2 additive migration: nullable attendee-provided display name.
+-- Existing rows remain valid and keep name as NULL.
+ALTER TABLE org_checkins ADD COLUMN name TEXT;
