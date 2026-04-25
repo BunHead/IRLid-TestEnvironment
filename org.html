@@ -100,7 +100,15 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-pill { font-size: 10px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); }
 .expected-pill.ok { border-color: #238636; color: var(--green); background: #1a4731; }
 .expected-pill.warn { border-color: var(--orange); color: var(--orange); background: #2d2a0f; }
+.checkin-lower-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.expected-admin-panel { background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.expected-admin-panel h5 { font-size: 13px; margin-bottom: 12px; }
+.expected-admin-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.expected-admin-actions { display: flex; gap: 8px; margin-top: 12px; }
+.btn-danger { background: #da3633; color: #fff; }
+.btn-danger:hover { background: var(--red); }
 .match-panel { margin-top: 14px; background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.checkin-lower-grid .match-panel { margin-top: 0; }
 .match-panel h5 { font-size: 13px; margin-bottom: 6px; }
 .match-panel p, .mini-help { font-size: 11px; color: var(--muted); line-height: 1.5; }
 .warning-note { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #2d2a0f; border: 1px solid var(--orange); color: var(--orange); font-size: 11px; line-height: 1.45; }
@@ -247,6 +255,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
   .sidebar-logo img { width: 40px; }
   .org-badge, .sidebar-footer, .nav-item span { display: none; }
   .content { padding: 14px; }
+  .checkin-lower-grid, .expected-admin-fields { grid-template-columns: 1fr; }
+  .expected-admin-actions { flex-direction: column; }
   .settings-grid-2, .settings-grid-3, .switch-grid { grid-template-columns: 1fr; }
 }
 </style>
@@ -409,14 +419,34 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                     <div id="expectedAttendeeList"></div>
                   </div>
 
-                  <div class="match-panel">
-                    <h5>When identity is unclear</h5>
-                    <p>If the attendee is not already linked, the intended flow is to send them to an assisted identity screen where they can select themselves from the expected list and provide any additional proof required by organisation policy.</p>
-                    <div class="mini-help">
-                      Preferred path:
-                      <br>1. reuse normal IRLid scanner
-                      <br>2. detect HELLO vs venue QR
-                      <br>3. if unmatched, go to assisted identity flow
+                  <div class="checkin-lower-grid">
+                    <div class="expected-admin-panel">
+                      <h5>Add expected attendee</h5>
+                      <div class="expected-admin-fields">
+                        <div class="input-group" style="margin-bottom:0;">
+                          <label for="expectedFirstName">First Name</label>
+                          <input type="text" id="expectedFirstName" autocomplete="given-name">
+                        </div>
+                        <div class="input-group" style="margin-bottom:0;">
+                          <label for="expectedSurname">Surname</label>
+                          <input type="text" id="expectedSurname" autocomplete="family-name">
+                        </div>
+                      </div>
+                      <div class="expected-admin-actions">
+                        <button class="btn btn-primary" type="button">Add</button>
+                        <button class="btn btn-danger" type="button">Delete</button>
+                      </div>
+                    </div>
+
+                    <div class="match-panel">
+                      <h5>When identity is unclear</h5>
+                      <p>If the attendee is not already linked, the intended flow is to send them to an assisted identity screen where they can select themselves from the expected list and provide any additional proof required by organisation policy.</p>
+                      <div class="mini-help">
+                        Preferred path:
+                        <br>1. reuse normal IRLid scanner
+                        <br>2. detect HELLO vs venue QR
+                        <br>3. if unmatched, go to assisted identity flow
+                      </div>
                     </div>
                   </div>
                 </div>
