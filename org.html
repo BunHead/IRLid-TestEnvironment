@@ -742,37 +742,33 @@ function buildVenuePayload() {
 }
 function applySettingsToUI() {
   if (document.getElementById('scoreSlider')) { document.getElementById('scoreSlider').value = settings.minScore || 50; updateSlider(document.getElementById('scoreSlider')); }
-  if (document.getElementById('settingsScoreSlider')) { document.getElementById('settingsScoreSlider').value = settings.minScore || 50; updateSettingsSlider(document.getElementById('settingsScoreSlider')); }
+  if (document.getElementById('minimumTrustScore')) document.getElementById('minimumTrustScore').value = normalizeScore(settings.minScore);
   setToggle('togBio', !!settings.bioRequired); setToggle('togPrivacy', settings.privacyMode !== false); setToggle('togCheckout', settings.checkoutEnabled !== false); setToggle('togReturnAllowed', settings.returnAllowed !== false); setToggle('togAnon', !!settings.anonymousMode);
-  setToggle('settingsTogBio', !!settings.bioRequired); setToggle('settingsTogPrivacy', settings.privacyMode !== false); setToggle('settingsTogCheckout', settings.checkoutEnabled !== false); setToggle('settingsTogReturnAllowed', settings.returnAllowed !== false); setToggle('settingsTogAnon', !!settings.anonymousMode);
-  setToggle('settingsTogSelfSelect', settings.allowSelfSelect !== false); setToggle('settingsTogDoormanConfirm', settings.requireDoormanConfirm !== false); setToggle('settingsTogRequireProof', settings.requireProof !== false); setToggle('settingsTogAllowProofRecording', settings.allowProofRecording !== false); setToggle('settingsTogAllowIdPhoto', !!settings.allowIdPhotoCapture);
-  const logo = document.getElementById('settingsLogoUrl'); const welcome = document.getElementById('settingsWelcome'); const redirect = document.getElementById('settingsRedirectUrl');
-  if (logo) logo.value = settings.logoUrl || ''; if (welcome) welcome.value = settings.welcomeMessage || ''; if (redirect) redirect.value = settings.redirectUrl || '';
   if (document.getElementById('statMin')) document.getElementById('statMin').textContent = (settings.minScore || 50) + '%';
   if (document.getElementById('checkoutLabel')) document.getElementById('checkoutLabel').textContent = (settings.checkoutEnabled !== false) ? '✓ Check-out enabled' : 'Check-out disabled';
 }
 function collectSettingsFromCanonical() {
   return {
-    minScore: parseInt(document.getElementById('minimumTrustScore')?.value || 50, 10),
-    bioRequired: document.getElementById('settingsTogBio')?.classList.contains('on') ?? false,
-    privacyMode: document.getElementById('settingsTogPrivacy')?.classList.contains('on') ?? true,
-    checkoutEnabled: document.getElementById('settingsTogCheckout')?.classList.contains('on') ?? true,
-    returnAllowed: document.getElementById('settingsTogReturnAllowed')?.classList.contains('on') ?? true,
-    anonymousMode: document.getElementById('settingsTogAnon')?.classList.contains('on') ?? false,
-    logoUrl: document.getElementById('settingsLogoUrl')?.value.trim() || '',
-    welcomeMessage: document.getElementById('settingsWelcome')?.value.trim() || '',
-    redirectUrl: document.getElementById('settingsRedirectUrl')?.value.trim() || '',
-    allowSelfSelect: document.getElementById('settingsTogSelfSelect')?.classList.contains('on') ?? true,
-    requireDoormanConfirm: document.getElementById('settingsTogDoormanConfirm')?.classList.contains('on') ?? true,
-    requireProof: document.getElementById('settingsTogRequireProof')?.classList.contains('on') ?? true,
-    allowProofRecording: document.getElementById('settingsTogAllowProofRecording')?.classList.contains('on') ?? true,
-    allowIdPhotoCapture: document.getElementById('settingsTogAllowIdPhoto')?.classList.contains('on') ?? false
+    minScore: normalizeScore(document.getElementById('minimumTrustScore')?.value, 50),
+    bioRequired: !!document.getElementById('biometricRequired')?.checked,
+    privacyMode: !!document.getElementById('privacyMode')?.checked,
+    checkoutEnabled: !!document.getElementById('checkoutRequired')?.checked,
+    returnAllowed: !!document.getElementById('returnAllowed')?.checked,
+    anonymousMode: !!document.getElementById('anonymousMode')?.checked,
+    logoUrl: document.getElementById('logoUrl')?.value.trim() || '',
+    welcomeMessage: document.getElementById('welcomeMessage')?.value.trim() || '',
+    redirectUrl: document.getElementById('redirectUrl')?.value.trim() || '',
+    allowSelfSelect: !!document.getElementById('allowSelfSelection')?.checked,
+    requireDoormanConfirm: !!document.getElementById('requireDoormanConfirmation')?.checked,
+    requireProof: !!document.getElementById('requireAdditionalProof')?.checked,
+    allowProofRecording: !!document.getElementById('allowProofRecording')?.checked,
+    allowIdPhotoCapture: !!document.getElementById('enableIdPhotoCapture')?.checked
   };
 }
 function collectSettingsFromQuick() {
   return {
     ...settings,
-    minScore: parseInt(document.getElementById('scoreSlider')?.value || 50, 10),
+    minScore: normalizeScore(document.getElementById('scoreSlider')?.value, 50),
     bioRequired: document.getElementById('togBio')?.classList.contains('on') ?? false,
     privacyMode: document.getElementById('togPrivacy')?.classList.contains('on') ?? true,
     checkoutEnabled: document.getElementById('togCheckout')?.classList.contains('on') ?? true,
@@ -949,19 +945,19 @@ function updateSlider(el) {
   const v = parseInt(el.value, 10); const label = v >= 80 ? 'High' : v >= 60 ? 'Good' : v >= 40 ? 'Standard' : 'Basic';
   document.getElementById('sliderVal').textContent = `${v}% — ${label}`;
   el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
-  if (document.getElementById('settingsScoreSlider')) { document.getElementById('settingsScoreSlider').value = v; updateSettingsSlider(document.getElementById('settingsScoreSlider')); }
+  const scoreInput = document.getElementById('minimumTrustScore');
+  if (scoreInput) scoreInput.value = normalizeScore(v);
 }
 function updateSettingsSlider(el) {
   const v = parseInt(el.value, 10); const label = v >= 80 ? 'High' : v >= 60 ? 'Good' : v >= 40 ? 'Standard' : 'Basic';
-  document.getElementById('settingsSliderVal').textContent = `${v}% — ${label}`;
+  const scoreInput = document.getElementById('minimumTrustScore');
+  if (scoreInput) scoreInput.value = normalizeScore(v);
   el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
 }
 function togToggle(key) {
   const ids = { bio:'togBio', privacy:'togPrivacy', checkout:'togCheckout', returnAllowed:'togReturnAllowed', anon:'togAnon' };
   const el = document.getElementById(ids[key]); if (!el) return;
   el.classList.toggle('on'); el.classList.toggle('off');
-  const mirror = { bio: 'settingsTogBio', privacy: 'settingsTogPrivacy', checkout: 'settingsTogCheckout', returnAllowed: 'settingsTogReturnAllowed', anon: 'settingsTogAnon' }[key];
-  const mirrorEl = document.getElementById(mirror); if (mirrorEl) mirrorEl.className = el.className;
 }
 function togToggleById(id) { const el = document.getElementById(id); if (!el) return; el.classList.toggle('on'); el.classList.toggle('off'); }
 function setToggle(id, on) { const el = document.getElementById(id); if (!el) return; el.className = 'toggle ' + (on ? 'on' : 'off'); }
@@ -976,6 +972,12 @@ function openSettingsTo(anchorId) {
 function showToast(msg, isError=false) { const t = document.getElementById('toast'); t.textContent = msg; t.style.background = isError ? '#da3633' : '#238636'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
 function copyText(text) { if (!text) return; navigator.clipboard?.writeText(text).then(() => showToast('Copied')).catch(() => window.prompt('Copy this text:', text)); }
 
+function normalizeScore(value, fallback = PORTAL_DEFAULTS.minimumTrustScore) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, n));
+}
+function displayValue(value) { return value ? String(value) : '(none)'; }
 function appendOptional(url, key, value) { if (!value) return; url.searchParams.set(key, value); }
 function buildOutcomeUrl(mode) {
   const url = new URL(OUTCOME_BASES[mode]);
@@ -983,7 +985,7 @@ function buildOutcomeUrl(mode) {
   url.searchParams.set('event', (portalState.eventCode || '').trim());
   url.searchParams.set('returnAllowed', String(!!portalState.returnAllowed));
   url.searchParams.set('returnTo', SCAN_URL);
-  url.searchParams.set('minimumTrustScore', String(portalState.minimumTrustScore || 0));
+  url.searchParams.set('minimumTrustScore', String(normalizeScore(portalState.minimumTrustScore)));
   url.searchParams.set('privacyMode', String(!!portalState.privacyMode));
   url.searchParams.set('anonymousMode', String(!!portalState.anonymousMode));
   url.searchParams.set('checkoutRequired', String(!!portalState.checkoutRequired));
@@ -1007,7 +1009,7 @@ function buildPortalSummaryText() {
   return [
     `Org code: ${portalState.orgCode || ''}`,
     `Event code: ${portalState.eventCode || ''}`,
-    `Minimum Trust Score: ${portalState.minimumTrustScore || ''}`,
+    `Minimum Trust Score: ${normalizeScore(portalState.minimumTrustScore)}%`,
     `Bio-metric Required: ${portalState.biometricRequired ? 'Yes' : 'No'}`,
     `Privacy Mode: ${portalState.privacyMode ? 'Yes' : 'No'}`,
     `Anonymous Mode: ${portalState.anonymousMode ? 'Yes' : 'No'}`,
@@ -1026,11 +1028,13 @@ function buildPortalSummaryText() {
 function setPortalFieldValues() {
   PORTAL_IDS.forEach((id) => {
     const el = document.getElementById(id); if (!el) return;
-    if (el.type === 'checkbox') el.checked = !!portalState[id]; else el.value = portalState[id] ?? '';
+    if (el.type === 'checkbox') el.checked = !!portalState[id];
+    else if (id === 'minimumTrustScore') el.value = normalizeScore(portalState.minimumTrustScore);
+    else el.value = portalState[id] ?? '';
   });
 }
 function syncPortalFromLegacy() {
-  portalState.minimumTrustScore = settings.minScore || 50;
+  portalState.minimumTrustScore = normalizeScore(settings.minScore, 50);
   portalState.biometricRequired = !!settings.bioRequired;
   portalState.privacyMode = !!settings.privacyMode;
   portalState.anonymousMode = !!settings.anonymousMode;
@@ -1049,7 +1053,7 @@ function syncPortalFromLegacy() {
   setPortalFieldValues();
 }
 function syncLegacyFromPortal() {
-  settings.minScore = parseInt(portalState.minimumTrustScore || 50, 10);
+  settings.minScore = normalizeScore(portalState.minimumTrustScore, 50);
   settings.bioRequired = !!portalState.biometricRequired;
   settings.privacyMode = !!portalState.privacyMode;
   settings.anonymousMode = !!portalState.anonymousMode;
@@ -1105,9 +1109,9 @@ function renderPortalAll() { renderPortalButtons(); renderPortalVisuals(); rende
 function escapeHtml(value) { return String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;'); }
 function buildPortalSummaryItems() {
   return [
-    ['Org code',        portalState.orgCode || ''],
-    ['Event code',      portalState.eventCode || ''],
-    ['Min score',       (portalState.minimumTrustScore ?? 70) + '%'],
+    ['Org code',        displayValue(portalState.orgCode)],
+    ['Event code',      displayValue(portalState.eventCode)],
+    ['Min score',       `${normalizeScore(portalState.minimumTrustScore)}%`],
     ['Bio-metric',      portalState.biometricRequired ? 'Yes' : 'No'],
     ['Privacy mode',    portalState.privacyMode ? 'Yes' : 'No'],
     ['Anonymous',       portalState.anonymousMode ? 'Yes' : 'No'],
@@ -1118,12 +1122,20 @@ function buildPortalSummaryItems() {
     ['Extra proof',     portalState.requireAdditionalProof ? 'Yes' : 'No'],
     ['Proof recording', portalState.allowProofRecording ? 'Yes' : 'No'],
     ['ID photo',        portalState.enableIdPhotoCapture ? 'Yes' : 'No'],
+    ['Logo URL',        displayValue(portalState.logoUrl)],
+    ['Welcome',         displayValue(portalState.welcomeMessage)],
+    ['Redirect URL',    displayValue(portalState.redirectUrl)]
   ];
 }
 function wirePortalFields() {
   PORTAL_IDS.forEach((id) => {
     const el = document.getElementById(id); if (!el) return;
-    const handler = () => { portalState[id] = el.type === 'checkbox' ? el.checked : el.value; syncLegacyFromPortal(); renderPortalAll(); generateVenueQR(); };
+    const handler = () => {
+      portalState[id] = el.type === 'checkbox' ? el.checked : id === 'minimumTrustScore' ? normalizeScore(el.value) : el.value;
+      syncLegacyFromPortal();
+      renderPortalAll();
+      generateVenueQR();
+    };
     el.addEventListener('input', handler); el.addEventListener('change', handler);
   });
   document.querySelectorAll('.mode-btn').forEach((btn) => {
@@ -1155,10 +1167,10 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('existingKeyInput').value = currentOrg.api_key || '';
     document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
     document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block';
-    setSignedInUI(true); applySettingsToUI(); syncPortalFromLegacy(); refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
+    setSignedInUI(true); syncLegacyFromPortal(); refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
     return;
   }
-  setSignedInUI(false); applySettingsToUI(); syncPortalFromLegacy(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
+  setSignedInUI(false); syncLegacyFromPortal(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
   const stored = loadJson(STORAGE_KEY_ORG, null);
   if (stored) {
     currentOrg = stored; document.getElementById('orgNameInput').value = currentOrg.name || ''; document.getElementById('existingKeyInput').value = currentOrg.api_key || ''; document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
