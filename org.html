@@ -668,6 +668,25 @@ function orgFromUrl() {
     mode: 'irlid-api-test'
   };
 }
+function orgNameStorageKey() {
+  const orgCode = currentOrg && (currentOrg.api_key || currentOrg.slug || currentOrg.id || currentOrg.name);
+  return orgCode ? `irlid:org:${orgCode}:name` : null;
+}
+function getStoredOrgName() {
+  const key = orgNameStorageKey();
+  if (!key) return '';
+  try { return localStorage.getItem(key) || ''; } catch { return ''; }
+}
+function setStoredOrgName(name) {
+  const key = orgNameStorageKey();
+  if (!key || !name) return;
+  try { localStorage.setItem(key, name); } catch {}
+}
+function syncManualNameInput() {
+  const input = document.getElementById('manualLabel');
+  if (!input || input.value.trim()) return;
+  input.value = getStoredOrgName();
+}
 function ensureExpectedAttendees() { let stored = loadJson(STORAGE_KEY_EXPECTED, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultExpectedAttendees(); saveJson(STORAGE_KEY_EXPECTED, stored); } return stored; }
 function loadPortalState() { try { const raw = localStorage.getItem(STORAGE_KEY_PORTAL); return { ...PORTAL_DEFAULTS, ...(raw ? JSON.parse(raw) : {}) }; } catch (e) { return { ...PORTAL_DEFAULTS }; } }
 function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.stringify(portalState)); }
@@ -709,6 +728,7 @@ async function registerOrg() {
     document.getElementById('existingKeyInput').value = currentOrg.api_key;
     document.getElementById('setupForm').style.display = 'none';
     document.getElementById('setupResult').style.display = 'block';
+    syncManualNameInput();
     showSetupMessage('Organisation registered with irlid-api-test.', false);
   } catch (err) {
     showSetupMessage(err.message || 'Could not register organisation.', true);
@@ -725,6 +745,7 @@ async function loadExistingKey() {
   currentOrg = stored && stored.api_key === k ? stored : { name: 'IRLid Test Organisation', api_key: k, mode: 'irlid-api-test' };
   saveJson(STORAGE_KEY_ORG, currentOrg);
   document.getElementById('orgNameInput').value = currentOrg.name || '';
+  syncManualNameInput();
   setSignedInUI(true); await refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded');
 }
 function signOutOrg() { currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
@@ -902,14 +923,17 @@ function selectMode(mode) {
   document.querySelector('#modeDoorman .mode-badge').textContent = mode === 'doorman_scan' ? '✓ Active at door' : 'Switch to this';
   document.getElementById('venueQRWrap').style.display = mode === 'attendee_scan' ? 'flex' : 'none';
   document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
+  if (mode === 'doorman_scan') syncManualNameInput();
   generateVenueQR();
 }
 async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
   if (!currentOrg) return showToast('Load an organisation first', true);
+  if (label) setStoredOrgName(label);
   try {
     await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
       mode: 'doorman_scan',
+      name: label || undefined,
       attendeeLabel: settings.anonymousMode ? '' : label,
       score: settings.minScore || 50,
       bioVerified: !!settings.bioRequired
@@ -1241,6 +1265,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('existingKeyInput').value = currentOrg.api_key || '';
     document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
     document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block';
+    syncManualNameInput();
     setSignedInUI(true); syncLegacyFromPortal(); await refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
     return;
   }
