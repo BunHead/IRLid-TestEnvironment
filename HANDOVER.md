@@ -1,96 +1,146 @@
-# HANDOVER.md — Mr. Data Brief (Batch 2)
+# HANDOVER.md — Mr. Data Brief (Batch 3)
 
 **Issued:** 26 April 2026 by Number One
 **Recipient:** Mr. Data (Codex)
 **Repo scope:** `BunHead/IRLid-TestEnvironment` only — do NOT touch `BunHead/IRLid`
 **Working rule:** Up to 3 atomic tasks per session, in order, each its own PR. Stop after Task 3.
 
-**Context:** Batch 1 wired the dashboard to the live Worker. This batch adds the **Imbue pilot pattern** — first-visit name registration plus persistent device-key recognition — so attendees show up by name on the dashboard rather than as anonymous fingerprints. This is the minimum needed for Imbue / event check-in / doorman use cases.
+**Context:** Batch 2 added user-driven name capture on check-in (PR #5 + #6 — should be merged to main before this batch starts). This batch adds the **org-admin-driven Expected Attendees management flow** — letting an organisation pre-load known attendees by name *before* the event, so the doorman has a list to match against. This is the other half of the Imbue pilot pattern.
 
-**Pre-requisites:** Batch 1 PRs (#2, #3) should be merged to main before starting this batch. If they aren't, ask Number One before proceeding — Task 1 below assumes the dashboard is live-API-backed.
+**Pre-requisites:** PR #5 and PR #6 must be merged to main before starting Task 3. Tasks 1 and 2 are UI/client-only and can run regardless. If PR #5/#6 aren't merged when you start, do Tasks 1 and 2 anyway and stop before Task 3.
 
 ---
 
-## Task 1 — Name-prompt on first-visit check-in
+## Task 1 — UI restructure: Expected Attendees admin frame
 
-**Goal:** When a device-key is checking in for the first time at a given org, prompt the user for their name once. Store the name client-side and submit it as part of the check-in payload.
+**Goal:** Add a new input panel on the check-in page for the org admin to type expected attendees by name. Visual restructure only — no wiring yet.
 
 **Files in scope:**
-- `scan.html` (and any included JS for the check-in flow — `js/scan.js` if it exists)
-- `accept.html` if the prompt belongs there instead — your call based on where check-in actually completes
+- `org.html` (check-in page)
+- Any associated CSS in `<style>` blocks or external stylesheets
+
+**Layout requirements:**
+- In the **lowest frame area** of the check-in page (currently containing "When identity is unclear")
+- Restructure into **two columns**:
+  - **Left column (NEW):** "Expected Attendees Admin" panel
+    - Heading: "Add expected attendee"
+    - Two input fields side-by-side: `First Name` | `Surname` (label above each input)
+    - Below the inputs, two buttons in a row:
+      - **Add** — green (e.g., `bg-emerald-500` or matching the existing "Record Check-in" green button)
+      - **Delete** — red (e.g., `bg-red-500`)
+  - **Right column (MOVED):** existing "When identity is unclear" content, unchanged
+- Responsive: stacks single-column on mobile; side-by-side on desktop (≥768px)
 
 **Acceptance criteria:**
-- On a fresh device (no localStorage entry for this org), after a successful scan but before the receipt is finalised, prompt: *"Welcome — what name should we put on the door list?"* with an input field and Continue button
-- The entered name is stored locally as `irlid:org:<orgCode>:name` in localStorage, and included in the POST to the Worker check-in endpoint as `name` in the request body
-- If the name field is left blank, do NOT block the check-in — submit with no name (anonymous remains a valid path)
-- If the device already has a name stored for this org, skip the prompt entirely
-- The prompt must be **off the critical path** — pressing Cancel/closing the modal still completes the check-in anonymously
+- New left-column panel visible with heading, two labeled inputs, and two buttons
+- Existing "When identity is unclear" content is preserved exactly, just moved to right column
+- Layout works on both mobile (stacked) and desktop (side-by-side)
+- No JavaScript wiring yet — buttons are inert; inputs accept text but do nothing
+- No regression in existing check-in flow (Doorman Console, attendee QR mode, Quick Settings)
 
-**Out of scope:** name editing UI, name validation beyond non-empty, multi-org name management.
+**Out of scope:** Add/Delete behaviour (Task 2), persistence (Task 3), validation (later batch).
 
-**PR title:** `[codex] Add first-visit name prompt to check-in flow`
+**PR title:** `[codex] Add Expected Attendees admin frame to check-in page`
 
 ---
 
-## Task 2 — Persist `(device_key → name)` in test D1 + Worker endpoint
+## Task 2 — Wire Add/Delete behaviour (client-side, in-memory)
 
-**Goal:** Extend the `irlid-api-test` Worker so the name from Task 1 is stored against the device key in test D1, and returned alongside attendance rows.
-
-**Files in scope:**
-- `irlid-api/schema.sql` (add migration — do NOT rewrite existing tables; append new column or new table)
-- `irlid-api/src/index.js` (update check-in POST handler to accept `name`; update `GET /org/attendance` response to include `name` per row)
-- `irlid-api/wrangler.toml` only if a binding needs adjusting (probably not)
-
-**Acceptance criteria:**
-- Migration is **additive only** — existing rows remain valid (Design Principle: DB is immutable, warts-and-all). Add a `name` column nullable, OR a separate `attendees` lookup table keyed on device_key + org_code. Your call; document the decision in the PR description.
-- POST check-in endpoint accepts `name` in the body and stores it
-- `GET /org/attendance` returns `name` field per row (null if not provided)
-- Migration applied to test D1 (`b7d7ccc9`) via `wrangler d1 execute` — document the exact command in PR description
-- Existing rows (without a name) continue to verify and return `name: null` cleanly
-- Live Worker smoke: POST a check-in with a name, GET it back via attendance, confirm name field round-trips
-
-**Out of scope:** name editing endpoint, deduplication of names across device keys, GDPR delete endpoint (later).
-
-**Hard rule:** **No retroactive rewrites of existing rows.** If the column is added, old rows get `NULL`, not a backfilled "Anonymous" or anything else. That's the immutability principle.
-
-**PR title:** `[codex] Persist attendee name in test D1 and Worker`
-
----
-
-## Task 3 — Dashboard renders names + doorman manual-entry
-
-**Goal:** The org dashboard now shows real names where they're known, and lets the doorman type a name against any unknown row inline.
+**Goal:** Make the buttons from Task 1 functional against client-side state. No persistence yet — just in-memory list updates.
 
 **Files in scope:**
 - `org.html`
-- `js/orgapi.js` (the file Codex created in Batch 1)
+- `js/orgapi.js` if it makes sense to add helpers there; otherwise inline in `org.html`
+
+**Behaviour — Add button:**
+- Click Add → reads First Name and Surname inputs
+- If either is blank, show inline validation message: "Please enter both first name and surname"
+- If both filled: prepends a new row to the Expected attendees list with:
+  - Display name: `First Name + " " + Surname`
+  - Status badge: `assist` (matching existing styling for "assist" rows)
+  - Subscription state: `manual · added by admin`
+- Inputs clear after successful add
+- Existing Expected attendees rows stay where they are — new rows go at the top of the list
+
+**Behaviour — Delete button:**
+- Click Delete → enters "delete mode":
+  - The Expected attendees list becomes the **only** interactive element on the page
+  - Everything else greys out (apply `opacity: 0.4; pointer-events: none;` or similar to all other panels)
+  - The Expected attendees list rows become hover-highlighted; cursor: pointer
+- Click any row in delete mode → show confirmation modal/dialog: *"Remove [Full Name] from expected attendees?"* with Cancel and Confirm buttons
+- Confirm → remove that row from in-memory state, exit delete mode (un-grey everything)
+- Cancel → close modal, stay in delete mode (allows clicking a different row)
+- ESC key or clicking outside the list → exit delete mode without changes
+- A subtle visual indicator that delete mode is active (e.g., "Delete mode — click a row to remove" banner above the list)
 
 **Acceptance criteria:**
-- Dashboard `Attendee` column renders the `name` from the API response when present; falls back to truncated device-key (e.g. `anon_a4f2…`) when null
-- Each row with a `null` name shows an inline "+ Add name" button
-- Clicking "+ Add name" turns the cell into an input field; pressing Enter or clicking Save sends `PATCH /org/attendance/{rowId}` (or whatever endpoint shape you propose — document in PR) with the new name; cancel discards
-- After save, the row updates to show the new name; no full page refresh
-- If the PATCH fails, the row reverts and an inline error appears
-- Empty/error states from Batch 1 still work — don't regress them
+- Add prepends rows correctly with the right state
+- Delete enters its mode visually (greys everything else)
+- Delete confirmation dialog appears and behaves correctly
+- ESC and outside-click exit delete mode without changes
+- Existing Expected attendees rows (the seed/debug data) can be deleted same as newly-added ones
+- No regression in any existing check-in functionality
 
-**Out of scope:** bulk edit, undo, name history, who-edited-what audit log.
+**Out of scope:** Persistence (Task 3), edit/rename of existing rows, bulk delete.
 
-**Note on the new endpoint:** if you need to add a `PATCH /org/attendance/{id}` endpoint to the Worker, that goes in this PR (it's the doorman-edit feature). Keep auth via `X-Org-Key` like the existing endpoints.
+**PR title:** `[codex] Wire Expected Attendees Add/Delete (client-side)`
 
-**PR title:** `[codex] Render names on dashboard with doorman manual-entry`
+---
+
+## Task 3 — Persist Expected Attendees list in test D1
+
+**Goal:** Move the Expected attendees list from in-memory / debug state to actual persistence in test D1 via the Worker. Org admins can now add/remove expected attendees and have them survive page refresh and be shared across devices viewing the same org.
+
+**Pre-requisite:** PR #5 and PR #6 from Batch 2 must be merged to main first. If they aren't, **do not start Task 3** — comment in the chat and stop.
+
+**Files in scope:**
+- `irlid-api/schema.sql` (additive migration only)
+- `irlid-api/src/index.js` (new endpoints)
+- `js/orgapi.js`
+- `org.html`
+
+**Schema (additive):**
+- New table `org_expected` with columns: `id` (auto-increment primary key), `org_code` (text, indexed), `first_name` (text), `surname` (text), `status` (text, default `'assist'`), `created_at` (integer timestamp)
+- Existing tables and rows are not touched — this is purely additive
+
+**Worker endpoints (auth via `X-Org-Key`, same as existing org endpoints):**
+- `GET /org/expected` — returns array of expected attendees for the authenticated org, ordered by `created_at DESC`
+- `POST /org/expected` — body `{first_name, surname}` — inserts row, returns the inserted row including its `id`
+- `DELETE /org/expected/:id` — removes the row if it belongs to the authenticated org
+
+**Client wiring:**
+- On page load: replace the seed/debug Expected attendees data by calling `GET /org/expected`
+- Add button (from Task 2): now calls `POST /org/expected`, appends the returned row to the list
+- Delete confirmation (from Task 2): now calls `DELETE /org/expected/:id`, removes from list on success
+- Empty / loading / error states handled the same as Batch 1's `org/attendance` panel:
+  - Loading: spinner while fetching
+  - Empty: "No expected attendees yet — add some above"
+  - Error: banner with retry button
+  - Auth failure: "Session expired — please re-authenticate"
+
+**Acceptance criteria:**
+- Migration is **additive only** — no rewriting of existing tables. Document the exact `wrangler d1 execute` command in the PR description.
+- All three endpoints work end-to-end against `irlid-api-test`
+- Live smoke: add via UI → refresh page → row persists; delete via UI → refresh → row gone
+- Worker version deployed to `irlid-api-test` documented in PR description
+- No regression in existing `/org/attendance` or `/org/checkin` endpoints
+
+**Hard rule:** **No retroactive rewrites.** New table is purely additive. Existing tables untouched.
+
+**PR title:** `[codex] Persist Expected Attendees list in test D1`
 
 ---
 
 ## When all three are done
 
-- One short summary message in this thread: which PRs landed, schema decisions made, anything you noticed worth flagging, any questions for Number One
-- Then stop. Wait for the next `HANDOVER.md` before picking up further work.
+- One short summary message: which PRs landed, schema decision (table chosen, indexes, etc.), Worker version deployed, anything noticed worth flagging
+- Stop. Wait for the next `HANDOVER.md`.
 
 ## If you get stuck
 
-- **Stuck on schema choice (Task 2):** add a `name` column to the existing check-ins table is simpler; separate `attendees` lookup table is cleaner long-term. Pick one, justify in PR. Don't ask permission for this — it's a judgement call within scope.
-- **Stuck on UI shape (Task 3):** the inline edit pattern is more important than visual polish. Function over form. A doorman just needs it to work fast.
+- **PR #5 / #6 not yet merged when you reach Task 3:** stop, comment in chat, do not improvise. Tasks 1 and 2 are still useful even without Task 3.
+- **Layout choice ambiguity (Task 1):** match the visual register of the rest of the page; check existing CSS classes in use (e.g., the existing green "Record Check-in" button — match that green for the Add button).
+- **Schema migration on test D1 fails:** stop, comment in PR, wait. Do NOT manually fix the test D1 outside of the migration script.
 - **Anything that touches `BunHead/IRLid` (the live repo):** stop immediately. Hard wall.
-- **Schema migration on test D1 fails:** stop, comment in the PR, wait. Do NOT manually fix the test D1 outside of the migration script.
 
 — Number One
