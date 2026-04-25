@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IRLid — Organisation Portal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/orgapi.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -585,7 +586,6 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 const DEV_AUTO_LOGIN = true;
 const DEV_ORG_NAME = "IRLid";
 const STORAGE_KEY_ORG = "irlid_mock_org";
-const STORAGE_KEY_ATT = "irlid_mock_attendance";
 const STORAGE_KEY_SETTINGS = "irlid_mock_settings";
 const STORAGE_KEY_EXPECTED = "irlid_mock_expected_attendees";
 const STORAGE_KEY_PORTAL = 'irlid_portal_full_v1';
@@ -639,37 +639,27 @@ let settings = {
 };
 let portalState = loadPortalState();
 let attendanceData = [];
+let attendanceStats = null;
 let venueQrPayload = null;
 
-function mockGenerateKey() { return 'org_' + Math.random().toString(36).slice(2) + Date.now().toString(36); }
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
-function defaultAttendance() {
-  const now = Math.floor(Date.now() / 1000);
-  return [
-    { id: 'a1', mode: 'attendee_scan', attendee_label: 'Alice', attendee_key_id: 'key_alice_123', score: 92, bio_verified: 1, checkin_at: now - 7200, checkout_at: null, duration_s: null },
-    { id: 'a2', mode: 'doorman_scan', attendee_label: 'Bob', attendee_key_id: 'key_bob_456', score: 77, bio_verified: 0, checkin_at: now - 6800, checkout_at: now - 1800, duration_s: 5000 },
-    { id: 'a3', mode: 'attendee_scan', attendee_label: 'Charlie', attendee_key_id: 'key_charlie_789', score: 84, bio_verified: 1, checkin_at: now - 3600, checkout_at: null, duration_s: null },
-    { id: 'a4', mode: 'doorman_scan', attendee_label: '', attendee_key_id: 'anon_2244', score: 48, bio_verified: 0, checkin_at: now - 2400, checkout_at: now - 600, duration_s: 1800 }
-  ];
-}
 function defaultExpectedAttendees() {
-  return [
-    { id: 'e1', name: 'Alice Morgan', paid: true, subscription: true, linked: true },
-    { id: 'e2', name: 'Bob Clarke', paid: true, subscription: false, linked: true },
-    { id: 'e3', name: 'Charlie West', paid: false, subscription: false, linked: false },
-    { id: 'e4', name: 'Dana Hughes', paid: true, subscription: false, linked: false }
-  ];
+  return [];
 }
 function ensureDevOrg() {
-  let stored = loadJson(STORAGE_KEY_ORG, null);
-  if (!stored) {
-    stored = { name: DEV_ORG_NAME, api_key: mockGenerateKey(), created_at: Date.now(), mode: 'offline-debug-dev' };
-    saveJson(STORAGE_KEY_ORG, stored);
-  }
-  return stored;
+  return loadJson(STORAGE_KEY_ORG, null);
 }
-function ensureDevAttendance() { let stored = loadJson(STORAGE_KEY_ATT, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultAttendance(); saveJson(STORAGE_KEY_ATT, stored); } return stored; }
+function orgFromUrl() {
+  const params = new URLSearchParams(location.search || '');
+  const apiKey = params.get('orgKey') || params.get('key');
+  if (!apiKey) return null;
+  return {
+    name: params.get('orgName') || params.get('org') || 'IRLid Test Organisation',
+    api_key: apiKey,
+    mode: 'irlid-api-test'
+  };
+}
 function ensureExpectedAttendees() { let stored = loadJson(STORAGE_KEY_EXPECTED, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultExpectedAttendees(); saveJson(STORAGE_KEY_EXPECTED, stored); } return stored; }
 function loadPortalState() { try { const raw = localStorage.getItem(STORAGE_KEY_PORTAL); return { ...PORTAL_DEFAULTS, ...(raw ? JSON.parse(raw) : {}) }; } catch (e) { return { ...PORTAL_DEFAULTS }; } }
 function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.stringify(portalState)); }
@@ -700,29 +690,34 @@ function setSignedInUI(isSignedIn) {
     document.getElementById('sidebarOrgPlan').textContent = 'Load or register an organisation';
   }
 }
-function registerOrg() {
+async function registerOrg() {
   const name = document.getElementById('orgNameInput').value.trim();
   if (!name) return showToast('Enter an organisation name', true);
-  const org = { name, api_key: mockGenerateKey(), created_at: Date.now(), mode: 'offline-debug' };
-  saveJson(STORAGE_KEY_ORG, org);
-  currentOrg = org;
-  document.getElementById('apiKeyDisplay').textContent = org.api_key;
-  document.getElementById('existingKeyInput').value = org.api_key;
-  document.getElementById('setupForm').style.display = 'none';
-  document.getElementById('setupResult').style.display = 'block';
-  showSetupMessage('Debug organisation created locally.', false);
+  try {
+    const org = await window.IRLidOrgApi.registerOrganisation(name);
+    currentOrg = { name: org.name || name, api_key: org.api_key, id: org.id, slug: org.slug, created_at: Date.now(), mode: 'irlid-api-test' };
+    saveJson(STORAGE_KEY_ORG, currentOrg);
+    document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key;
+    document.getElementById('existingKeyInput').value = currentOrg.api_key;
+    document.getElementById('setupForm').style.display = 'none';
+    document.getElementById('setupResult').style.display = 'block';
+    showSetupMessage('Organisation registered with irlid-api-test.', false);
+  } catch (err) {
+    showSetupMessage(err.message || 'Could not register organisation.', true);
+  }
 }
-function saveKeyAndContinue() {
+async function saveKeyAndContinue() {
   if (!currentOrg) return showToast('No organisation ready to continue with', true);
-  setSignedInUI(true); refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded locally');
+  setSignedInUI(true); await refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded');
 }
-function loadExistingKey() {
+async function loadExistingKey() {
   const k = document.getElementById('existingKeyInput').value.trim();
   if (!k.startsWith('org_')) return showToast('Key must start with org_', true);
   const stored = loadJson(STORAGE_KEY_ORG, null);
-  if (!stored) return showToast('No locally stored debug organisation found', true);
-  if (stored.api_key !== k) return showToast('That key does not match the local debug organisation', true);
-  currentOrg = stored; document.getElementById('orgNameInput').value = currentOrg.name || ''; setSignedInUI(true); refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded locally');
+  currentOrg = stored && stored.api_key === k ? stored : { name: 'IRLid Test Organisation', api_key: k, mode: 'irlid-api-test' };
+  saveJson(STORAGE_KEY_ORG, currentOrg);
+  document.getElementById('orgNameInput').value = currentOrg.name || '';
+  setSignedInUI(true); await refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded');
 }
 function signOutOrg() { currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
 function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
@@ -798,27 +793,69 @@ function renderExpectedAttendees() {
     return `<div class="expected-item"><div><div>${r.name}</div><div class="expected-meta">${meta}</div></div>${pill}</div>`;
   }).join('');
 }
-function refreshAttendance() {
-  if (!currentOrg) return;
-  attendanceData = loadJson(STORAGE_KEY_ATT, defaultAttendance());
-  renderStats(attendanceData); renderTable(attendanceData); document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+function aggregateAttendees(checkins) {
+  const byAttendee = new Map();
+  (checkins || []).forEach((row) => {
+    const id = row.attendee_key_id || row.attendee_label || row.id;
+    const firstSeen = row.checkin_at || row.created_at || 0;
+    const lastSeen = row.checkout_at || row.checkin_at || row.created_at || 0;
+    const existing = byAttendee.get(id);
+    if (!existing) {
+      byAttendee.set(id, {
+        id,
+        name: row.attendee_label || id,
+        first_seen: firstSeen,
+        last_seen: lastSeen,
+        scan_count: 1
+      });
+      return;
+    }
+    existing.first_seen = Math.min(existing.first_seen || firstSeen, firstSeen || existing.first_seen);
+    existing.last_seen = Math.max(existing.last_seen || lastSeen, lastSeen || existing.last_seen);
+    existing.scan_count += 1;
+    if (!existing.name && row.attendee_label) existing.name = row.attendee_label;
+  });
+  return Array.from(byAttendee.values()).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
 }
-function renderStats(rows) {
-  const currentlyIn = rows.filter(r => !r.checkout_at).length;
-  const checkedOut = rows.filter(r => !!r.checkout_at).length;
-  const avgScore = rows.length ? Math.round(rows.reduce((s, r) => s + (r.score || 0), 0) / rows.length) : 0;
-  const bioCount = rows.filter(r => !!r.bio_verified).length;
+function formatTimestamp(ts) {
+  return ts ? new Date(ts * 1000).toLocaleString() : '—';
+}
+async function refreshAttendance() {
+  if (!currentOrg) return;
+  try {
+    const payload = await window.IRLidOrgApi.listAttendance(currentOrg.api_key);
+    attendanceStats = payload.stats || null;
+    attendanceData = aggregateAttendees(payload.checkins || []);
+    renderStats(attendanceData, attendanceStats);
+    renderTable(attendanceData);
+    document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch (err) {
+    attendanceStats = null;
+    attendanceData = [];
+    renderStats(attendanceData, attendanceStats);
+    renderTable(attendanceData);
+    document.getElementById('lastRefresh').textContent = 'Could not load attendance';
+    showToast(err.message || 'Could not load attendance', true);
+  }
+}
+function renderStats(rows, stats) {
+  const currentlyIn = stats ? stats.currently_in : 0;
+  const checkedOut = stats ? stats.checked_out : 0;
+  const avgScore = stats ? stats.avg_score : 0;
+  const bioCount = stats ? stats.bio_verified : 0;
   document.getElementById('statIn').textContent = currentlyIn;
   document.getElementById('statOut').textContent = checkedOut;
   document.getElementById('statScore').textContent = avgScore ? avgScore + '%' : '—';
   document.getElementById('statBio').textContent = bioCount;
-  document.getElementById('statInSub').textContent = rows.length ? `${rows.length} total today` : 'No attendance yet';
+  document.getElementById('statInSub').textContent = rows.length ? `${rows.length} attendees seen` : 'No attendance yet';
 }
 function renderTable(rows) {
-  if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No check-ins yet today</div>'; return; }
-  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Attendee</th><th>In</th><th>Out</th><th>Score</th><th>Bio</th><th>Status</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
+  if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
+  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = rows.map(r => {
+    const displayLabel = r.name || r.id || 'Unknown attendee';
+    return `<tr><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td></tr>`;
     const scoreClass = r.score >= 80 ? 'score-high' : r.score >= 50 ? 'score-med' : 'score-low';
     const scoreStr = r.score != null ? `<span class="score-pill ${scoreClass}">${r.score}%</span>` : '—';
     const bioStr = r.bio_verified ? '<span class="bio-tag">👁 Verified</span>' : '<span style="color:#8b949e;font-size:10px;">None</span>';
@@ -848,11 +885,22 @@ function selectMode(mode) {
   document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
   generateVenueQR();
 }
-function manualCheckin() {
+async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
-  const now = Math.floor(Date.now() / 1000);
-  const newRow = { id: 'm' + Math.random().toString(36).slice(2, 8), mode: 'doorman_scan', attendee_label: settings.anonymousMode ? '' : label, attendee_key_id: 'manual_' + Math.random().toString(36).slice(2, 10), score: settings.minScore || 50, bio_verified: settings.bioRequired ? 1 : 0, checkin_at: now, checkout_at: null, duration_s: null };
-  attendanceData.unshift(newRow); saveJson(STORAGE_KEY_ATT, attendanceData); document.getElementById('manualLabel').value = ''; refreshAttendance(); showToast('Debug check-in recorded');
+  if (!currentOrg) return showToast('Load an organisation first', true);
+  try {
+    await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
+      mode: 'doorman_scan',
+      attendeeLabel: settings.anonymousMode ? '' : label,
+      score: settings.minScore || 50,
+      bioVerified: !!settings.bioRequired
+    });
+    document.getElementById('manualLabel').value = '';
+    await refreshAttendance();
+    showToast('Check-in recorded');
+  } catch (err) {
+    showToast(err.message || 'Could not record check-in', true);
+  }
 }
 function loadVenueQR() { generateVenueQR(); showToast('Debug QR refreshed'); }
 function fullscreenQR() {
@@ -865,8 +913,13 @@ function fullscreenQR() {
 }
 function exportCSV() {
   if (!attendanceData.length) return showToast('No data to export', true);
-  const headers = ['ID','Mode','Label','Key','Score','Bio','Check-in','Check-out','Duration(s)'];
-  const rows = attendanceData.map(r => [r.id, r.mode, r.attendee_label || '', r.attendee_key_id || '', r.score || '', r.bio_verified ? 'yes' : 'no', r.checkin_at ? new Date(r.checkin_at * 1000).toISOString() : '', r.checkout_at ? new Date(r.checkout_at * 1000).toISOString() : '', r.duration_s || ''].join(','));
+  const headers = ['Name or ID','First seen','Last seen','Scan count'];
+  const rows = attendanceData.map(r => [
+    r.name || r.id || '',
+    r.first_seen ? new Date(r.first_seen * 1000).toISOString() : '',
+    r.last_seen ? new Date(r.last_seen * 1000).toISOString() : '',
+    r.scan_count || 0
+  ].join(','));
   const csv = [headers.join(','), ...rows].join('\n');
   const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(csv); a.download = `irlid-attendance-${new Date().toISOString().slice(0,10)}.csv`; a.click();
 }
@@ -1148,7 +1201,7 @@ function wirePortalFields() {
   document.getElementById('resetPortalSettingsBtn').addEventListener('click', () => { portalState = { ...PORTAL_DEFAULTS }; setPortalFieldValues(); syncLegacyFromPortal(); renderPortalAll(); generateVenueQR(); showToast('Portal settings reset'); });
 }
 
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   settings = loadJson(STORAGE_KEY_SETTINGS, settings);
   portalState = loadPortalState();
   setPortalFieldValues();
@@ -1161,13 +1214,15 @@ window.addEventListener('DOMContentLoaded', () => {
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
 
-  if (DEV_AUTO_LOGIN) {
-    currentOrg = ensureDevOrg(); attendanceData = ensureDevAttendance(); ensureExpectedAttendees();
+  const bootOrg = orgFromUrl() || ensureDevOrg();
+  if (DEV_AUTO_LOGIN && bootOrg) {
+    currentOrg = bootOrg; ensureExpectedAttendees();
+    saveJson(STORAGE_KEY_ORG, currentOrg);
     document.getElementById('orgNameInput').value = currentOrg.name || '';
     document.getElementById('existingKeyInput').value = currentOrg.api_key || '';
     document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
     document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block';
-    setSignedInUI(true); syncLegacyFromPortal(); refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
+    setSignedInUI(true); syncLegacyFromPortal(); await refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
     return;
   }
   setSignedInUI(false); syncLegacyFromPortal(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
