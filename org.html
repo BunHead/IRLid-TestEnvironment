@@ -134,6 +134,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .status-out { color: var(--muted); font-size: 10px; }
 .bio-tag { color: #bc8cff; font-size: 10px; }
 .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+.loading-state, .error-state { padding: 24px; color: var(--muted); font-size: 13px; }
+.loading-state { display: flex; align-items: center; gap: 10px; justify-content: center; }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-state { border: 1px solid rgba(248,81,73,0.35); background: rgba(248,81,73,0.08); border-radius: 8px; margin: 12px; color: #ffd1d1; }
+.error-state strong { display: block; color: #fff; margin-bottom: 5px; }
+.error-state p { margin-bottom: 12px; line-height: 1.45; }
+.error-state a { color: var(--blue); text-decoration: none; }
 .btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
 .btn-primary { background: #238636; color: #fff; }
 .btn-primary:hover { background: #2ea043; }
@@ -820,8 +828,19 @@ function aggregateAttendees(checkins) {
 function formatTimestamp(ts) {
   return ts ? new Date(ts * 1000).toLocaleString() : '—';
 }
+function renderAttendanceLoading() {
+  document.getElementById('attendanceBody').innerHTML = '<div class="loading-state"><span class="spinner" aria-hidden="true"></span><span>Loading attendees...</span></div>';
+}
+function renderAttendanceError(message) {
+  document.getElementById('attendanceBody').innerHTML = `<div class="error-state" role="alert"><strong>Could not load attendees</strong><p>${escapeHtml(message || 'The irlid-api-test Worker did not respond successfully.')}</p><button class="btn btn-secondary btn-sm" type="button" onclick="refreshAttendance()">Retry</button></div>`;
+}
+function renderAttendanceAuthFailure() {
+  document.getElementById('attendanceBody').innerHTML = `<div class="error-state" role="alert"><strong>Session expired — please re-authenticate</strong><p>The organisation token was rejected by irlid-api-test.</p><a href="#" onclick="showPanel('setup', document.getElementById('navOrganisation')); return false;">Re-login</a></div>`;
+}
 async function refreshAttendance() {
   if (!currentOrg) return;
+  renderAttendanceLoading();
+  document.getElementById('lastRefresh').textContent = 'Loading...';
   try {
     const payload = await window.IRLidOrgApi.listAttendance(currentOrg.api_key);
     attendanceStats = payload.stats || null;
@@ -833,9 +852,9 @@ async function refreshAttendance() {
     attendanceStats = null;
     attendanceData = [];
     renderStats(attendanceData, attendanceStats);
-    renderTable(attendanceData);
+    if (err && (err.status === 401 || err.status === 403)) renderAttendanceAuthFailure();
+    else renderAttendanceError(err && err.message);
     document.getElementById('lastRefresh').textContent = 'Could not load attendance';
-    showToast(err.message || 'Could not load attendance', true);
   }
 }
 function renderStats(rows, stats) {
@@ -850,7 +869,7 @@ function renderStats(rows, stats) {
   document.getElementById('statInSub').textContent = rows.length ? `${rows.length} attendees seen` : 'No attendance yet';
 }
 function renderTable(rows) {
-  if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
+  if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees yet — share your QR to get started</div>'; return; }
   document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = rows.map(r => {
