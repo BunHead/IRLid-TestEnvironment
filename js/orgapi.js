@@ -51,6 +51,27 @@
         orgKey,
         body
       });
+    },
+
+    listExpected(orgKey) {
+      return request("/org/expected", {
+        orgKey
+      });
+    },
+
+    createExpected(orgKey, body) {
+      return request("/org/expected", {
+        method: "POST",
+        orgKey,
+        body
+      });
+    },
+
+    deleteExpected(orgKey, id) {
+      return request(`/org/expected/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        orgKey
+      });
     }
   };
 })();

@@ -101,3 +101,15 @@ CREATE INDEX IF NOT EXISTS idx_checkins_at ON org_checkins(org_id, checkin_at);
 -- Batch 2 additive migration: nullable attendee-provided display name.
 -- Existing rows remain valid and keep name as NULL.
 ALTER TABLE org_checkins ADD COLUMN name TEXT;
+
+-- Batch 3 additive migration: org-managed expected attendees.
+-- Purely additive; existing tables and rows are untouched.
+CREATE TABLE IF NOT EXISTS org_expected (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_code   TEXT NOT NULL,
+  first_name TEXT NOT NULL,
+  surname    TEXT NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'assist',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_org_expected_org ON org_expected(org_code);

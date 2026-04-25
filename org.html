@@ -97,10 +97,27 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-head { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .expected-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
 .expected-item:last-child { border-bottom: none; }
+.expected-item.delete-selectable { cursor: pointer; }
+.expected-item.delete-selectable:hover { background: rgba(248,81,73,0.14); }
 .expected-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
 .expected-pill { font-size: 10px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); }
 .expected-pill.ok { border-color: #238636; color: var(--green); background: #1a4731; }
 .expected-pill.warn { border-color: var(--orange); color: var(--orange); background: #2d2a0f; }
+.expected-state { padding: 14px 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.expected-state.error { color: var(--red); }
+.expected-state .btn { margin-top: 8px; }
+.expected-validation { min-height: 16px; margin-top: 8px; color: var(--red); font-size: 11px; }
+.expected-delete-banner { margin-top: 14px; padding: 9px 12px; border: 1px solid var(--red); border-radius: 8px; background: #3d1c1c; color: #ffb3ad; font-size: 12px; }
+.expected-delete-active .sidebar,
+.expected-delete-active .topbar,
+.expected-delete-active #panel-checkin > .two-col > div:not(:first-child),
+.expected-delete-active #panel-checkin .card > .card-header,
+.expected-delete-active #panel-checkin .card > .card-body > :not(#doormanWrap) { opacity: 0.4; pointer-events: none; }
+.scan-panel.expected-delete-mode > :not(.expected-list):not(.expected-delete-banner) { opacity: 0.4; pointer-events: none; }
+.expected-confirm-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(1,4,9,0.68); }
+.expected-confirm { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 18px 42px rgba(0,0,0,0.38); }
+.expected-confirm p { color: var(--text); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+.expected-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .checkin-lower-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .expected-admin-panel { background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .expected-admin-panel h5 { font-size: 13px; margin-bottom: 12px; }
@@ -405,7 +422,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
               </div>
 
               <div id="doormanWrap" style="display:none;">
-                <div class="scan-panel">
+                <div class="scan-panel" id="doormanPanel">
                   <div class="scan-panel-title">Doorman Console</div>
                   <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
 
@@ -415,8 +432,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                   </div>
                   <button class="btn btn-primary" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
 
+                  <div class="expected-delete-banner hidden" id="expectedDeleteBanner">Delete mode — click a row to remove</div>
                   <div class="expected-list">
-                    <div class="expected-head">Expected attendees (debug list)</div>
+                    <div class="expected-head">Expected attendees</div>
                     <div id="expectedAttendeeList"></div>
                   </div>
 
@@ -434,9 +452,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                         </div>
                       </div>
                       <div class="expected-admin-actions">
-                        <button class="btn btn-primary" type="button">Add</button>
-                        <button class="btn btn-danger" type="button">Delete</button>
+                        <button class="btn btn-primary" type="button" id="expectedAddBtn">Add</button>
+                        <button class="btn btn-danger" type="button" id="expectedDeleteBtn">Delete</button>
                       </div>
+                      <div class="expected-validation" id="expectedValidation"></div>
                     </div>
 
                     <div class="match-panel">
@@ -610,6 +629,15 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="expected-confirm-backdrop hidden" id="expectedConfirmDialog" role="dialog" aria-modal="true" aria-labelledby="expectedConfirmText">
+  <div class="expected-confirm">
+    <p id="expectedConfirmText"></p>
+    <div class="expected-confirm-actions">
+      <button class="btn btn-secondary" type="button" id="expectedCancelDeleteBtn">Cancel</button>
+      <button class="btn btn-danger" type="button" id="expectedConfirmDeleteBtn">Confirm</button>
+    </div>
+  </div>
+</div>
 <input type="file" id="csvFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" style="display:none">
 
 <script>
@@ -671,6 +699,11 @@ let portalState = loadPortalState();
 let attendanceData = [];
 let attendanceStats = null;
 let venueQrPayload = null;
+let expectedAttendees = [];
+let expectedLoading = false;
+let expectedError = null;
+let expectedDeleteMode = false;
+let expectedDeleteTargetId = null;
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -738,7 +771,7 @@ async function registerOrg() {
 }
 async function saveKeyAndContinue() {
   if (!currentOrg) return showToast('No organisation ready to continue with', true);
-  setSignedInUI(true); await refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded');
+  setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('dashboard'); showToast('Organisation loaded');
 }
 async function loadExistingKey() {
   const k = document.getElementById('existingKeyInput').value.trim();
@@ -747,7 +780,7 @@ async function loadExistingKey() {
   currentOrg = stored && stored.api_key === k ? stored : { name: 'IRLid Test Organisation', api_key: k, mode: 'irlid-api-test' };
   saveJson(STORAGE_KEY_ORG, currentOrg);
   document.getElementById('orgNameInput').value = currentOrg.name || '';
-  setSignedInUI(true); await refreshAttendance(); generateVenueQR(); renderExpectedAttendees(); showPanel('dashboard'); showToast('Organisation loaded');
+  setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('dashboard'); showToast('Organisation loaded');
 }
 function signOutOrg() { currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
 function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
@@ -822,6 +855,118 @@ function renderExpectedAttendees() {
     const meta = `${r.paid ? 'paid' : 'unpaid'} · ${r.subscription ? 'subscriber' : 'no sub'}`;
     return `<div class="expected-item"><div><div>${r.name}</div><div class="expected-meta">${meta}</div></div>${pill}</div>`;
   }).join('');
+}
+function expectedDisplayName(row) {
+  return `${row.first_name || ''} ${row.surname || ''}`.trim() || row.name || 'Unnamed attendee';
+}
+function renderExpectedAttendeesApiState() {
+  const root = document.getElementById('expectedAttendeeList'); if (!root) return;
+  if (expectedLoading) {
+    root.innerHTML = '<div class="expected-state">Loading expected attendees...</div>';
+    return;
+  }
+  if (expectedError) {
+    const message = expectedError.status === 401 ? 'Session expired — please re-authenticate' : escapeHtml(expectedError.message || 'Could not load expected attendees');
+    root.innerHTML = `<div class="expected-state error">${message}<br><button class="btn btn-secondary btn-sm" type="button" onclick="refreshExpectedAttendees()">Retry</button></div>`;
+    return;
+  }
+  if (!expectedAttendees.length) {
+    root.innerHTML = '<div class="expected-state">No expected attendees yet — add some above</div>';
+    return;
+  }
+  root.innerHTML = expectedAttendees.map(r => {
+    const deleteClass = expectedDeleteMode ? ' delete-selectable' : '';
+    const status = r.status || 'assist';
+    return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div><div>${escapeHtml(expectedDisplayName(r))}</div><div class="expected-meta">manual · added by admin</div></div><span class="expected-pill warn">${escapeHtml(status)}</span></div>`;
+  }).join('');
+}
+renderExpectedAttendees = renderExpectedAttendeesApiState;
+async function refreshExpectedAttendees() {
+  const root = document.getElementById('expectedAttendeeList'); if (!root) return;
+  if (!currentOrg) {
+    expectedAttendees = [];
+    expectedError = null;
+    renderExpectedAttendees();
+    return;
+  }
+  expectedLoading = true;
+  expectedError = null;
+  renderExpectedAttendees();
+  try {
+    const payload = await window.IRLidOrgApi.listExpected(currentOrg.api_key);
+    expectedAttendees = payload.expected || [];
+  } catch (err) {
+    expectedAttendees = [];
+    expectedError = err;
+  } finally {
+    expectedLoading = false;
+    renderExpectedAttendees();
+  }
+}
+function setExpectedValidation(message) {
+  const el = document.getElementById('expectedValidation'); if (!el) return;
+  el.textContent = message || '';
+}
+async function addExpectedAttendee() {
+  const firstInput = document.getElementById('expectedFirstName');
+  const surnameInput = document.getElementById('expectedSurname');
+  const firstName = firstInput?.value.trim() || '';
+  const surname = surnameInput?.value.trim() || '';
+  if (!firstName || !surname) {
+    setExpectedValidation('Please enter both first name and surname');
+    return;
+  }
+  if (!currentOrg) return showToast('Load an organisation first', true);
+  try {
+    const payload = await window.IRLidOrgApi.createExpected(currentOrg.api_key, { first_name: firstName, surname });
+    if (payload.expected) expectedAttendees.unshift(payload.expected);
+    if (firstInput) firstInput.value = '';
+    if (surnameInput) surnameInput.value = '';
+    setExpectedValidation('');
+    renderExpectedAttendees();
+    showToast('Expected attendee added');
+  } catch (err) {
+    setExpectedValidation(err.status === 401 ? 'Session expired — please re-authenticate' : (err.message || 'Could not add expected attendee'));
+  }
+}
+function setExpectedDeleteMode(active) {
+  expectedDeleteMode = active;
+  expectedDeleteTargetId = null;
+  document.body.classList.toggle('expected-delete-active', active);
+  document.getElementById('doormanPanel')?.classList.toggle('expected-delete-mode', active);
+  document.getElementById('expectedDeleteBanner')?.classList.toggle('hidden', !active);
+  hideExpectedDeleteDialog();
+  renderExpectedAttendees();
+}
+function showExpectedDeleteDialog(row) {
+  expectedDeleteTargetId = row.id;
+  const text = document.getElementById('expectedConfirmText');
+  if (text) text.textContent = `Remove ${expectedDisplayName(row)} from expected attendees?`;
+  document.getElementById('expectedConfirmDialog')?.classList.remove('hidden');
+}
+function hideExpectedDeleteDialog() {
+  document.getElementById('expectedConfirmDialog')?.classList.add('hidden');
+  expectedDeleteTargetId = null;
+}
+async function confirmExpectedDelete() {
+  if (!expectedDeleteTargetId || !currentOrg) return;
+  const id = expectedDeleteTargetId;
+  try {
+    await window.IRLidOrgApi.deleteExpected(currentOrg.api_key, id);
+    expectedAttendees = expectedAttendees.filter(row => String(row.id) !== String(id));
+    setExpectedDeleteMode(false);
+    showToast('Expected attendee removed');
+  } catch (err) {
+    hideExpectedDeleteDialog();
+    showToast(err.status === 401 ? 'Session expired — please re-authenticate' : (err.message || 'Could not remove expected attendee'), true);
+  }
+}
+function handleExpectedListClick(event) {
+  if (!expectedDeleteMode) return;
+  const rowEl = event.target.closest('.expected-item');
+  if (!rowEl) return;
+  const row = expectedAttendees.find(item => String(item.id) === String(rowEl.dataset.expectedId));
+  if (row) showExpectedDeleteDialog(row);
 }
 function aggregateAttendees(checkins) {
   const byAttendee = new Map();
@@ -1243,6 +1388,28 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
+  document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
+  document.getElementById('expectedDeleteBtn')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    setExpectedDeleteMode(true);
+  });
+  document.getElementById('expectedAttendeeList')?.addEventListener('click', handleExpectedListClick);
+  document.getElementById('expectedCancelDeleteBtn')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    hideExpectedDeleteDialog();
+  });
+  document.getElementById('expectedConfirmDeleteBtn')?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    confirmExpectedDelete();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
+  });
+  document.addEventListener('click', (event) => {
+    if (!expectedDeleteMode) return;
+    if (event.target.closest('.expected-list') || event.target.closest('#expectedConfirmDialog') || event.target.closest('#expectedDeleteBtn')) return;
+    setExpectedDeleteMode(false);
+  });
 
   const bootOrg = orgFromUrl() || ensureDevOrg();
   if (DEV_AUTO_LOGIN && bootOrg) {
@@ -1252,7 +1419,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('existingKeyInput').value = currentOrg.api_key || '';
     document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
     document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block';
-    setSignedInUI(true); syncLegacyFromPortal(); await refreshAttendance(); renderExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
+    setSignedInUI(true); syncLegacyFromPortal(); await refreshAttendance(); await refreshExpectedAttendees(); showPanel('dashboard'); generateVenueQR(); renderPortalAll();
     return;
   }
   setSignedInUI(false); syncLegacyFromPortal(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
