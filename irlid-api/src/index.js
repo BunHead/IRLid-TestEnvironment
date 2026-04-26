@@ -36,6 +36,11 @@ function json(data, status = 200) {
 }
 
 function err(message, status = 400) { return json({ error: message }, status); }
+function authErr(message, status = 401) {
+  const response = err(message, status);
+  response.error = true;
+  return response;
+}
 
 function randomToken() { return b64urlEncode(crypto.getRandomValues(new Uint8Array(32))); }
 
@@ -210,8 +215,8 @@ function corsHeaders(env, request) {
   ];
   return {
     "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0],
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Org-Key",
     "Access-Control-Max-Age": "86400"
   };
 }
@@ -757,7 +762,19 @@ async function orgCheckin(request, env) {
   await env.DB.prepare(
     "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at,name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
   ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t, displayName).run();
-  return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings });
+  let link = { linked: false };
+  if (displayName) {
+    const expected = await env.DB.prepare(
+      "SELECT id,first_name,surname FROM org_expected WHERE org_code=? AND status='assist' AND LOWER(first_name || ' ' || surname)=LOWER(?) ORDER BY id ASC LIMIT 1"
+    ).bind(org.id, displayName).first();
+    if (expected) {
+      await env.DB.prepare(
+        "UPDATE org_expected SET status='linked', linked_at=? WHERE id=? AND org_code=? AND status='assist'"
+      ).bind(t, expected.id, org.id).run();
+      link = { linked: true, expected_id: expected.id, expected_name: `${expected.first_name} ${expected.surname}`.trim() };
+    }
+  }
+  return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings, ...link });
 }
 
 async function orgCheckout(request, env) {
@@ -794,7 +811,7 @@ async function orgAttendance(request, env) {
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at FROM org_expected WHERE org_code=? ORDER BY created_at DESC, id DESC"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
   ).bind(org.id).all();
   return json({ expected: rows.results });
 }
@@ -805,9 +822,13 @@ async function orgExpectedCreate(request, env) {
   const firstName = (body.first_name || "").trim();
   const surname = (body.surname || "").trim();
   if (!firstName || !surname) return err("first_name and surname required");
+  const existing = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
+  ).bind(org.id, firstName, surname).first();
+  if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
   const createdAt = now();
   const row = await env.DB.prepare(
-    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at"
+    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
   ).bind(org.id, firstName, surname, "assist", createdAt).first();
   return json({ expected: row });
 }
@@ -822,11 +843,28 @@ async function orgExpectedDelete(request, env, id) {
   return json({ deleted: true, id });
 }
 
+async function orgExpectedUpdate(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const firstName = (body.first_name || "").trim();
+  const surname = (body.surname || "").trim();
+  if (!firstName || !surname) return err("first_name and surname required");
+  const existing = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND id<>? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
+  ).bind(org.id, id, firstName, surname).first();
+  if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
+  const row = await env.DB.prepare(
+    "UPDATE org_expected SET first_name=?, surname=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
+  ).bind(firstName, surname, id, org.id).first();
+  if (!row) return err("Expected attendee not found", 404);
+  return json({ expected: row });
+}
+
 async function orgAuth(request, env) {
   const key = request.headers.get("X-Org-Key") || new URL(request.url).searchParams.get("key");
-  if (!key) return err("X-Org-Key header required", 401);
+  if (!key) return authErr("X-Org-Key header required", 401);
   const org = await env.DB.prepare("SELECT * FROM organisations WHERE api_key=?").bind(key).first();
-  if (!org) return err("Invalid API key", 401);
+  if (!org) return authErr("Invalid API key", 401);
   return org;
 }
 
@@ -877,6 +915,7 @@ export default {
       else {
         const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
+        else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
           if (method === "GET" && m) response = await getReceipt(request, env, m[1]);

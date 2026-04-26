@@ -53,6 +53,14 @@
       });
     },
 
+    checkout(orgKey, body) {
+      return request("/org/checkout", {
+        method: "POST",
+        orgKey,
+        body
+      });
+    },
+
     listExpected(orgKey) {
       return request("/org/expected", {
         orgKey
@@ -71,6 +79,14 @@
       return request(`/org/expected/${encodeURIComponent(id)}`, {
         method: "DELETE",
         orgKey
+      });
+    },
+
+    updateExpected(orgKey, id, body) {
+      return request(`/org/expected/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        orgKey,
+        body
       });
     }
   };

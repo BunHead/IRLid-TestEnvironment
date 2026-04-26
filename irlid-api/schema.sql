@@ -113,3 +113,7 @@ CREATE TABLE IF NOT EXISTS org_expected (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_org_expected_org ON org_expected(org_code);
+
+-- Batch 4 additive migration: first-seen timestamp when a new check-in links an expected attendee.
+-- Existing expected rows stay untouched with linked_at as NULL.
+ALTER TABLE org_expected ADD COLUMN linked_at INTEGER;
