@@ -72,6 +72,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .stat-value.orange { color: var(--orange); }
 .stat-value.purple { color: #bc8cff; }
 .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.threshold-bar { position: relative; height: 4px; margin-top: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.threshold-bar-fill { height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, var(--orange), var(--green)); transition: width 600ms ease-out; }
+.threshold-bar-marker { position: absolute; top: -3px; width: 2px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.78); transform: translateX(-1px); transition: left 600ms ease-out; }
 .two-col { display: grid; grid-template-columns: 1.2fr 340px; gap: 18px; }
 .mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
 .mode-card { border: 2px solid var(--line); border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s; background: #0b1220; }
@@ -186,7 +189,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .btn-secondary:hover { background: var(--line); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 5px; animation: pulse 2s infinite; }
+.attendance-live-dot { box-shadow: 0 0 0 0 rgba(63,185,80,0.35); animation: liveDotPulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+@keyframes liveDotPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(63,185,80,0.28)} 50%{opacity:0.65;box-shadow:0 0 0 5px rgba(63,185,80,0)} }
 .toast { position: fixed; bottom: 24px; right: 24px; background: #238636; color: #fff; padding: 12px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
 .toast.show { opacity: 1; }
 .alert { padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-bottom: 14px; }
@@ -323,6 +328,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 @media (prefers-reduced-motion: reduce) {
   .qr-fullscreen-code, .btn-spinner, .scan-panel.flash-success, .scan-panel.flash-walkin, .scan-panel.flash-error, .checkout-row-complete td { animation: none; }
   .checkin-result { transition: none; }
+  .live-dot, .attendance-live-dot { animation: none; }
+  .threshold-bar-fill, .threshold-bar-marker { transition: none; }
 }
 </style>
 </head>
@@ -403,14 +410,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
       <div class="stats-row" id="statsRow">
         <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="statIn">12</div><div class="stat-sub" id="statInSub">18 total today</div></div>
         <div class="stat-card"><div class="stat-label">Checked Out</div><div class="stat-value blue" id="statOut">6</div></div>
-        <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value orange" id="statScore">84%</div><div class="stat-sub">Min threshold: <span id="statMin">50%</span></div></div>
+        <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value orange" id="statScore">84%</div><div class="stat-sub">Min threshold: <span id="statMin">50%</span></div><div class="threshold-bar" aria-hidden="true"><div class="threshold-bar-fill" id="scoreProgress"></div><div class="threshold-bar-marker" id="scoreThresholdMarker"></div></div></div>
         <div class="stat-card"><div class="stat-label">Bio-metric Verified</div><div class="stat-value purple" id="statBio">7</div></div>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><span class="live-dot"></span>Attendance — Today</div>
-          <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Debug data loaded</div>
+          <div class="card-title"><span class="live-dot attendance-live-dot"></span>Attendance — Today</div>
+          <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Waiting for data</div>
         </div>
         <div id="attendanceBody" style="overflow-x:auto;">
           <table class="att-table">
@@ -752,6 +759,9 @@ let checkoutConfirmId = null;
 let checkoutBusyId = null;
 let checkoutErrors = {};
 let recentlyCheckedOutId = null;
+let statDisplayValues = { statIn: 0, statOut: 0, statScore: 0, statBio: 0 };
+let hasRenderedStats = false;
+let lastRefreshAt = null;
 let expectedAttendees = [];
 let expectedLoading = false;
 let expectedError = null;
@@ -1113,6 +1123,43 @@ function aggregateAttendees(checkins) {
 function formatTimestamp(ts) {
   return ts ? new Date(ts * 1000).toLocaleString() : '—';
 }
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function animateStatValue(id, nextValue, suffix='') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const startValue = hasRenderedStats ? (statDisplayValues[id] || 0) : 0;
+  statDisplayValues[id] = nextValue;
+  if (prefersReducedMotion()) {
+    el.textContent = suffix && nextValue === 0 ? '—' : `${nextValue}${suffix}`;
+    return;
+  }
+  const duration = 600;
+  const start = performance.now();
+  const step = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const value = Math.round(startValue + (nextValue - startValue) * eased);
+    el.textContent = suffix && nextValue === 0 ? '—' : `${value}${suffix}`;
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function relativeRefreshText() {
+  if (!lastRefreshAt) return 'Waiting for data';
+  const seconds = Math.max(0, Math.floor((Date.now() - lastRefreshAt) / 1000));
+  if (seconds < 45) return 'Updated just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 1) return 'Updated 1 minute ago';
+  if (minutes < 60) return `Updated ${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours === 1 ? 'Updated 1 hour ago' : `Updated ${hours} hours ago`;
+}
+function updateRelativeRefresh() {
+  const el = document.getElementById('lastRefresh');
+  if (el) el.textContent = relativeRefreshText();
+}
 async function refreshAttendance() {
   if (!currentOrg) return;
   try {
@@ -1121,7 +1168,8 @@ async function refreshAttendance() {
     attendanceData = aggregateAttendees(payload.checkins || []);
     renderStats(attendanceData, attendanceStats);
     renderTable(attendanceData);
-    document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    lastRefreshAt = Date.now();
+    updateRelativeRefresh();
   } catch (err) {
     attendanceStats = null;
     attendanceData = [];
@@ -1136,11 +1184,17 @@ function renderStats(rows, stats) {
   const checkedOut = stats ? stats.checked_out : 0;
   const avgScore = stats ? stats.avg_score : 0;
   const bioCount = stats ? stats.bio_verified : 0;
-  document.getElementById('statIn').textContent = currentlyIn;
-  document.getElementById('statOut').textContent = checkedOut;
-  document.getElementById('statScore').textContent = avgScore ? avgScore + '%' : '—';
-  document.getElementById('statBio').textContent = bioCount;
+  animateStatValue('statIn', currentlyIn);
+  animateStatValue('statOut', checkedOut);
+  animateStatValue('statScore', avgScore, '%');
+  animateStatValue('statBio', bioCount);
   document.getElementById('statInSub').textContent = rows.length ? `${rows.length} attendees seen` : 'No attendance yet';
+  const minScore = settings.minScore || 50;
+  const scoreProgress = document.getElementById('scoreProgress');
+  const scoreThresholdMarker = document.getElementById('scoreThresholdMarker');
+  if (scoreProgress) scoreProgress.style.width = `${Math.max(0, Math.min(100, avgScore))}%`;
+  if (scoreThresholdMarker) scoreThresholdMarker.style.left = `${Math.max(0, Math.min(100, minScore))}%`;
+  hasRenderedStats = true;
 }
 function renderTable(rows) {
   if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
@@ -1638,6 +1692,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
+  setInterval(updateRelativeRefresh, 30000);
   document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
   document.getElementById('expectedDeleteBtn')?.addEventListener('click', (event) => {
     event.stopPropagation();
