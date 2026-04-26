@@ -106,6 +106,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-state { padding: 14px 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .expected-state.error { color: var(--red); }
 .expected-state .btn { margin-top: 8px; }
+.checkin-result { margin-top: 10px; min-height: 18px; font-size: 12px; line-height: 1.45; }
+.checkin-result.success { color: var(--green); }
+.checkin-result.info { color: var(--muted); }
 .expected-validation { min-height: 16px; margin-top: 8px; color: var(--red); font-size: 11px; }
 .expected-delete-banner { margin-top: 14px; padding: 9px 12px; border: 1px solid var(--red); border-radius: 8px; background: #3d1c1c; color: #ffb3ad; font-size: 12px; }
 .expected-delete-active .sidebar,
@@ -431,6 +434,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                     <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
                   </div>
                   <button class="btn btn-primary" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
+                  <div class="checkin-result" id="manualCheckinResult"></div>
 
                   <div class="expected-delete-banner hidden" id="expectedDeleteBanner">Delete mode — click a row to remove</div>
                   <div class="expected-list">
@@ -877,7 +881,9 @@ function renderExpectedAttendeesApiState() {
   root.innerHTML = expectedAttendees.map(r => {
     const deleteClass = expectedDeleteMode ? ' delete-selectable' : '';
     const status = r.status || 'assist';
-    return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div><div>${escapeHtml(expectedDisplayName(r))}</div><div class="expected-meta">manual · added by admin</div></div><span class="expected-pill warn">${escapeHtml(status)}</span></div>`;
+    const pillClass = status === 'linked' ? 'ok' : 'warn';
+    const meta = status === 'linked' && r.linked_at ? `linked · ${formatTimestamp(r.linked_at)}` : 'manual · added by admin';
+    return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div><div>${escapeHtml(expectedDisplayName(r))}</div><div class="expected-meta">${escapeHtml(meta)}</div></div><span class="expected-pill ${pillClass}">${escapeHtml(status)}</span></div>`;
   }).join('');
 }
 renderExpectedAttendees = renderExpectedAttendeesApiState;
@@ -1062,16 +1068,29 @@ function selectMode(mode) {
 }
 async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
+  const resultEl = document.getElementById('manualCheckinResult');
+  if (resultEl) { resultEl.textContent = ''; resultEl.className = 'checkin-result'; }
   if (!currentOrg) return showToast('Load an organisation first', true);
   try {
-    await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
+    const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
       mode: 'doorman_scan',
+      name: settings.anonymousMode ? '' : label,
       attendeeLabel: settings.anonymousMode ? '' : label,
       score: settings.minScore || 50,
       bioVerified: !!settings.bioRequired
     });
     document.getElementById('manualLabel').value = '';
     await refreshAttendance();
+    await refreshExpectedAttendees();
+    if (resultEl && label) {
+      if (result.linked) {
+        resultEl.textContent = `✓ Matched expected attendee: ${result.expected_name || label}`;
+        resultEl.classList.add('success');
+      } else {
+        resultEl.textContent = 'Recorded as walk-in (not on expected list)';
+        resultEl.classList.add('info');
+      }
+    }
     showToast('Check-in recorded');
   } catch (err) {
     showToast(err.message || 'Could not record check-in', true);

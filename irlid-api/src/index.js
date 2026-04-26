@@ -757,7 +757,19 @@ async function orgCheckin(request, env) {
   await env.DB.prepare(
     "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at,name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
   ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t, displayName).run();
-  return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings });
+  let link = { linked: false };
+  if (displayName) {
+    const expected = await env.DB.prepare(
+      "SELECT id,first_name,surname FROM org_expected WHERE org_code=? AND status='assist' AND LOWER(first_name || ' ' || surname)=LOWER(?) ORDER BY id ASC LIMIT 1"
+    ).bind(org.id, displayName).first();
+    if (expected) {
+      await env.DB.prepare(
+        "UPDATE org_expected SET status='linked', linked_at=? WHERE id=? AND org_code=? AND status='assist'"
+      ).bind(t, expected.id, org.id).run();
+      link = { linked: true, expected_id: expected.id, expected_name: `${expected.first_name} ${expected.surname}`.trim() };
+    }
+  }
+  return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings, ...link });
 }
 
 async function orgCheckout(request, env) {
@@ -794,7 +806,7 @@ async function orgAttendance(request, env) {
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at FROM org_expected WHERE org_code=? ORDER BY created_at DESC, id DESC"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at FROM org_expected WHERE org_code=? ORDER BY created_at DESC, id DESC"
   ).bind(org.id).all();
   return json({ expected: rows.results });
 }
@@ -807,7 +819,7 @@ async function orgExpectedCreate(request, env) {
   if (!firstName || !surname) return err("first_name and surname required");
   const createdAt = now();
   const row = await env.DB.prepare(
-    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at"
+    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
   ).bind(org.id, firstName, surname, "assist", createdAt).first();
   return json({ expected: row });
 }
