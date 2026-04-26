@@ -102,6 +102,14 @@
       });
     },
 
+    rebindExpected(orgKey, id, body) {
+      return request(`/org/expected/${encodeURIComponent(id)}/rebind`, {
+        method: "POST",
+        orgKey,
+        body
+      });
+    },
+
     resolveConflict(orgKey, id, resolution) {
       return request(`/org/conflicts/${encodeURIComponent(id)}/resolve`, {
         method: "POST",

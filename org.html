@@ -130,8 +130,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-delete-active .topbar,
 .expected-delete-active #panel-checkin > .two-col > div:not(:first-child),
 .expected-delete-active #panel-checkin .card > .card-header,
-.expected-delete-active #panel-checkin .card > .card-body > :not(#doormanWrap) { opacity: 0.4; pointer-events: none; }
-.scan-panel.expected-delete-mode > :not(.expected-list):not(.expected-delete-banner) { opacity: 0.4; pointer-events: none; }
+.expected-delete-active #panel-checkin .mode-selector,
+.expected-delete-active #venueQRWrap,
+.expected-delete-active #doormanWrap,
+.expected-delete-active #checkoutSettingsCard { opacity: 0.4; pointer-events: none; }
+.expected-shared-panel.expected-delete-mode > :not(.expected-list):not(.expected-delete-banner) { opacity: 0.4; pointer-events: none; }
 .expected-confirm-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(1,4,9,0.68); }
 .expected-confirm { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 18px 42px rgba(0,0,0,0.38); }
 .expected-confirm p { color: var(--text); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
@@ -493,48 +496,50 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                   </div>
                   <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
                   <div class="checkin-result" id="manualCheckinResult"></div>
+                </div>
+              </div>
 
-                  <div class="expected-delete-banner hidden" id="expectedDeleteBanner">Delete mode — click a row to remove</div>
-                  <div class="expected-list">
-                    <div class="expected-head">Expected attendees</div>
-                    <div id="expectedAttendeeList"></div>
+              <div class="expected-shared-panel" id="expectedSharedPanel">
+                <div class="expected-delete-banner hidden" id="expectedDeleteBanner">Delete mode — click a row to remove</div>
+                <div class="expected-list">
+                  <div class="expected-head">Expected attendees</div>
+                  <div id="expectedAttendeeList"></div>
+                </div>
+
+                <div class="checkin-lower-grid">
+                  <div class="expected-admin-panel">
+                    <h5>Add expected attendee</h5>
+                    <div class="expected-admin-fields">
+                      <div class="input-group" style="margin-bottom:0;">
+                        <label for="expectedFirstName">First Name</label>
+                        <input type="text" id="expectedFirstName" autocomplete="given-name">
+                      </div>
+                      <div class="input-group" style="margin-bottom:0;">
+                        <label for="expectedSurname">Surname</label>
+                        <input type="text" id="expectedSurname" autocomplete="family-name">
+                      </div>
+                    </div>
+                    <div class="expected-admin-actions">
+                      <button class="btn btn-primary" type="button" id="expectedAddBtn">Add</button>
+                      <button class="btn btn-danger" type="button" id="expectedDeleteBtn">Delete</button>
+                    </div>
+                    <div class="expected-validation" id="expectedValidation"></div>
                   </div>
 
-                  <div class="checkin-lower-grid">
-                    <div class="expected-admin-panel">
-                      <h5>Add expected attendee</h5>
-                      <div class="expected-admin-fields">
-                        <div class="input-group" style="margin-bottom:0;">
-                          <label for="expectedFirstName">First Name</label>
-                          <input type="text" id="expectedFirstName" autocomplete="given-name">
-                        </div>
-                        <div class="input-group" style="margin-bottom:0;">
-                          <label for="expectedSurname">Surname</label>
-                          <input type="text" id="expectedSurname" autocomplete="family-name">
-                        </div>
-                      </div>
-                      <div class="expected-admin-actions">
-                        <button class="btn btn-primary" type="button" id="expectedAddBtn">Add</button>
-                        <button class="btn btn-danger" type="button" id="expectedDeleteBtn">Delete</button>
-                      </div>
-                      <div class="expected-validation" id="expectedValidation"></div>
-                    </div>
-
-                    <div class="match-panel">
-                      <h5>When identity is unclear</h5>
-                      <p>If the attendee is not already linked, the intended flow is to send them to an assisted identity screen where they can select themselves from the expected list and provide any additional proof required by organisation policy.</p>
-                      <div class="mini-help">
-                        Preferred path:
-                        <br>1. reuse normal IRLid scanner
-                        <br>2. detect HELLO vs venue QR
-                        <br>3. if unmatched, go to assisted identity flow
-                      </div>
+                  <div class="match-panel">
+                    <h5>When identity is unclear</h5>
+                    <p>If the attendee is not already linked, the intended flow is to send them to an assisted identity screen where they can select themselves from the expected list and provide any additional proof required by organisation policy.</p>
+                    <div class="mini-help">
+                      Preferred path:
+                      <br>1. reuse normal IRLid scanner
+                      <br>2. detect HELLO vs venue QR
+                      <br>3. if unmatched, go to assisted identity flow
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div style="background:#1a1f29;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <div id="checkoutSettingsCard" style="background:#1a1f29;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
                 <div>
                   <div style="font-size:13px;font-weight:500;" id="checkoutLabel">✓ Check-out enabled</div>
                   <div style="font-size:11px;color:#8b949e;margin-top:2px;">Records departure time and duration</div>
@@ -1052,7 +1057,7 @@ function setExpectedDeleteMode(active) {
   expectedDeleteTargetId = null;
   if (active) cancelExpectedEdit();
   document.body.classList.toggle('expected-delete-active', active);
-  document.getElementById('doormanPanel')?.classList.toggle('expected-delete-mode', active);
+  document.getElementById('expectedSharedPanel')?.classList.toggle('expected-delete-mode', active);
   document.getElementById('expectedDeleteBanner')?.classList.toggle('hidden', !active);
   hideExpectedDeleteDialog();
   renderExpectedAttendees();
