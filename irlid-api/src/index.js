@@ -210,8 +210,8 @@ function corsHeaders(env, request) {
   ];
   return {
     "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0],
-    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Org-Key",
     "Access-Control-Max-Age": "86400"
   };
 }
@@ -838,6 +838,23 @@ async function orgExpectedDelete(request, env, id) {
   return json({ deleted: true, id });
 }
 
+async function orgExpectedUpdate(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const firstName = (body.first_name || "").trim();
+  const surname = (body.surname || "").trim();
+  if (!firstName || !surname) return err("first_name and surname required");
+  const existing = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND id<>? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
+  ).bind(org.id, id, firstName, surname).first();
+  if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
+  const row = await env.DB.prepare(
+    "UPDATE org_expected SET first_name=?, surname=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
+  ).bind(firstName, surname, id, org.id).first();
+  if (!row) return err("Expected attendee not found", 404);
+  return json({ expected: row });
+}
+
 async function orgAuth(request, env) {
   const key = request.headers.get("X-Org-Key") || new URL(request.url).searchParams.get("key");
   if (!key) return err("X-Org-Key header required", 401);
@@ -893,6 +910,7 @@ export default {
       else {
         const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
+        else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
           if (method === "GET" && m) response = await getReceipt(request, env, m[1]);

@@ -100,6 +100,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-item.delete-selectable { cursor: pointer; }
 .expected-item.delete-selectable:hover { background: rgba(248,81,73,0.14); }
 .expected-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.expected-name-display { cursor: pointer; }
+.expected-name-display:hover { color: var(--blue); }
+.expected-edit-fields { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.expected-edit-fields input { width: 118px; background: #0b1220; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; color: var(--text); font-size: 12px; }
+.expected-row-error { margin-top: 6px; color: var(--red); font-size: 11px; }
 .expected-pill { font-size: 10px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); }
 .expected-pill.ok { border-color: #238636; color: var(--green); background: #1a4731; }
 .expected-pill.warn { border-color: var(--orange); color: var(--orange); background: #2d2a0f; }
@@ -708,6 +713,8 @@ let expectedLoading = false;
 let expectedError = null;
 let expectedDeleteMode = false;
 let expectedDeleteTargetId = null;
+let expectedEditId = null;
+let expectedEditError = '';
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -883,7 +890,11 @@ function renderExpectedAttendeesApiState() {
     const status = r.status || 'assist';
     const pillClass = status === 'linked' ? 'ok' : 'warn';
     const meta = status === 'linked' && r.linked_at ? `linked · ${formatTimestamp(r.linked_at)}` : 'manual · added by admin';
-    return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div><div>${escapeHtml(expectedDisplayName(r))}</div><div class="expected-meta">${escapeHtml(meta)}</div></div><span class="expected-pill ${pillClass}">${escapeHtml(status)}</span></div>`;
+    const isEditing = String(expectedEditId) === String(r.id);
+    const nameBlock = isEditing
+      ? `<div class="expected-edit-fields"><input id="expectedEditFirst" type="text" value="${escapeHtml(r.first_name || '')}" aria-label="First name"><input id="expectedEditSurname" type="text" value="${escapeHtml(r.surname || '')}" aria-label="Surname"><button class="btn btn-primary btn-sm" type="button" onclick="saveExpectedEdit('${escapeHtml(r.id)}')">Save</button><button class="btn btn-secondary btn-sm" type="button" onclick="cancelExpectedEdit()">Cancel</button></div>${expectedEditError ? `<div class="expected-row-error">${escapeHtml(expectedEditError)}</div>` : ''}`
+      : `<div class="expected-name-display" onclick="startExpectedEdit('${escapeHtml(r.id)}')" title="Edit name">${escapeHtml(expectedDisplayName(r))}</div>`;
+    return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div>${nameBlock}<div class="expected-meta">${escapeHtml(meta)}</div></div><span class="expected-pill ${pillClass}">${escapeHtml(status)}</span></div>`;
   }).join('');
 }
 renderExpectedAttendees = renderExpectedAttendeesApiState;
@@ -942,6 +953,7 @@ async function addExpectedAttendee() {
 function setExpectedDeleteMode(active) {
   expectedDeleteMode = active;
   expectedDeleteTargetId = null;
+  if (active) cancelExpectedEdit();
   document.body.classList.toggle('expected-delete-active', active);
   document.getElementById('doormanPanel')?.classList.toggle('expected-delete-mode', active);
   document.getElementById('expectedDeleteBanner')?.classList.toggle('hidden', !active);
@@ -961,6 +973,7 @@ function hideExpectedDeleteDialog() {
 async function confirmExpectedDelete() {
   if (!expectedDeleteTargetId || !currentOrg) return;
   const id = expectedDeleteTargetId;
+  cancelExpectedEdit();
   try {
     await window.IRLidOrgApi.deleteExpected(currentOrg.api_key, id);
     expectedAttendees = expectedAttendees.filter(row => String(row.id) !== String(id));
@@ -977,6 +990,43 @@ function handleExpectedListClick(event) {
   if (!rowEl) return;
   const row = expectedAttendees.find(item => String(item.id) === String(rowEl.dataset.expectedId));
   if (row) showExpectedDeleteDialog(row);
+}
+function startExpectedEdit(id) {
+  if (expectedDeleteMode) return;
+  expectedEditId = id;
+  expectedEditError = '';
+  renderExpectedAttendees();
+  document.getElementById('expectedEditFirst')?.focus();
+}
+function cancelExpectedEdit() {
+  if (!expectedEditId && !expectedEditError) return;
+  expectedEditId = null;
+  expectedEditError = '';
+  renderExpectedAttendees();
+}
+async function saveExpectedEdit(id) {
+  if (!currentOrg) return;
+  const firstName = document.getElementById('expectedEditFirst')?.value.trim() || '';
+  const surname = document.getElementById('expectedEditSurname')?.value.trim() || '';
+  if (!firstName || !surname) {
+    expectedEditError = 'Please enter both first name and surname';
+    renderExpectedAttendees();
+    return;
+  }
+  try {
+    const payload = await window.IRLidOrgApi.updateExpected(currentOrg.api_key, id, { first_name: firstName, surname });
+    if (payload.expected) {
+      expectedAttendees = expectedAttendees.map(item => String(item.id) === String(id) ? payload.expected : item);
+      expectedAttendees.sort((a, b) => (a.surname || '').localeCompare(b.surname || '', undefined, { sensitivity: 'base' }) || (a.first_name || '').localeCompare(b.first_name || '', undefined, { sensitivity: 'base' }));
+    }
+    expectedEditId = null;
+    expectedEditError = '';
+    renderExpectedAttendees();
+  } catch (err) {
+    if (err.status === 409 && err.message === 'duplicate') expectedEditError = `${firstName} ${surname} is already on the expected list.`;
+    else expectedEditError = err.status === 401 ? 'Session expired — please re-authenticate' : (err.message || 'Could not update expected attendee');
+    renderExpectedAttendees();
+  }
 }
 function aggregateAttendees(checkins) {
   const byAttendee = new Map();
@@ -1427,6 +1477,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
+    else if (event.key === 'Escape' && expectedEditId) cancelExpectedEdit();
   });
   document.addEventListener('click', (event) => {
     if (!expectedDeleteMode) return;
