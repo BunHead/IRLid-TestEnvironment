@@ -28,8 +28,8 @@
 }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; overflow: hidden; }
 .sidebar { width: 220px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; }
-.sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: center; align-items: center; min-height: 76px; }
-.sidebar-logo img { width: 54px; filter: brightness(0) invert(1); opacity: 0.95; }
+.sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; align-items: center; min-height: 76px; }
+.sidebar-logo img { display: block; height: 38px; width: auto; max-width: 160px; object-fit: contain; opacity: 0.95; }
 .sidebar-fallback { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
 .org-badge { margin: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .org-badge .org-name { font-size: 13px; font-weight: 600; }
@@ -322,7 +322,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 @media (max-width: 760px) {
   body { overflow: auto; }
   .sidebar { width: 78px; }
-  .sidebar-logo img { width: 40px; }
+  .sidebar-logo { justify-content: center; padding-inline: 10px; }
+  .sidebar-logo img { height: 36px; max-width: 56px; }
   .org-badge, .sidebar-footer, .nav-item span { display: none; }
   .content { padding: 14px; }
   .checkin-lower-grid, .expected-admin-fields { grid-template-columns: 1fr; }
@@ -342,7 +343,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 <body>
 <div class="sidebar">
   <div class="sidebar-logo">
-    <img src="logo.png" alt="IRLid logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+    <img id="chromeLogo" src="logo.png" alt="Organisation logo">
     <div class="sidebar-fallback" style="display:none;">IRL</div>
   </div>
 
@@ -818,6 +819,32 @@ function showPanel(name, el) {
   const titles = { dashboard: 'Dashboard', checkin: 'Check-in', settings: 'Settings', setup: 'Organisation' };
   document.getElementById('topbarTitle').textContent = titles[name] || name;
 }
+function chromeLogoUrl() {
+  return (settings.logoUrl || portalState.logoUrl || '').trim() || 'logo.png';
+}
+function updateChromeLogo() {
+  const logo = document.getElementById('chromeLogo');
+  const fallback = document.querySelector('.sidebar-fallback');
+  if (!logo) return;
+  const src = chromeLogoUrl();
+  logo.alt = currentOrg?.name ? `${currentOrg.name} logo` : 'IRLid logo';
+  logo.dataset.fallbackTried = src === 'logo.png' ? '1' : '0';
+  logo.style.display = 'block';
+  if (fallback) fallback.style.display = 'none';
+  if (logo.getAttribute('src') !== src) logo.src = src;
+}
+function handleChromeLogoError() {
+  const logo = document.getElementById('chromeLogo');
+  const fallback = document.querySelector('.sidebar-fallback');
+  if (!logo) return;
+  if (logo.dataset.fallbackTried !== '1') {
+    logo.dataset.fallbackTried = '1';
+    logo.src = 'logo.png';
+    return;
+  }
+  logo.style.display = 'none';
+  if (fallback) fallback.style.display = 'block';
+}
 function setSignedInUI(isSignedIn) {
   document.getElementById('navDashboard').classList.toggle('hidden', !isSignedIn);
   document.getElementById('navCheckin').classList.toggle('hidden', !isSignedIn);
@@ -831,6 +858,7 @@ function setSignedInUI(isSignedIn) {
     document.getElementById('sidebarOrgName').textContent = 'Not signed in';
     document.getElementById('sidebarOrgPlan').textContent = 'Load or register an organisation';
   }
+  updateChromeLogo();
 }
 async function registerOrg() {
   const name = document.getElementById('orgNameInput').value.trim();
@@ -883,6 +911,7 @@ function applySettingsToUI() {
   setToggle('togBio', !!settings.bioRequired); setToggle('togPrivacy', settings.privacyMode !== false); setToggle('togCheckout', settings.checkoutEnabled !== false); setToggle('togReturnAllowed', settings.returnAllowed !== false); setToggle('togAnon', !!settings.anonymousMode);
   if (document.getElementById('statMin')) document.getElementById('statMin').textContent = (settings.minScore || 50) + '%';
   if (document.getElementById('checkoutLabel')) document.getElementById('checkoutLabel').textContent = (settings.checkoutEnabled !== false) ? '✓ Check-out enabled' : 'Check-out disabled';
+  updateChromeLogo();
 }
 function collectSettingsFromCanonical() {
   return {
@@ -1742,6 +1771,8 @@ function wirePortalFields() {
 window.addEventListener('DOMContentLoaded', async () => {
   settings = loadJson(STORAGE_KEY_SETTINGS, settings);
   portalState = loadPortalState();
+  document.getElementById('chromeLogo')?.addEventListener('error', handleChromeLogoError);
+  updateChromeLogo();
   setPortalFieldValues();
   wirePortalFields();
   const csvFileInput = document.getElementById('csvFileInput');
