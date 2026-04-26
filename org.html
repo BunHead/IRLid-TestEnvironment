@@ -651,7 +651,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 
 <script>
 const DEV_AUTO_LOGIN = true;
-const DEV_ORG_NAME = "IRLid";
+const DEV_ORG_NAME = "DEV";
+const DEV_ORG_KEY = "org_DEV_IRLID_TEST_ENVIRONMENT";
 const STORAGE_KEY_ORG = "irlid_mock_org";
 const STORAGE_KEY_SETTINGS = "irlid_mock_settings";
 const STORAGE_KEY_EXPECTED = "irlid_mock_expected_attendees";
@@ -722,7 +723,12 @@ function defaultExpectedAttendees() {
   return [];
 }
 function ensureDevOrg() {
-  return loadJson(STORAGE_KEY_ORG, null);
+  return {
+    name: DEV_ORG_NAME,
+    api_key: DEV_ORG_KEY,
+    slug: 'dev',
+    mode: 'irlid-api-test-dev'
+  };
 }
 function orgFromUrl() {
   const params = new URLSearchParams(location.search || '');
