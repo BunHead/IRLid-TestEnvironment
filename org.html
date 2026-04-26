@@ -266,18 +266,20 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .settings-summary code { color: #dff6ff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .small-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
-.qr-fullscreen-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 28px; background: radial-gradient(circle at top, #f7fbff 0, #eef5ff 42%, #dde8f8 100%); color: #0f172a; cursor: default; }
-.qr-fullscreen-card { width: min(92vw, 760px); max-height: 92vh; overflow: auto; display: grid; justify-items: center; gap: 18px; padding: clamp(22px, 4vw, 42px); border-radius: 18px; background: #ffffff; border: 1px solid #d5dfef; box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24); text-align: center; }
+.qr-fullscreen-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 28px; background: #05070c; color: #f8fbff; cursor: default; }
+.qr-fullscreen-card { width: min(96vw, 1120px); max-height: 94vh; overflow: auto; display: grid; justify-items: center; gap: clamp(16px, 2.4vmin, 26px); padding: clamp(20px, 3vmin, 34px); border-radius: 18px; background: #08101d; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 28px 90px rgba(0,0,0,0.54); text-align: center; }
 .qr-fullscreen-brand { display: flex; flex-direction: column; align-items: center; gap: 9px; min-width: 0; }
-.qr-fullscreen-logo { width: 88px; max-width: 40vw; max-height: 70px; object-fit: contain; }
-.qr-fullscreen-fallback { min-width: 70px; min-height: 54px; display: none; align-items: center; justify-content: center; border-radius: 12px; background: #0f172a; color: #fff; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; }
-.qr-fullscreen-org { font-size: clamp(28px, 5vw, 54px); line-height: 1; font-weight: 800; color: #0b1220; overflow-wrap: anywhere; }
-.qr-fullscreen-subtitle { font-size: clamp(14px, 2vw, 18px); color: #475569; }
-.qr-fullscreen-code { display: flex; align-items: center; justify-content: center; padding: 18px; border-radius: 18px; background: #fff; border: 1px solid #d9e3f2; }
-.qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(56vw, 48vh, 380px) !important; height: min(56vw, 48vh, 380px) !important; }
-.qr-fullscreen-trust { width: 100%; display: grid; gap: 5px; padding: 12px 14px; border-radius: 12px; background: #f1f6fd; border: 1px solid #d5dfef; color: #334155; font-size: 13px; line-height: 1.35; }
-.qr-fullscreen-trust strong { color: #0f172a; }
-.qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: #0f172a; color: #fff; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(15, 23, 42, 0.26); }
+.qr-fullscreen-logo { width: 120px; max-width: 34vw; max-height: 92px; object-fit: contain; filter: drop-shadow(0 12px 28px rgba(0,0,0,0.34)); }
+.qr-fullscreen-fallback { min-width: 92px; min-height: 70px; display: none; align-items: center; justify-content: center; border-radius: 14px; background: #f8fbff; color: #08101d; font-size: 30px; font-weight: 800; letter-spacing: 0.03em; }
+.qr-fullscreen-org { font-size: clamp(32px, 5.4vmin, 68px); line-height: 1; font-weight: 800; color: #ffffff; overflow-wrap: anywhere; }
+.qr-fullscreen-subtitle { font-size: clamp(22px, 3.4vmin, 42px); line-height: 1.12; color: #dbeafe; font-weight: 700; }
+.qr-fullscreen-code { display: flex; align-items: center; justify-content: center; padding: clamp(14px, 2vmin, 24px); border-radius: 22px; background: #fff; border: 4px solid rgba(88,166,255,0.72); box-shadow: 0 0 0 1px rgba(255,255,255,0.95), 0 24px 80px rgba(0,0,0,0.42); animation: qrBorderPulse 2s ease-in-out infinite; }
+.qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(72vmin, 840px) !important; height: min(72vmin, 840px) !important; }
+.qr-fullscreen-trust { width: min(100%, 760px); display: grid; gap: 5px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #a9b8d4; font-size: clamp(12px, 1.6vmin, 14px); line-height: 1.35; }
+.qr-fullscreen-trust strong { color: #e8f0ff; }
+.qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
+.qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
+@keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 
 @media (max-width: 1380px) {
   .settings-shell { grid-template-columns: 1fr; }
@@ -298,7 +300,11 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
   .settings-grid-2, .settings-grid-3, .switch-grid { grid-template-columns: 1fr; }
   .qr-fullscreen-overlay { padding: 14px; align-items: flex-start; }
   .qr-fullscreen-card { max-height: calc(100vh - 28px); gap: 13px; padding: 18px; }
-  .qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(78vw, 46vh) !important; height: min(78vw, 46vh) !important; }
+  .qr-fullscreen-logo { width: min(44vw, 120px); }
+  .qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(78vw, 48vh) !important; height: min(78vw, 48vh) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qr-fullscreen-code { animation: none; }
 }
 </style>
 </head>
@@ -1216,7 +1222,7 @@ function fullscreenQR() {
         <img class="qr-fullscreen-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)} logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="qr-fullscreen-fallback">IRL</div>
         <div class="qr-fullscreen-org">${escapeHtml(orgName)}</div>
-        <div class="qr-fullscreen-subtitle">${escapeHtml(eventName)} attendee check-in</div>
+        <div class="qr-fullscreen-subtitle">Scan to check in to ${escapeHtml(orgName)}</div>
       </div>
       <div class="qr-fullscreen-code" data-fullscreen-qr></div>
       <div class="qr-fullscreen-trust">
@@ -1235,7 +1241,7 @@ function fullscreenQR() {
   document.body.appendChild(holder);
   const qrTarget = holder.querySelector('[data-fullscreen-qr]');
   if (window.QRCode) {
-    new QRCode(qrTarget, { text: venueQrPayload, width: 380, height: 380, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrTarget, { text: venueQrPayload, width: 840, height: 840, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   } else {
     qrTarget.textContent = 'QR unavailable';
   }
