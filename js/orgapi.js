@@ -72,6 +72,14 @@
         method: "DELETE",
         orgKey
       });
+    },
+
+    updateExpected(orgKey, id, body) {
+      return request(`/org/expected/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        orgKey,
+        body
+      });
     }
   };
 })();
