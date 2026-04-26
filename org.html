@@ -932,6 +932,10 @@ async function addExpectedAttendee() {
     renderExpectedAttendees();
     showToast('Expected attendee added');
   } catch (err) {
+    if (err.status === 409 && err.message === 'duplicate') {
+      setExpectedValidation(`${firstName} ${surname} is already on the expected list.`);
+      return;
+    }
     setExpectedValidation(err.status === 401 ? 'Session expired — please re-authenticate' : (err.message || 'Could not add expected attendee'));
   }
 }

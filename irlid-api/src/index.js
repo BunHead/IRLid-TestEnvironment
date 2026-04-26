@@ -806,7 +806,7 @@ async function orgAttendance(request, env) {
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at,linked_at FROM org_expected WHERE org_code=? ORDER BY created_at DESC, id DESC"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
   ).bind(org.id).all();
   return json({ expected: rows.results });
 }
@@ -817,6 +817,10 @@ async function orgExpectedCreate(request, env) {
   const firstName = (body.first_name || "").trim();
   const surname = (body.surname || "").trim();
   if (!firstName || !surname) return err("first_name and surname required");
+  const existing = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
+  ).bind(org.id, firstName, surname).first();
+  if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
   const createdAt = now();
   const row = await env.DB.prepare(
     "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
