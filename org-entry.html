@@ -34,6 +34,10 @@
   body.status-allow { background: var(--green); }
   body.status-review { background: var(--amber); }
   body.status-deny { background: var(--red); }
+  body.status-identity {
+    background:#3b2b00;
+    overflow:auto;
+  }
 
   .wrap{
     width:min(92vw, 920px);
@@ -197,6 +201,73 @@
   .next-btn.show{ display:inline-flex; }
   .next-btn:focus-visible{ outline:3px solid rgba(255,255,255,0.7); outline-offset:3px; }
 
+  .identity-picker{
+    display:none;
+    width:min(100%, 560px);
+    margin:24px auto 0;
+    text-align:left;
+  }
+
+  .identity-picker.show{ display:block; }
+
+  .identity-search{
+    width:100%;
+    border:1px solid rgba(255,255,255,0.36);
+    border-radius:8px;
+    padding:12px 14px;
+    background:rgba(0,0,0,0.24);
+    color:#fff;
+    font:inherit;
+    font-size:16px;
+    outline:none;
+  }
+
+  .identity-search::placeholder{ color:rgba(255,255,255,0.62); }
+
+  .identity-list{
+    margin-top:12px;
+    max-height:min(42vh, 360px);
+    overflow:auto;
+    display:grid;
+    gap:8px;
+  }
+
+  .identity-row,
+  .identity-walkin{
+    width:100%;
+    border:1px solid rgba(255,255,255,0.24);
+    border-radius:8px;
+    padding:12px 14px;
+    background:rgba(0,0,0,0.22);
+    color:#fff;
+    font:inherit;
+    text-align:left;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+
+  .identity-row:hover,
+  .identity-row:focus-visible,
+  .identity-walkin:hover,
+  .identity-walkin:focus-visible{
+    background:rgba(255,255,255,0.14);
+    outline:none;
+  }
+
+  .identity-row[disabled]{
+    opacity:0.58;
+    cursor:wait;
+  }
+
+  .identity-row-name{ font-weight:700; }
+  .identity-row-meta{ color:rgba(255,255,255,0.66); font-size:12px; margin-top:3px; }
+  .identity-pill{ flex:0 0 auto; border:1px solid rgba(255,255,255,0.28); border-radius:999px; padding:3px 8px; color:rgba(255,255,255,0.78); font-size:11px; }
+  .identity-error{ min-height:18px; margin-top:10px; color:#ffe4e4; font-size:13px; line-height:1.35; }
+  .identity-walkin{ margin-top:12px; justify-content:center; font-weight:700; }
+
   @media (max-width: 700px){
     body.ready .card{
       transform:translateY(-7vh);
@@ -222,6 +293,12 @@
       margin-left:auto;
       margin-right:auto;
     }
+    body.status-identity .card{
+      transform:translateY(0);
+    }
+    .identity-list{
+      max-height:38vh;
+    }
   }
 </style>
 </head>
@@ -236,10 +313,17 @@
       <div class="meta" id="meta"></div>
       <button class="next-btn" id="nextBtn" type="button">Next scan</button>
       <div class="hint" id="hint"></div>
+      <div class="identity-picker" id="identityPicker">
+        <input class="identity-search" id="identitySearch" type="search" placeholder="Search expected attendees" autocomplete="off">
+        <div class="identity-list" id="identityList"></div>
+        <button class="identity-walkin" id="identityWalkinBtn" type="button">I'm not on the list</button>
+        <div class="identity-error" id="identityError"></div>
+      </div>
     </div>
   </div>
 
 <script src="js/sign.js?v=3.1"></script>
+<script src="js/orgapi.js"></script>
 <script>
   const params = new URLSearchParams(window.location.search);
   const type = (params.get("type") || "").trim().toLowerCase();
@@ -262,6 +346,7 @@
 
   let returnTimer = null;
   let lastTapAt = 0;
+  let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
 
   const returnTo = (params.get("returnTo") || "").trim();
   const API_BASE = "https://irlid-api-test.irlid-bunhead.workers.dev";
@@ -282,6 +367,10 @@
   function goNext(target) {
     clearTimeout(returnTimer);
     window.location.href = target;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
   function iconMarkup(status) {
@@ -339,9 +428,11 @@
     const nextBtn = document.getElementById("nextBtn");
     const logo = document.getElementById("logo");
     const brandFallback = document.getElementById("brandFallback");
+    const identityPicker = document.getElementById("identityPicker");
 
     body.className = "";
     body.classList.add("status-" + state.status);
+    if (identityPicker) identityPicker.classList.remove("show");
 
     iconShell.innerHTML = iconMarkup(state.status);
     title.textContent = state.title;
@@ -370,6 +461,21 @@
     enableDoormanDoubleTap(target);
   }
 
+  function applyBranding() {
+    const logo = document.getElementById("logo");
+    const brandFallback = document.getElementById("brandFallback");
+    if (logoUrl) {
+      logo.src = logoUrl;
+      logo.classList.add("show");
+      brandFallback.classList.remove("show");
+    } else {
+      logo.removeAttribute("src");
+      logo.classList.remove("show");
+      brandFallback.textContent = initialsFor(eventName);
+      brandFallback.classList.add("show");
+    }
+  }
+
   function initialsFor(value) {
     const words = String(value || "IRL").replace(/[^a-z0-9\s-]/gi, " ").trim().split(/\s+/).filter(Boolean);
     if (!words.length) return "IRL";
@@ -390,7 +496,28 @@
     goNext(defaultReturnTarget());
   });
 
-  function renderVenue() {
+  async function renderVenue() {
+    if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") {
+      continueVenueWalkin();
+      return;
+    }
+    try {
+      const pub = compactJwk(await getPublicJwk());
+      const fp = await deviceKeyFingerprint(pub);
+      const recognized = await recognizeDevice(fp);
+      if (recognized?.recognized) {
+        if (recognized.name) localStorage.setItem(`irlid_org_name_${orgParam}`, recognized.name);
+        continueVenueWalkin();
+        return;
+      }
+      await renderIdentityPicker(pub, fp);
+    } catch (err) {
+      console.warn("Venue first-scan identity check failed", err);
+      continueVenueWalkin();
+    }
+  }
+
+  function continueVenueWalkin(options = {}) {
     const meta = returnAllowed ? "Re-entry allowed" : "Re-entry not allowed";
     render({
       status: "allow",
@@ -398,7 +525,7 @@
       subtitle: welcomeMessage || "You’re checked in",
       meta
     });
-    recordVenueCheckin().catch((err) => console.warn("Venue check-in record failed", err));
+    recordVenueCheckin(options).catch((err) => console.warn("Venue check-in record failed", err));
   }
 
   async function postOrg(path, body) {
@@ -416,6 +543,15 @@
 
   async function getOrg(path) {
     const response = await fetch(API_BASE + path);
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
+    return data;
+  }
+
+  async function getOrgAuthed(path) {
+    if (!orgParam) throw new Error("Missing organisation key");
+    const response = await fetch(API_BASE + path, { headers: { "X-Org-Key": orgParam } });
     let data = null;
     try { data = await response.json(); } catch {}
     if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
@@ -443,12 +579,115 @@
     return "";
   }
 
-  async function recordVenueCheckin() {
+  async function recognizeDevice(fp) {
+    return getOrg(`/org/recognize?org=${encodeURIComponent(orgParam)}&device_pub=${encodeURIComponent(fp)}`);
+  }
+
+  function expectedDisplayName(row) {
+    return `${row.first_name || ""} ${row.surname || ""}`.trim() || row.name || "Unnamed attendee";
+  }
+
+  async function renderIdentityPicker(pub, fp) {
+    clearTimeout(returnTimer);
+    identityState = { pub, fp, expected: [], query: "", busyId: null, error: "" };
+    const body = document.body;
+    const iconShell = document.getElementById("iconShell");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const meta = document.getElementById("meta");
+    const nextBtn = document.getElementById("nextBtn");
+    const picker = document.getElementById("identityPicker");
+    const search = document.getElementById("identitySearch");
+
+    body.className = "";
+    body.classList.add("status-review", "status-identity");
+    iconShell.innerHTML = iconMarkup("review");
+    title.textContent = "Choose your name";
+    subtitle.textContent = "This phone is not linked yet";
+    meta.textContent = "Select yourself from the expected list";
+    if (nextBtn) nextBtn.classList.remove("show");
+    applyBranding();
+    picker.classList.add("show");
+    requestAnimationFrame(() => body.classList.add("ready"));
+
+    search.value = "";
+    search.oninput = () => {
+      identityState.query = search.value.trim().toLowerCase();
+      renderIdentityRows();
+    };
+    document.getElementById("identityWalkinBtn").onclick = () => continueVenueWalkin({ anonymous: true });
+
+    try {
+      const result = await getOrgAuthed("/org/expected");
+      identityState.expected = Array.isArray(result?.expected) ? result.expected : [];
+      renderIdentityRows();
+      search.focus({ preventScroll: true });
+    } catch (err) {
+      identityState.error = err.message || "Could not load expected attendees";
+      renderIdentityRows();
+    }
+  }
+
+  function renderIdentityRows() {
+    const list = document.getElementById("identityList");
+    const error = document.getElementById("identityError");
+    if (!list || !error) return;
+    const query = identityState.query;
+    const rows = identityState.expected.filter((row) => expectedDisplayName(row).toLowerCase().includes(query));
+    error.textContent = identityState.error || "";
+    if (identityState.error) {
+      list.innerHTML = "";
+      return;
+    }
+    if (!rows.length) {
+      list.innerHTML = '<div class="identity-row-meta">No matching expected attendees</div>';
+      return;
+    }
+    list.innerHTML = rows.map((row) => {
+      const name = expectedDisplayName(row);
+      const busy = String(identityState.busyId || "") === String(row.id);
+      const meta = row.device_key_fp ? "Already linked" : "Ready to link";
+      const disabled = busy ? " disabled" : "";
+      return `<button class="identity-row" type="button" data-expected-id="${escapeHtml(row.id)}"${disabled}><span><span class="identity-row-name">${escapeHtml(name)}</span><span class="identity-row-meta">${escapeHtml(meta)}</span></span><span class="identity-pill">${busy ? "Linking..." : "Select"}</span></button>`;
+    }).join("");
+    list.querySelectorAll("[data-expected-id]").forEach((button) => {
+      button.addEventListener("click", () => claimIdentity(button.getAttribute("data-expected-id")));
+    });
+  }
+
+  async function claimIdentity(expectedId) {
+    if (!expectedId || identityState.busyId) return;
+    identityState.busyId = expectedId;
+    identityState.error = "";
+    renderIdentityRows();
+    try {
+      if (window.IRLidOrgApi?.claimExpected) {
+        await window.IRLidOrgApi.claimExpected(orgParam, expectedId, identityState.fp);
+      } else {
+        await postOrg(`/org/expected/${encodeURIComponent(expectedId)}/claim`, { device_pub_fp: identityState.fp });
+      }
+      const chosen = identityState.expected.find((row) => String(row.id) === String(expectedId));
+      const name = expectedDisplayName(chosen || {});
+      if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
+      render({
+        status: "allow",
+        title: "Identity linked",
+        subtitle: "Scan the venue QR again",
+        meta: name || "This phone is ready"
+      });
+    } catch (err) {
+      identityState.error = err.status === 409 ? "Already claimed by another device - see organiser" : (err.message || "Could not claim this attendee");
+      identityState.busyId = null;
+      renderIdentityRows();
+    }
+  }
+
+  async function recordVenueCheckin(options = {}) {
     if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") return;
     const pub = compactJwk(await getPublicJwk());
     const helloPayload = { mode: "attendee_scan", org: orgParam, pub, ts: Math.floor(Date.now() / 1000), v: 1 };
     const helloHash = await hashPayloadToB64url(helloPayload, 3);
-    const cachedName = await recognizedNameForDevice(pub);
+    const cachedName = options.anonymous ? "" : await recognizedNameForDevice(pub);
     const payload = await postOrg("/org/checkin", {
       mode: "attendee_scan",
       helloPayload,

@@ -110,6 +110,14 @@
       });
     },
 
+    claimExpected(orgKey, id, devicePubFp) {
+      return request(`/org/expected/${encodeURIComponent(id)}/claim`, {
+        method: "POST",
+        orgKey,
+        body: { device_pub_fp: devicePubFp }
+      });
+    },
+
     resolveConflict(orgKey, id, resolution) {
       return request(`/org/conflicts/${encodeURIComponent(id)}/resolve`, {
         method: "POST",
