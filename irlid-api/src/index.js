@@ -956,6 +956,32 @@ async function orgExpectedRebind(request, env, id) {
   return json({ ok: true, rebind_id: rebind?.id || null });
 }
 
+async function orgExpectedClaim(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const devicePubFp = (body.device_pub_fp || "").trim();
+  if (!devicePubFp) return err("device_pub_fp required");
+
+  const expected = await env.DB.prepare(
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp FROM org_expected WHERE id=? AND org_code=?"
+  ).bind(id, org.id).first();
+  if (!expected) return err("Expected attendee not found", 404);
+
+  if (expected.device_key_fp && expected.device_key_fp !== devicePubFp) {
+    return json({ error: "already_claimed", existing_fp_short: expected.device_key_fp.slice(0, 8) }, 409);
+  }
+
+  if (expected.device_key_fp === devicePubFp) {
+    return json({ ok: true, expected });
+  }
+
+  const t = now();
+  const row = await env.DB.prepare(
+    "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp"
+  ).bind(devicePubFp, t, id, org.id).first();
+  return json({ ok: true, expected: row });
+}
+
 async function orgResolveConflict(request, env, id) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -1042,10 +1068,12 @@ export default {
       else {
         const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
+        const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
+        else if (method === "POST" && mExpectedClaim) response = await orgExpectedClaim(request, env, Number(mExpectedClaim[1]));
         else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
