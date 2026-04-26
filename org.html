@@ -90,7 +90,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .qr-info p { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .qr-payload-preview { margin-top: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0a0f15; font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
-.scan-panel { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.scan-panel { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 16px; transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease; }
+.scan-panel.flash-success { animation: doormanFlashSuccess 300ms ease; }
+.scan-panel.flash-walkin { animation: doormanFlashWalkin 300ms ease; }
+.scan-panel.flash-error { animation: doormanFlashError 300ms ease; }
 .scan-panel-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .scan-panel-sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
 .expected-list { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #11161d; overflow: hidden; }
@@ -112,8 +115,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-state.error { color: var(--red); }
 .expected-state .btn { margin-top: 8px; }
 .checkin-result { margin-top: 10px; min-height: 18px; font-size: 12px; line-height: 1.45; }
-.checkin-result.success { color: var(--green); }
-.checkin-result.info { color: var(--muted); }
+.checkin-result.success { color: var(--green); opacity: 1; transition: opacity 500ms ease; }
+.checkin-result.info { color: var(--orange); opacity: 1; transition: opacity 500ms ease; }
+.checkin-result.error { color: var(--red); opacity: 1; }
+.checkin-result.fading { opacity: 0; }
+.btn-loading { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.42); border-top-color: #fff; animation: spin 760ms linear infinite; }
 .expected-validation { min-height: 16px; margin-top: 8px; color: var(--red); font-size: 11px; }
 .expected-delete-banner { margin-top: 14px; padding: 9px 12px; border: 1px solid var(--red); border-radius: 8px; background: #3d1c1c; color: #ffb3ad; font-size: 12px; }
 .expected-delete-active .sidebar,
@@ -280,6 +287,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
 .qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
+@keyframes doormanFlashWalkin { 0% { box-shadow: 0 0 0 rgba(210,153,34,0); } 45% { border-color: var(--orange); background: rgba(210,153,34,0.12); box-shadow: 0 0 0 3px rgba(210,153,34,0.18); } 100% { box-shadow: 0 0 0 rgba(210,153,34,0); } }
+@keyframes doormanFlashError { 0% { box-shadow: 0 0 0 rgba(248,81,73,0); } 45% { border-color: var(--red); background: rgba(248,81,73,0.12); box-shadow: 0 0 0 3px rgba(248,81,73,0.18); } 100% { box-shadow: 0 0 0 rgba(248,81,73,0); } }
 
 @media (max-width: 1380px) {
   .settings-shell { grid-template-columns: 1fr; }
@@ -304,7 +315,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
   .qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(78vw, 48vh) !important; height: min(78vw, 48vh) !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .qr-fullscreen-code { animation: none; }
+  .qr-fullscreen-code, .btn-spinner, .scan-panel.flash-success, .scan-panel.flash-walkin, .scan-panel.flash-error { animation: none; }
+  .checkin-result { transition: none; }
 }
 </style>
 </head>
@@ -459,7 +471,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                     <label>Manual check-in (attendee label)</label>
                     <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
                   </div>
-                  <button class="btn btn-primary" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
+                  <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
                   <div class="checkin-result" id="manualCheckinResult"></div>
 
                   <div class="expected-delete-banner hidden" id="expectedDeleteBanner">Delete mode — click a row to remove</div>
@@ -1162,11 +1174,43 @@ function selectMode(mode) {
   document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
   generateVenueQR();
 }
+let manualCheckinFeedbackTimer = null;
+function flashDoormanPanel(kind) {
+  const panel = document.getElementById('doormanPanel');
+  if (!panel) return;
+  panel.classList.remove('flash-success', 'flash-walkin', 'flash-error');
+  void panel.offsetWidth;
+  panel.classList.add(`flash-${kind}`);
+  setTimeout(() => panel.classList.remove(`flash-${kind}`), 340);
+}
+function setManualCheckinLoading(isLoading) {
+  const btn = document.getElementById('manualCheckinBtn');
+  if (!btn) return;
+  btn.disabled = isLoading;
+  btn.classList.toggle('btn-loading', isLoading);
+  btn.innerHTML = isLoading ? '<span class="btn-spinner" aria-hidden="true"></span><span>Checking in...</span>' : 'Record Check-in';
+}
+function showManualCheckinResult(message, kind, autoFade=false) {
+  const resultEl = document.getElementById('manualCheckinResult');
+  if (!resultEl) return;
+  clearTimeout(manualCheckinFeedbackTimer);
+  resultEl.textContent = message;
+  resultEl.className = `checkin-result ${kind}`;
+  if (autoFade) {
+    manualCheckinFeedbackTimer = setTimeout(() => {
+      resultEl.classList.add('fading');
+      manualCheckinFeedbackTimer = setTimeout(() => {
+        resultEl.textContent = '';
+        resultEl.className = 'checkin-result';
+      }, 520);
+    }, 4000);
+  }
+}
 async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
-  const resultEl = document.getElementById('manualCheckinResult');
-  if (resultEl) { resultEl.textContent = ''; resultEl.className = 'checkin-result'; }
+  showManualCheckinResult('', '');
   if (!currentOrg) return showToast('Load an organisation first', true);
+  setManualCheckinLoading(true);
   try {
     const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
       mode: 'doorman_scan',
@@ -1178,18 +1222,18 @@ async function manualCheckin() {
     document.getElementById('manualLabel').value = '';
     await refreshAttendance();
     await refreshExpectedAttendees();
-    if (resultEl && label) {
-      if (result.linked) {
-        resultEl.textContent = `✓ Matched expected attendee: ${result.expected_name || label}`;
-        resultEl.classList.add('success');
-      } else {
-        resultEl.textContent = 'Recorded as walk-in (not on expected list)';
-        resultEl.classList.add('info');
-      }
+    if (label) {
+      if (result.linked) showManualCheckinResult(`✓ Matched expected attendee: ${result.expected_name || label}`, 'success', true);
+      else showManualCheckinResult('Recorded as walk-in (not on expected list)', 'info', true);
     }
+    flashDoormanPanel(result.linked ? 'success' : 'walkin');
     showToast('Check-in recorded');
   } catch (err) {
+    flashDoormanPanel('error');
+    showManualCheckinResult(err.message || 'Could not record check-in', 'error');
     showToast(err.message || 'Could not record check-in', true);
+  } finally {
+    setManualCheckinLoading(false);
   }
 }
 function loadVenueQR() { generateVenueQR(); showToast('Debug QR refreshed'); }
