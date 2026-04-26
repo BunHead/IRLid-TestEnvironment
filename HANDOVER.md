@@ -1,120 +1,147 @@
-# HANDOVER.md — Mr. Data Brief (Batch 4)
+# HANDOVER.md — Mr. Data Brief (Batch 7 — Presentation Polish)
 
-**Issued:** 27 April 2026 by Number One
+**Issued:** 27 April 2026 (midday) by Number One
 **Recipient:** Mr. Data (Codex)
 **Repo scope:** `BunHead/IRLid-TestEnvironment` only — do NOT touch `BunHead/IRLid`
-**Working rule:** Up to 3 atomic tasks per session, in order, each its own PR. Stop after Task 3.
+**Working rule:** Up to 5 atomic tasks (visual polish only — no protocol changes).
 
-**Context:** Batches 1–3 built the editable database — dashboard wiring, name capture, persistence, admin frame, Add/Delete, server persistence of Expected Attendees. This batch closes the gap between "expected attendees list" and "actual check-ins" so the org admin can see, in real time, who has arrived. This is what makes the Imbue pilot demo actually compelling.
+**Context:** The test environment is functional end-to-end (PRs #14, #15, #16 now on main; DEV auto-login works; check-in, attendee list, expected attendees, fullscreen venue QR, branding, and check-out all live). The Captain demoed it to family with a real phone scan and the redirect/branding worked. Now the goal is **presentation polish** — make every visible state look intentional and confident, ready to show Donald at Imbue.
 
-**Pre-requisite:** PR #9 from Batch 3 must be merged to `main` and the Worker must be deployed to `irlid-api-test` before starting. If `GET /org/expected` returns a 404 against the live test Worker, **stop immediately and ask** — don't improvise around a missing endpoint.
+This batch is **visual/UX only**. No schema changes, no Worker changes (unless adding a presentational endpoint becomes necessary — flag and stop if so).
+
+**Pre-requisite:** PRs #14 and #15 (with #16 stacked) must be on main. If not, stop and ask.
 
 ---
 
-## Task 1 — Auto-link on manual check-in
+## Task 1 — Welcome page logo sizing + spacing
 
-**Goal:** When a doorman performs a manual check-in (the existing "Name or ID" input + Record Check-in flow), and the name they enter matches an Expected Attendee for that org (case-insensitive), the system auto-links them — flipping the attendee's status from `assist` to `linked` and stamping first-seen time.
+**Goal:** The post-scan welcome page (the one the attendee's phone shows after scanning the venue QR) currently shows the org logo at small size. Make it presentation-grade: prominent logo, generous spacing, clear hierarchy.
 
 **Files in scope:**
-- `irlid-api/src/index.js` — extend the existing `/org/checkin` endpoint
-- `org.html` — display the link result in the doorman flow
-- `js/orgapi.js` — helper if needed
-
-**Server behaviour:**
-- On `POST /org/checkin` with a `name` field: after recording the check-in, query `org_expected` for any row matching `(org_code, lower(first_name + ' ' + surname) = lower(submitted_name))`. If a match exists, update its `status` from `assist` to `linked` and set a new `linked_at` timestamp column.
-- Schema migration: add nullable `linked_at INTEGER` column to `org_expected` (additive only, no rewrites)
-- Response includes `{linked: true, expected_id: <id>}` when an auto-link occurred, otherwise `{linked: false}`
-- Existing rows already with `status = 'linked'` are not touched (no double-stamping)
-
-**Client behaviour (`org.html` doorman flow):**
-- After Record Check-in returns `{linked: true}`: show a small inline confirmation: *"✓ Matched expected attendee: [Full Name]"*
-- After Record Check-in returns `{linked: false}` with a name: show: *"Recorded as walk-in (not on expected list)"*
-- Empty name still works (anonymous walk-in path remains unchanged)
-- Refresh the Expected attendees list view so the status badge updates from `assist` to `linked` without a full page reload
+- The attendee-facing welcome/confirm page (likely `accept.html`, `org-entry.html`, or wherever the post-scan flow lives — check existing routing to confirm the right file)
+- Associated CSS
 
 **Acceptance criteria:**
-- Schema migration applied to test D1 cleanly (additive)
-- Worker version deployed to `irlid-api-test`; documented in PR description
-- Live smoke: add expected attendee "Test Person" via UI → manual check-in with name "test person" (lowercase) → status flips to `linked` → "✓ Matched" message appears
-- Live smoke: manual check-in with name not on expected list → "walk-in" message appears, no errors
-- No regression in the anonymous (no-name) walk-in path
-- Old check-in records remain unchanged
+- Logo displayed at `max-width: 240px` (or similar tasteful size — match the green checkmark proportionally)
+- Logo has at least 32px breathing room above and below
+- Logo container `object-fit: contain` so non-square logos (like Imbue's wordmark) render correctly
+- "Welcome to [org]" heading is at least `2rem` size, weight 600+
+- The custom welcome message appears below the heading at comfortable readable size
+- Re-entry/policy line stays subtle but legible
+- Page works on portrait phone widths (320px+) — no logo overflow
+- Logo loading failure gracefully falls back to initials or a neutral icon (don't show broken-image)
 
-**Hard rule:** **No retroactive linking of past check-ins.** Only new check-ins flowing through the endpoint trigger the link. Old rows stay as they were. (Immutability principle.)
+**Out of scope:** changing the green checkmark, animating the page entrance (Task 5 covers some animation).
 
-**PR title:** `[codex] Auto-link manual check-in to Expected Attendee match`
+**PR title:** `[codex] Welcome page — logo sizing and spacing polish`
 
 ---
 
-## Task 2 — Alphabetical sort + duplicate prevention on Expected list
+## Task 2 — Fullscreen Venue QR — final polish pass
 
-**Goal:** The Expected Attendees list is now sorted alphabetically by surname (then first name). Adding a duplicate name (case-insensitive match on first + surname) is rejected with a clear inline message instead of silently creating a second row.
+**Goal:** The fullscreen venue QR (Settings → QR test tools → fullscreen) is the centrepiece of the doorman demo. Currently functional thanks to PR #15. Now make it confident and clear from 2-3 metres away.
 
 **Files in scope:**
-- `irlid-api/src/index.js` — sort in the `GET /org/expected` query; duplicate check in `POST /org/expected`
-- `org.html` — handle the duplicate error response cleanly
-- `js/orgapi.js` — error path if needed
-
-**Server behaviour:**
-- `GET /org/expected` — return rows ordered by `LOWER(surname) ASC, LOWER(first_name) ASC`
-- `POST /org/expected` — before inserting, query for `LOWER(first_name) = LOWER(?) AND LOWER(surname) = LOWER(?) AND org_code = ?`. If a match exists, return HTTP 409 Conflict with body `{error: "duplicate", existing_id: <id>}`. Otherwise insert as normal.
-
-**Client behaviour:**
-- On 409 Conflict from Add: show inline error message under the inputs: *"[Full Name] is already on the expected list."* — keep the inputs filled so the user can correct
-- All other error paths from Batch 3 continue to work (network down, auth fail, etc.)
+- `org.html` (the Settings panel and the fullscreen overlay)
+- Associated CSS
 
 **Acceptance criteria:**
-- Live smoke: add "Alice Smith" → success. Add "alice smith" again → inline duplicate error shown, no second row created. Add "Bob Smith" → success, sorts after Alice.
-- After page refresh, list is in alphabetical order by surname
-- No regression on Delete or other existing flows
+- QR module size: at least 70% of the smaller viewport dimension on landscape monitors (so a 1080p screen shows a QR at minimum ~750px)
+- Org logo displayed above the QR at a tasteful size (~120px)
+- "Scan to check in to [Org Name]" tagline above QR, large and legible
+- Trust cue text (org key fingerprint, scan domain — already present from PR #15) below QR, in a smaller subtle font
+- Solid dark background to maximise QR scan contrast (white background already matches QR convention; keep)
+- Subtle pulse animation on the QR border (~2s cycle, very gentle) to draw eye without distracting
+- Exit-fullscreen button visible but unobtrusive (top-right corner, low-opacity until hover)
 
-**PR title:** `[codex] Sort Expected list alphabetically; reject duplicates`
+**Out of scope:** Worker-signed QR payload (deferred — see Task 5 caveat note)
+
+**PR title:** `[codex] Fullscreen Venue QR — presentation polish`
 
 ---
 
-## Task 3 — Inline edit-name on Expected list rows
+## Task 3 — Doorman scan flow — visual feedback states
 
-**Goal:** Click an Expected Attendee's name → it becomes editable inline (two text inputs: First / Surname) → Save commits the change to test D1; Cancel reverts. Allows correcting typos without delete-then-readd.
+**Goal:** When the doorman uses Manual check-in or scans an attendee, give immediate visual feedback for each outcome. Currently the form just submits silently and the row appears in the list. Demo-grade requires confidence-building feedback.
 
 **Files in scope:**
-- `irlid-api/src/index.js` — new `PATCH /org/expected/:id` endpoint
-- `org.html` — inline edit UI
-- `js/orgapi.js` — new helper
-
-**Server behaviour:**
-- `PATCH /org/expected/:id` — body `{first_name, surname}`. Auth via `X-Org-Key`. Updates the row only if it belongs to the authenticated org. Returns the updated row.
-- Same case-insensitive duplicate check as Task 2 on PATCH (don't allow renaming "Alice Smith" → "Bob Jones" if a "Bob Jones" already exists for this org).
-- Does NOT change `status`, `created_at`, `linked_at`, or any other field.
-
-**Client behaviour:**
-- Pencil icon (or click on the name itself) on each Expected Attendee row → row enters edit mode: two inline text inputs (First / Surname) replace the name display, Save and Cancel buttons appear
-- Save → calls PATCH → on success, row re-renders with new name; on duplicate (409) or error, inline message under that row, edit mode stays active
-- Cancel → discards changes, row returns to display mode
-- Only one row in edit mode at a time — clicking pencil on another row cancels the first edit
-- ESC key cancels edit
-- Status badges (`linked`, `assist`) and Delete button remain visible during edit (just the name field becomes editable)
+- `org.html` (Doorman Console section)
+- CSS for transitions
 
 **Acceptance criteria:**
-- Live smoke: edit "Alice Smith" → "Alicia Smith" → save → list re-sorts (alphabetical sort from Task 2 still applies) → name persists across refresh
-- Editing to a duplicate name shows inline error, doesn't save
-- ESC and Cancel both abort cleanly
-- Delete still works on rows whether in edit mode or not (delete cancels edit first)
-- No regression on Add, Delete, auto-link from Tasks 1–2
+- **In-progress:** Record Check-in button shows a subtle spinner inline while the request is in flight; button text changes to "Checking in..."; button is disabled
+- **Success — auto-link match:** brief green flash on the Doorman Console panel (300ms), the inline "✓ Matched expected attendee: [Name]" message from PR #14 stays visible for 4 seconds then fades
+- **Success — walk-in:** brief amber flash; "Recorded as walk-in" message stays for 4 seconds
+- **Failure:** brief red flash; error inline; button re-enables; input field stays filled so the doorman can retry
+- All transitions use CSS only; no library dependencies
+- Reduced-motion preference (`prefers-reduced-motion: reduce`) skips the flash animations but keeps the text feedback
 
-**PR title:** `[codex] Inline edit-name on Expected Attendee rows`
+**Out of scope:** sound effects (later); screenreader live regions (worth doing eventually but not this batch).
+
+**PR title:** `[codex] Doorman flow — scan feedback animations`
 
 ---
 
-## When all three are done
+## Task 4 — Checkout confirmation flow
 
-- One short summary message: which PRs landed, schema decisions, Worker version deployed, anything noticed worth flagging
+**Goal:** The Check-out button from PR #16 currently fires immediately on click. For demo confidence and safety, add a quick inline confirmation: hover/click reveals "Confirm check-out?" inline, only the second click commits.
+
+**Files in scope:**
+- `org.html` (Dashboard attendance table)
+- `js/orgapi.js` if needed
+- CSS
+
+**Acceptance criteria:**
+- Click Check-out → button transforms inline into "Confirm" (red) + small "Cancel" (grey) — does NOT use a modal
+- Confirm click → fires the existing `POST /org/checkout` call, button shows brief spinner
+- On success → row's status badge transitions from "🟢 IN" to "🔴 OUT", check-out time stamps in
+- On failure → revert button, inline error appears
+- Cancel click → button returns to "Check out" without firing anything
+- Dashboard stats (CHECKED IN / CHECKED OUT) update without full-page refresh
+- ESC key while in confirm state → cancels
+
+**Out of scope:** undo-checkout (later); checkout reason tracking (later).
+
+**PR title:** `[codex] Check-out — inline confirmation + status transition`
+
+---
+
+## Task 5 — Dashboard sparkle pass
+
+**Goal:** Make the four headline stat cards (Checked In, Checked Out, Avg Score, Bio-metric Verified) feel alive. Currently they snap from one value to another. Demo-grade should count up smoothly when values change.
+
+**Files in scope:**
+- `org.html` (Dashboard component)
+- CSS / a tiny inline JS counter helper
+
+**Acceptance criteria:**
+- When stat values change (after refresh, after check-in, after checkout): numbers animate from old value to new over ~600ms (ease-out)
+- For percentage scores: animate from 0% to current value on first load
+- The "Min threshold: 70%" line under Avg Score: subtle progress bar (already partially there as the orange line) showing distance from threshold
+- Status indicator dot next to "Attendance — Today" header pulses subtly (~2s cycle) to indicate live data
+- Reduced-motion preference disables count animations; uses snap to final value
+- "Last updated: HH:MM:SS" is replaced by a relative time ("just now", "2 minutes ago") that updates every 30 seconds
+
+**Out of scope:** Charts / graphs (deferred to a later batch); CSV export polish.
+
+**PR title:** `[codex] Dashboard — stat animations and live indicators`
+
+---
+
+## When all five are done
+
+- One short summary message: which PRs landed, anything noticed worth flagging
 - Stop. Wait for the next `HANDOVER.md`.
 
 ## If you get stuck
 
-- **PR #9 not merged when you start:** stop immediately, ask in chat. Do not improvise.
-- **Schema migration on test D1 fails:** stop, comment in PR, wait. Do NOT manually fix the test D1 outside of the migration script.
-- **Auto-link logic ambiguity (Task 1):** if a name matches multiple expected attendees somehow (shouldn't happen due to Task 2's duplicate prevention, but in case of legacy data), link only the first match by `id ASC` and document the choice in the PR description.
+- **PRs #14/#15/#16 not yet on main when you start:** stop, comment, ask Captain to merge first
+- **Need a Worker change to support polish (e.g., new endpoint):** stop and propose; do NOT implement Worker changes in this batch
+- **Library dependency required for animation:** prefer CSS-only or a tiny inline JS helper. Do not pull in a new library.
 - **Anything that touches `BunHead/IRLid` (the live repo):** stop immediately. Hard wall.
+
+## Captain's note (relayed by Number One)
+
+The Worker-signed QR payload work you proposed at the end of Batch 6 is captured for v6 — good architectural thinking, deferred deliberately so this presentation batch stays purely visual. Carry on with the polish.
 
 — Number One
