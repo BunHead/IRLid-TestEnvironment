@@ -1052,24 +1052,33 @@ async function saveExpectedEdit(id) {
 function aggregateAttendees(checkins) {
   const byAttendee = new Map();
   (checkins || []).forEach((row) => {
-    const id = row.attendee_key_id || row.attendee_label || row.id;
+    const id = row.attendee_key_id || row.attendee_label || row.name || row.id;
     const firstSeen = row.checkin_at || row.created_at || 0;
     const lastSeen = row.checkout_at || row.checkin_at || row.created_at || 0;
+    const isActive = !row.checkout_at;
     const existing = byAttendee.get(id);
     if (!existing) {
       byAttendee.set(id, {
         id,
-        name: row.attendee_label || id,
+        name: row.name || row.attendee_label || id,
         first_seen: firstSeen,
         last_seen: lastSeen,
-        scan_count: 1
+        scan_count: 1,
+        active_checkin_id: isActive ? row.id : null,
+        active_since: isActive ? firstSeen : null,
+        checked_out: !isActive
       });
       return;
     }
     existing.first_seen = Math.min(existing.first_seen || firstSeen, firstSeen || existing.first_seen);
     existing.last_seen = Math.max(existing.last_seen || lastSeen, lastSeen || existing.last_seen);
     existing.scan_count += 1;
-    if (!existing.name && row.attendee_label) existing.name = row.attendee_label;
+    if (!existing.name && (row.name || row.attendee_label)) existing.name = row.name || row.attendee_label;
+    if (isActive && (!existing.active_since || firstSeen >= existing.active_since)) {
+      existing.active_checkin_id = row.id;
+      existing.active_since = firstSeen;
+      existing.checked_out = false;
+    }
   });
   return Array.from(byAttendee.values()).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
 }
@@ -1107,21 +1116,27 @@ function renderStats(rows, stats) {
 }
 function renderTable(rows) {
   if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
-  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
+  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th><th>Status</th><th>Action</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = rows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
-    return `<tr><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td></tr>`;
-    const scoreClass = r.score >= 80 ? 'score-high' : r.score >= 50 ? 'score-med' : 'score-low';
-    const scoreStr = r.score != null ? `<span class="score-pill ${scoreClass}">${r.score}%</span>` : '—';
-    const bioStr = r.bio_verified ? '<span class="bio-tag">👁 Verified</span>' : '<span style="color:#8b949e;font-size:10px;">None</span>';
-    const inTime = r.checkin_at ? new Date(r.checkin_at * 1000).toLocaleTimeString() : '—';
-    const outTime = r.checkout_at ? new Date(r.checkout_at * 1000).toLocaleTimeString() : '—';
-    const status = r.checkout_at ? '<span class="status-out">◯ OUT</span>' : '<span class="status-in">● IN</span>';
-    const label = r.attendee_label || (r.attendee_key_id ? r.attendee_key_id.slice(0, 8) + '…' : 'Anonymous');
-    const modeStr = r.mode === 'attendee_scan' ? '📱' : '🚪';
-    return `<tr><td>${modeStr} ${label}</td><td>${inTime}</td><td>${outTime}</td><td>${scoreStr}</td><td>${bioStr}</td><td>${status}</td></tr>`;
+    const rowStatus = r.active_checkin_id ? '<span class="status-in">● IN</span>' : '<span class="status-out">◯ OUT</span>';
+    const actionHtml = r.active_checkin_id
+      ? `<button class="btn btn-secondary btn-sm" type="button" onclick="checkoutAttendee('${escapeHtml(r.active_checkin_id)}')">Check out</button>`
+      : '<span style="color:#8b949e;font-size:11px;">Done</span>';
+    return `<tr><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
   }).join('');
+}
+async function checkoutAttendee(checkinId) {
+  if (!currentOrg) return showToast('Load an organisation first', true);
+  if (!checkinId) return showToast('No active check-in found', true);
+  try {
+    await window.IRLidOrgApi.checkout(currentOrg.api_key, { checkin_id: checkinId });
+    await refreshAttendance();
+    showToast('Check-out recorded');
+  } catch (err) {
+    showToast(err.message || 'Could not check attendee out', true);
+  }
 }
 function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;

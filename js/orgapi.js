@@ -53,6 +53,14 @@
       });
     },
 
+    checkout(orgKey, body) {
+      return request("/org/checkout", {
+        method: "POST",
+        orgKey,
+        body
+      });
+    },
+
     listExpected(orgKey) {
       return request("/org/expected", {
         orgKey
