@@ -1601,10 +1601,15 @@ function displayValue(value) { return value ? String(value) : '(none)'; }
 function appendOptional(url, key, value) { if (!value) return; url.searchParams.set(key, value); }
 function buildOutcomeUrl(mode) {
   const url = new URL(OUTCOME_BASES[mode]);
+  url.searchParams.set('mode', mode);
+  url.searchParams.set('ctx', 'doorman');
+  url.searchParams.set('attendee', 'Alice Smith');
+  url.searchParams.set('score', String(normalizeScore(portalState.minimumTrustScore)));
   url.searchParams.set('orgCode', (portalState.orgCode || 'test').trim());
   url.searchParams.set('event', (portalState.eventCode || '').trim());
   url.searchParams.set('returnAllowed', String(!!portalState.returnAllowed));
   url.searchParams.set('returnTo', SCAN_URL);
+  url.searchParams.set('timeout', mode === 'allow' ? '2800' : '8000');
   url.searchParams.set('minimumTrustScore', String(normalizeScore(portalState.minimumTrustScore)));
   url.searchParams.set('privacyMode', String(!!portalState.privacyMode));
   url.searchParams.set('anonymousMode', String(!!portalState.anonymousMode));
@@ -1616,7 +1621,7 @@ function buildOutcomeUrl(mode) {
   url.searchParams.set('allowProofRecording', String(!!portalState.allowProofRecording));
   url.searchParams.set('enableIdPhotoCapture', String(!!portalState.enableIdPhotoCapture));
   appendOptional(url, 'welcome', (portalState.welcomeMessage || '').trim());
-  appendOptional(url, 'redirect', (portalState.redirectUrl || '').trim());
+  if (mode === 'allow') appendOptional(url, 'redirect', (portalState.redirectUrl || '').trim());
   appendOptional(url, 'logo', (portalState.logoUrl || '').trim());
   return url.toString();
 }
