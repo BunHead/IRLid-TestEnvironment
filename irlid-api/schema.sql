@@ -145,3 +145,16 @@ CREATE TABLE IF NOT EXISTS attendee_conflicts (
   resolved_at        INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_attendee_conflicts_org ON attendee_conflicts(org_code, resolution);
+
+-- Batch 10 additive migration: admin recovery fallback for expected attendee device rebinding.
+CREATE TABLE IF NOT EXISTS rebind_history (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_code        TEXT NOT NULL,
+  expected_id     INTEGER NOT NULL,
+  old_device_fp   TEXT,
+  new_device_fp   TEXT NOT NULL,
+  admin_signature TEXT,
+  reason          TEXT,
+  created_at      INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rebind_history_expected_month ON rebind_history(org_code, expected_id, created_at);
