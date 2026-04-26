@@ -791,6 +791,37 @@ async function orgAttendance(request, env) {
   return json({ checkins: rows.results, stats: { total: rows.results.length, currently_in: total_in, checked_out: total_out, avg_score, bio_verified: bio_count } });
 }
 
+async function orgExpectedList(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  const rows = await env.DB.prepare(
+    "SELECT id,org_code,first_name,surname,status,created_at FROM org_expected WHERE org_code=? ORDER BY created_at DESC, id DESC"
+  ).bind(org.id).all();
+  return json({ expected: rows.results });
+}
+
+async function orgExpectedCreate(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const firstName = (body.first_name || "").trim();
+  const surname = (body.surname || "").trim();
+  if (!firstName || !surname) return err("first_name and surname required");
+  const createdAt = now();
+  const row = await env.DB.prepare(
+    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at"
+  ).bind(org.id, firstName, surname, "assist", createdAt).first();
+  return json({ expected: row });
+}
+
+async function orgExpectedDelete(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  const result = await env.DB.prepare(
+    "DELETE FROM org_expected WHERE id=? AND org_code=?"
+  ).bind(id, org.id).run();
+  const deleted = (result.meta?.changes || 0) > 0;
+  if (!deleted) return err("Expected attendee not found", 404);
+  return json({ deleted: true, id });
+}
+
 async function orgAuth(request, env) {
   const key = request.headers.get("X-Org-Key") || new URL(request.url).searchParams.get("key");
   if (!key) return err("X-Org-Key header required", 401);
@@ -840,14 +871,20 @@ export default {
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
       else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
+      else if (method === "GET"  && path === "/org/expected")        response = await orgExpectedList(request, env);
+      else if (method === "POST" && path === "/org/expected")        response = await orgExpectedCreate(request, env);
 
       else {
-        const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
-        if (method === "GET" && m) response = await getReceipt(request, env, m[1]);
+        const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
+        if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else {
-          const mKey = path.match(/^\/users\/by-key\/([A-Za-z0-9\-_]+)$/);
-          if (method === "GET" && mKey) response = await lookupByKey(request, env, mKey[1]);
-          else response = err("Not found", 404);
+          const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
+          if (method === "GET" && m) response = await getReceipt(request, env, m[1]);
+          else {
+            const mKey = path.match(/^\/users\/by-key\/([A-Za-z0-9\-_]+)$/);
+            if (method === "GET" && mKey) response = await lookupByKey(request, env, mKey[1]);
+            else response = err("Not found", 404);
+          }
         }
       }
     } catch (e) {
