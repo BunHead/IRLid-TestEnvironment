@@ -1,147 +1,149 @@
-# HANDOVER.md — Mr. Data Brief (Batch 7 — Presentation Polish)
+# HANDOVER.md — Mr. Data Brief (Batch 8 — Cryptographic Identity Loop)
 
-**Issued:** 27 April 2026 (midday) by Number One
+**Issued:** 27 April 2026 (afternoon) by Number One
 **Recipient:** Mr. Data (Codex)
 **Repo scope:** `BunHead/IRLid-TestEnvironment` only — do NOT touch `BunHead/IRLid`
-**Working rule:** Up to 5 atomic tasks (visual polish only — no protocol changes).
+**Working rule:** 3 atomic tasks. These are protocol-touching tasks; lower ceiling.
 
-**Context:** The test environment is functional end-to-end (PRs #14, #15, #16 now on main; DEV auto-login works; check-in, attendee list, expected attendees, fullscreen venue QR, branding, and check-out all live). The Captain demoed it to family with a real phone scan and the redirect/branding worked. Now the goal is **presentation polish** — make every visible state look intentional and confident, ready to show Donald at Imbue.
+**Context:** Batch 7 polished the visible UX; this batch closes the **cryptographic identity loop** so the test environment is genuinely IRLid-grade — not just an attendance app with branding. Three gaps to close:
 
-This batch is **visual/UX only**. No schema changes, no Worker changes (unless adding a presentational endpoint becomes necessary — flag and stop if so).
+1. Check-out is currently a doorman button click — anyone could click it for anyone. It needs to be a real two-party signed event, like check-in.
+2. Returning attendees on the same device still have to type their name — the device key should be recognised and the name auto-filled.
+3. A second phone typing the same name as an existing bound attendee silently re-binds that name to the new device — that's a security hole. Conflicts should be flagged.
 
-**Pre-requisite:** PRs #14 and #15 (with #16 stacked) must be on main. If not, stop and ask.
+**Pre-requisite:** Batch 7 PRs (#18-#22) on main, GitHub Pages live. If GitHub Pages still shows old code, stop and ask.
+
+**Hard constraint:** This batch may add Worker endpoints and schema columns. **All schema changes additive only — no rewrites of existing rows.** Check-in receipts already in D1 stay valid forever. Check-out adds new columns; conflict detection adds a new table.
 
 ---
 
-## Task 1 — Welcome page logo sizing + spacing
+## Task 1 — Cryptographic Check-out (signed by attendee, not just doorman click)
 
-**Goal:** The post-scan welcome page (the one the attendee's phone shows after scanning the venue QR) currently shows the org logo at small size. Make it presentation-grade: prominent logo, generous spacing, clear hierarchy.
+**Goal:** Replace the current "Check out" button (which silently fires `POST /org/checkout`) with a real two-party scan flow. The leaving attendee proves they're the same person who checked in by signing the check-out with the same device key.
 
 **Files in scope:**
-- The attendee-facing welcome/confirm page (likely `accept.html`, `org-entry.html`, or wherever the post-scan flow lives — check existing routing to confirm the right file)
-- Associated CSS
+- `irlid-api/schema.sql` (additive: add `checkout_signature`, `checkout_payload_hash`, `checkout_ts` columns to the existing check-in table)
+- `irlid-api/src/index.js` (extend `/org/checkout` to verify a signed payload; reject if signature doesn't match the original `pub` field)
+- `org.html` (Doorman flow: "Check out" button now generates a check-out QR / triggers a scan instead of immediate fire)
+- `accept.html` or wherever the attendee post-scan flow lives (handle a check-out HELLO; sign the check-out payload; submit)
+- `js/orgapi.js`
+
+**Server schema (additive):**
+- New columns on the existing check-in row: `checkout_payload_hash TEXT NULLABLE`, `checkout_signature TEXT NULLABLE`, `checkout_ts INTEGER NULLABLE`
+- Existing rows untouched; old check-outs (button-only) stay as they are with a flag `checkout_method = 'legacy_button'` (default `'signed'` for new ones)
+
+**Server behaviour — `POST /org/checkout`:**
+- Accepts `{checkin_id, checkout_payload, signature}`
+- Looks up the original check-in row, retrieves its `pub` field
+- Verifies `signature` over `SHA-256(canonical(checkout_payload))` using `pub`
+- If signature valid: stores hash/sig/ts on the row, returns `{ok: true, checkout_method: 'signed'}`
+- If signature invalid: returns 401 `{error: "invalid_checkout_signature"}`
+- Existing legacy button-click path remains available behind a `checkout_method=legacy` query param for backwards-compat with old test rows; doorman UI no longer uses it for new flows
+
+**Client behaviour — Doorman:**
+- Doorman dashboard: "Check out" button now reads "Initiate check-out"
+- Click → modal/inline panel shows a check-out QR specific to that attendee row (encodes `checkin_id` and a `nonce`)
+- Doorman tells attendee: "Scan this on your IRLid page"
+- When the Worker receives the signed check-out, dashboard updates the row to "OUT" + 🔒 hardware-style badge to indicate signed check-out
+
+**Client behaviour — Attendee:**
+- Their IRLid page (the one they used to check in) sees the check-out QR
+- Reuses the same private key from check-in (still in localStorage)
+- Signs `{checkin_id, nonce, ts}` and POSTs to `/org/checkout`
+- Confirmation page: "✓ Check-out signed and recorded"
 
 **Acceptance criteria:**
-- Logo displayed at `max-width: 240px` (or similar tasteful size — match the green checkmark proportionally)
-- Logo has at least 32px breathing room above and below
-- Logo container `object-fit: contain` so non-square logos (like Imbue's wordmark) render correctly
-- "Welcome to [org]" heading is at least `2rem` size, weight 600+
-- The custom welcome message appears below the heading at comfortable readable size
-- Re-entry/policy line stays subtle but legible
-- Page works on portrait phone widths (320px+) — no logo overflow
-- Logo loading failure gracefully falls back to initials or a neutral icon (don't show broken-image)
+- Live smoke: complete check-in → initiate check-out → scan with same device → row marked OUT with `signed` method
+- Live smoke: try to check out a different device's check-in row → 401 invalid_checkout_signature
+- Old legacy-button check-outs still readable in dashboard (display as "OUT (legacy)" or similar)
+- Migration applied to test D1; Worker version documented in PR
 
-**Out of scope:** changing the green checkmark, animating the page entrance (Task 5 covers some animation).
-
-**PR title:** `[codex] Welcome page — logo sizing and spacing polish`
+**PR title:** `[codex] Cryptographic check-out — signed by attendee, not just doorman click`
 
 ---
 
-## Task 2 — Fullscreen Venue QR — final polish pass
+## Task 2 — Device-key recognition on return
 
-**Goal:** The fullscreen venue QR (Settings → QR test tools → fullscreen) is the centrepiece of the doorman demo. Currently functional thanks to PR #15. Now make it confident and clear from 2-3 metres away.
+**Goal:** When a device that has previously checked in for an org returns, the system recognises its device key and auto-fills the bound attendee's name. No typing required.
 
 **Files in scope:**
-- `org.html` (the Settings panel and the fullscreen overlay)
-- Associated CSS
+- `irlid-api/src/index.js` (new endpoint `GET /org/recognize?device_pub=<base64url>`)
+- `js/orgapi.js`
+- `org.html` (or wherever the post-scan flow lives) — on page load, fetch recognition before showing the name input
+
+**Server behaviour:**
+- New endpoint `GET /org/recognize` with query param `device_pub` (the hash/fingerprint of the device's public key)
+- Looks up most recent expected attendee row where `device_key_fp = ?` for this org
+- Returns `{recognized: true, name: "Spencer Austin", expected_id: <id>}` or `{recognized: false}`
+- Auth: bound to org by the org's host context (no X-Org-Key needed for read; rate-limited)
+
+**Client behaviour:**
+- On the attendee post-scan page: compute `device_key_fp = SHA-256(canonical(pub))` truncated to 16 chars (matches existing fingerprint convention)
+- Call `GET /org/recognize?device_pub=<fp>`
+- If recognised: pre-fill name field, show "Welcome back, [name]!" message; user can edit if wrong
+- If not recognised: standard name-prompt flow as today
+- Local cache: phone stores `(org_code, name)` pair in localStorage so recognition is instant on next visit even before server round-trip
 
 **Acceptance criteria:**
-- QR module size: at least 70% of the smaller viewport dimension on landscape monitors (so a 1080p screen shows a QR at minimum ~750px)
-- Org logo displayed above the QR at a tasteful size (~120px)
-- "Scan to check in to [Org Name]" tagline above QR, large and legible
-- Trust cue text (org key fingerprint, scan domain — already present from PR #15) below QR, in a smaller subtle font
-- Solid dark background to maximise QR scan contrast (white background already matches QR convention; keep)
-- Subtle pulse animation on the QR border (~2s cycle, very gentle) to draw eye without distracting
-- Exit-fullscreen button visible but unobtrusive (top-right corner, low-opacity until hover)
+- Live smoke: scan in as "Spencer Austin" → log out → return scan within same session → name auto-fills
+- Live smoke: open in fresh incognito (different device key fp) → no recognition, normal flow
+- Recognition gracefully degrades if endpoint fails (fallback to name prompt; do not block check-in)
 
-**Out of scope:** Worker-signed QR payload (deferred — see Task 5 caveat note)
-
-**PR title:** `[codex] Fullscreen Venue QR — presentation polish`
+**PR title:** `[codex] Device-key recognition on return — auto-fill bound name`
 
 ---
 
-## Task 3 — Doorman scan flow — visual feedback states
+## Task 3 — Name-conflict detection (different device claims bound name)
 
-**Goal:** When the doorman uses Manual check-in or scans an attendee, give immediate visual feedback for each outcome. Currently the form just submits silently and the row appears in the list. Demo-grade requires confidence-building feedback.
+**Goal:** When a check-in arrives with a typed name that matches an existing Expected Attendee already bound to a *different* device key, do NOT silently re-bind. Flag it as a conflict requiring doorman confirmation.
 
 **Files in scope:**
-- `org.html` (Doorman Console section)
-- CSS for transitions
+- `irlid-api/src/index.js` (extend `POST /org/checkin` and `POST /org/expected` flows)
+- `org.html` (Doorman dashboard: render `?` badge on conflict rows, inline Confirm/Reject actions)
+
+**Server behaviour:**
+- On `POST /org/checkin` with a `name` field:
+  - Look up Expected Attendee row matching that name (case-insensitive)
+  - If row exists AND has `device_key_fp` set AND incoming `device_pub`'s fp differs:
+    - Insert the check-in row but mark `status = 'conflict'`, store both old and new device fps in a new `attendee_conflicts` table
+    - Return `{ok: true, conflict: true, expected_id, conflict_id}`
+  - If row exists and device_key_fp matches OR is unset: normal auto-link flow
+  - If no row matches: walk-in flow (unchanged)
+
+**Schema (additive):**
+- New table `attendee_conflicts`: `id`, `org_code`, `expected_id`, `bound_device_fp`, `claiming_device_fp`, `claimed_name`, `created_at`, `resolution` (default null; can be `'confirmed_new_device'`, `'rejected'`, `'expired'`)
+
+**Client behaviour — Doorman dashboard:**
+- Conflict rows show a `?` badge (orange/amber) instead of `linked` or `assist`
+- Inline action: "Confirm new device" (e.g., user got a new phone) / "Reject" (someone else trying to claim)
+- Confirm → `POST /org/conflicts/:id/resolve` with `{resolution: 'confirmed_new_device'}`; binds new device fp to the expected row, marks conflict resolved
+- Reject → resolution `'rejected'`; the conflicting check-in row is marked invalid; expected attendee stays bound to original device
+- Worker endpoint `POST /org/conflicts/:id/resolve` does the appropriate update
 
 **Acceptance criteria:**
-- **In-progress:** Record Check-in button shows a subtle spinner inline while the request is in flight; button text changes to "Checking in..."; button is disabled
-- **Success — auto-link match:** brief green flash on the Doorman Console panel (300ms), the inline "✓ Matched expected attendee: [Name]" message from PR #14 stays visible for 4 seconds then fades
-- **Success — walk-in:** brief amber flash; "Recorded as walk-in" message stays for 4 seconds
-- **Failure:** brief red flash; error inline; button re-enables; input field stays filled so the doorman can retry
-- All transitions use CSS only; no library dependencies
-- Reduced-motion preference (`prefers-reduced-motion: reduce`) skips the flash animations but keeps the text feedback
+- Live smoke: phone A checks in as "Spencer Austin" → bound. Phone B (different device) types "Spencer Austin" → check-in succeeds but row marked `conflict`; dashboard shows `?` badge
+- Doorman clicks "Confirm new device" → conflict resolves, expected row now bound to phone B
+- Doorman clicks "Reject" on a different conflict → that row marked invalid, expected row stays with original phone
+- No regression on auto-link or walk-in paths
 
-**Out of scope:** sound effects (later); screenreader live regions (worth doing eventually but not this batch).
-
-**PR title:** `[codex] Doorman flow — scan feedback animations`
+**PR title:** `[codex] Name-conflict detection on bound expected attendees`
 
 ---
 
-## Task 4 — Checkout confirmation flow
+## When all three are done
 
-**Goal:** The Check-out button from PR #16 currently fires immediately on click. For demo confidence and safety, add a quick inline confirmation: hover/click reveals "Confirm check-out?" inline, only the second click commits.
-
-**Files in scope:**
-- `org.html` (Dashboard attendance table)
-- `js/orgapi.js` if needed
-- CSS
-
-**Acceptance criteria:**
-- Click Check-out → button transforms inline into "Confirm" (red) + small "Cancel" (grey) — does NOT use a modal
-- Confirm click → fires the existing `POST /org/checkout` call, button shows brief spinner
-- On success → row's status badge transitions from "🟢 IN" to "🔴 OUT", check-out time stamps in
-- On failure → revert button, inline error appears
-- Cancel click → button returns to "Check out" without firing anything
-- Dashboard stats (CHECKED IN / CHECKED OUT) update without full-page refresh
-- ESC key while in confirm state → cancels
-
-**Out of scope:** undo-checkout (later); checkout reason tracking (later).
-
-**PR title:** `[codex] Check-out — inline confirmation + status transition`
-
----
-
-## Task 5 — Dashboard sparkle pass
-
-**Goal:** Make the four headline stat cards (Checked In, Checked Out, Avg Score, Bio-metric Verified) feel alive. Currently they snap from one value to another. Demo-grade should count up smoothly when values change.
-
-**Files in scope:**
-- `org.html` (Dashboard component)
-- CSS / a tiny inline JS counter helper
-
-**Acceptance criteria:**
-- When stat values change (after refresh, after check-in, after checkout): numbers animate from old value to new over ~600ms (ease-out)
-- For percentage scores: animate from 0% to current value on first load
-- The "Min threshold: 70%" line under Avg Score: subtle progress bar (already partially there as the orange line) showing distance from threshold
-- Status indicator dot next to "Attendance — Today" header pulses subtly (~2s cycle) to indicate live data
-- Reduced-motion preference disables count animations; uses snap to final value
-- "Last updated: HH:MM:SS" is replaced by a relative time ("just now", "2 minutes ago") that updates every 30 seconds
-
-**Out of scope:** Charts / graphs (deferred to a later batch); CSV export polish.
-
-**PR title:** `[codex] Dashboard — stat animations and live indicators`
-
----
-
-## When all five are done
-
-- One short summary message: which PRs landed, anything noticed worth flagging
+- One short summary message: which PRs landed, schema decisions, Worker version deployed, anything noticed
 - Stop. Wait for the next `HANDOVER.md`.
 
 ## If you get stuck
 
-- **PRs #14/#15/#16 not yet on main when you start:** stop, comment, ask Captain to merge first
-- **Need a Worker change to support polish (e.g., new endpoint):** stop and propose; do NOT implement Worker changes in this batch
-- **Library dependency required for animation:** prefer CSS-only or a tiny inline JS helper. Do not pull in a new library.
+- **Pre-requisite missing (Batch 7 not on main / Pages not live):** stop and ask
+- **Cryptographic verification fails for legitimate signed payloads:** likely a canonicalisation mismatch — check that `canonical()` is applied identically client- and server-side, that base64url encoding matches, that the signed payload matches what's hashed
+- **Schema migration fails on test D1:** stop, comment in PR, wait
 - **Anything that touches `BunHead/IRLid` (the live repo):** stop immediately. Hard wall.
 
 ## Captain's note (relayed by Number One)
 
-The Worker-signed QR payload work you proposed at the end of Batch 6 is captured for v6 — good architectural thinking, deferred deliberately so this presentation batch stays purely visual. Carry on with the polish.
+The Worker-signed QR payload work you proposed at Batch 6 close is queued for v6 protocol work — not in this batch. Stay focused on the three cryptographic-identity tasks above.
 
 — Number One
