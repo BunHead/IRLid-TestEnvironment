@@ -170,8 +170,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .score-high { background: #1a4731; color: var(--green); }
 .score-med { background: #2d2a0f; color: var(--orange); }
 .score-low { background: #3d1c1c; color: var(--red); }
-.status-in { color: var(--green); font-size: 10px; font-weight: 600; }
-.status-out { color: var(--muted); font-size: 10px; }
+.status-in { color: var(--green); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
+.status-out { color: var(--red); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
+.checkout-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.checkout-error { flex-basis: 100%; color: var(--red); font-size: 11px; margin-top: 3px; }
+.checkout-row-complete td { animation: checkoutRowSettle 420ms ease; }
+.btn-confirm { background: #da3633; color: #fff; }
+.btn-confirm:hover { background: var(--red); }
 .bio-tag { color: #bc8cff; font-size: 10px; }
 .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
 .btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
@@ -291,6 +296,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
 @keyframes doormanFlashWalkin { 0% { box-shadow: 0 0 0 rgba(210,153,34,0); } 45% { border-color: var(--orange); background: rgba(210,153,34,0.12); box-shadow: 0 0 0 3px rgba(210,153,34,0.18); } 100% { box-shadow: 0 0 0 rgba(210,153,34,0); } }
 @keyframes doormanFlashError { 0% { box-shadow: 0 0 0 rgba(248,81,73,0); } 45% { border-color: var(--red); background: rgba(248,81,73,0.12); box-shadow: 0 0 0 3px rgba(248,81,73,0.18); } 100% { box-shadow: 0 0 0 rgba(248,81,73,0); } }
+@keyframes checkoutRowSettle { 0% { background: rgba(63,185,80,0.11); } 100% { background: transparent; } }
 
 @media (max-width: 1380px) {
   .settings-shell { grid-template-columns: 1fr; }
@@ -315,7 +321,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
   .qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(78vw, 48vh) !important; height: min(78vw, 48vh) !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .qr-fullscreen-code, .btn-spinner, .scan-panel.flash-success, .scan-panel.flash-walkin, .scan-panel.flash-error { animation: none; }
+  .qr-fullscreen-code, .btn-spinner, .scan-panel.flash-success, .scan-panel.flash-walkin, .scan-panel.flash-error, .checkout-row-complete td { animation: none; }
   .checkin-result { transition: none; }
 }
 </style>
@@ -742,6 +748,10 @@ let portalState = loadPortalState();
 let attendanceData = [];
 let attendanceStats = null;
 let venueQrPayload = null;
+let checkoutConfirmId = null;
+let checkoutBusyId = null;
+let checkoutErrors = {};
+let recentlyCheckedOutId = null;
 let expectedAttendees = [];
 let expectedLoading = false;
 let expectedError = null;
@@ -1138,21 +1148,56 @@ function renderTable(rows) {
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = rows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
-    const rowStatus = r.active_checkin_id ? '<span class="status-in">● IN</span>' : '<span class="status-out">◯ OUT</span>';
-    const actionHtml = r.active_checkin_id
-      ? `<button class="btn btn-secondary btn-sm" type="button" onclick="checkoutAttendee('${escapeHtml(r.active_checkin_id)}')">Check out</button>`
-      : '<span style="color:#8b949e;font-size:11px;">Done</span>';
-    return `<tr><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
+    const checkinId = r.active_checkin_id || '';
+    const rowStatus = checkinId ? '<span class="status-in">● IN</span>' : '<span class="status-out">● OUT</span>';
+    const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
+    const actionHtml = buildCheckoutAction(r);
+    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
   }).join('');
 }
-async function checkoutAttendee(checkinId) {
+function buildCheckoutAction(row) {
+  const checkinId = row.active_checkin_id || '';
+  const safeId = escapeHtml(checkinId);
+  const error = checkoutErrors[checkinId] ? `<div class="checkout-error">${escapeHtml(checkoutErrors[checkinId])}</div>` : '';
+  if (!checkinId) return '<span style="color:#8b949e;font-size:11px;">Done</span>';
+  if (checkoutBusyId === checkinId) {
+    return '<div class="checkout-actions"><button class="btn btn-confirm btn-sm btn-loading" type="button" disabled><span class="btn-spinner" aria-hidden="true"></span><span>Checking out...</span></button></div>';
+  }
+  if (checkoutConfirmId === checkinId) {
+    return `<div class="checkout-actions"><button class="btn btn-confirm btn-sm" type="button" onclick="confirmCheckout('${safeId}')">Confirm</button><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button>${error}</div>`;
+  }
+  return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Check out</button>${error}</div>`;
+}
+function requestCheckout(checkinId) {
+  checkoutConfirmId = checkinId;
+  checkoutErrors = {};
+  renderTable(attendanceData);
+}
+function cancelCheckout() {
+  checkoutConfirmId = null;
+  checkoutBusyId = null;
+  checkoutErrors = {};
+  renderTable(attendanceData);
+}
+async function confirmCheckout(checkinId) {
   if (!currentOrg) return showToast('Load an organisation first', true);
   if (!checkinId) return showToast('No active check-in found', true);
+  checkoutBusyId = checkinId;
+  checkoutErrors = {};
+  renderTable(attendanceData);
   try {
     await window.IRLidOrgApi.checkout(currentOrg.api_key, { checkin_id: checkinId });
+    const previousRow = attendanceData.find(row => row.active_checkin_id === checkinId);
+    recentlyCheckedOutId = previousRow?.id || null;
+    checkoutConfirmId = null;
+    checkoutBusyId = null;
     await refreshAttendance();
+    setTimeout(() => { recentlyCheckedOutId = null; renderTable(attendanceData); }, 700);
     showToast('Check-out recorded');
   } catch (err) {
+    checkoutBusyId = null;
+    checkoutErrors[checkinId] = err.message || 'Could not check attendee out';
+    renderTable(attendanceData);
     showToast(err.message || 'Could not check attendee out', true);
   }
 }
@@ -1610,6 +1655,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
     else if (event.key === 'Escape' && expectedEditId) cancelExpectedEdit();
+    else if (event.key === 'Escape' && checkoutConfirmId) cancelCheckout();
   });
   document.addEventListener('click', (event) => {
     if (!expectedDeleteMode) return;
