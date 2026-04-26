@@ -72,6 +72,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .stat-value.orange { color: var(--orange); }
 .stat-value.purple { color: #bc8cff; }
 .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.threshold-bar { position: relative; height: 4px; margin-top: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.threshold-bar-fill { height: 100%; width: 0%; border-radius: inherit; background: linear-gradient(90deg, var(--orange), var(--green)); transition: width 600ms ease-out; }
+.threshold-bar-marker { position: absolute; top: -3px; width: 2px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.78); transform: translateX(-1px); transition: left 600ms ease-out; }
 .two-col { display: grid; grid-template-columns: 1.2fr 340px; gap: 18px; }
 .mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
 .mode-card { border: 2px solid var(--line); border-radius: 10px; padding: 14px; cursor: pointer; transition: all 0.2s; background: #0b1220; }
@@ -90,7 +93,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .qr-info p { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
 .qr-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .qr-payload-preview { margin-top: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: #0a0f15; font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; }
-.scan-panel { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+.scan-panel { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 16px; transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease; }
+.scan-panel.flash-success { animation: doormanFlashSuccess 300ms ease; }
+.scan-panel.flash-walkin { animation: doormanFlashWalkin 300ms ease; }
+.scan-panel.flash-error { animation: doormanFlashError 300ms ease; }
 .scan-panel-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .scan-panel-sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
 .expected-list { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #11161d; overflow: hidden; }
@@ -112,8 +118,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-state.error { color: var(--red); }
 .expected-state .btn { margin-top: 8px; }
 .checkin-result { margin-top: 10px; min-height: 18px; font-size: 12px; line-height: 1.45; }
-.checkin-result.success { color: var(--green); }
-.checkin-result.info { color: var(--muted); }
+.checkin-result.success { color: var(--green); opacity: 1; transition: opacity 500ms ease; }
+.checkin-result.info { color: var(--orange); opacity: 1; transition: opacity 500ms ease; }
+.checkin-result.error { color: var(--red); opacity: 1; }
+.checkin-result.fading { opacity: 0; }
+.btn-loading { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.42); border-top-color: #fff; animation: spin 760ms linear infinite; }
 .expected-validation { min-height: 16px; margin-top: 8px; color: var(--red); font-size: 11px; }
 .expected-delete-banner { margin-top: 14px; padding: 9px 12px; border: 1px solid var(--red); border-radius: 8px; background: #3d1c1c; color: #ffb3ad; font-size: 12px; }
 .expected-delete-active .sidebar,
@@ -163,8 +173,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .score-high { background: #1a4731; color: var(--green); }
 .score-med { background: #2d2a0f; color: var(--orange); }
 .score-low { background: #3d1c1c; color: var(--red); }
-.status-in { color: var(--green); font-size: 10px; font-weight: 600; }
-.status-out { color: var(--muted); font-size: 10px; }
+.status-in { color: var(--green); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
+.status-out { color: var(--red); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
+.checkout-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.checkout-error { flex-basis: 100%; color: var(--red); font-size: 11px; margin-top: 3px; }
+.checkout-row-complete td { animation: checkoutRowSettle 420ms ease; }
+.btn-confirm { background: #da3633; color: #fff; }
+.btn-confirm:hover { background: var(--red); }
 .bio-tag { color: #bc8cff; font-size: 10px; }
 .empty-state { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
 .btn { padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; border: none; transition: all 0.15s; }
@@ -174,7 +189,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .btn-secondary:hover { background: var(--line); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 5px; animation: pulse 2s infinite; }
+.attendance-live-dot { box-shadow: 0 0 0 0 rgba(63,185,80,0.35); animation: liveDotPulse 2s ease-in-out infinite; }
 @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+@keyframes liveDotPulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(63,185,80,0.28)} 50%{opacity:0.65;box-shadow:0 0 0 5px rgba(63,185,80,0)} }
 .toast { position: fixed; bottom: 24px; right: 24px; background: #238636; color: #fff; padding: 12px 18px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 999; }
 .toast.show { opacity: 1; }
 .alert { padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-bottom: 14px; }
@@ -266,18 +283,25 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .settings-summary code { color: #dff6ff; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .settings-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .small-note { font-size: 11px; color: var(--muted); line-height: 1.45; }
-.qr-fullscreen-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 28px; background: radial-gradient(circle at top, #f7fbff 0, #eef5ff 42%, #dde8f8 100%); color: #0f172a; cursor: default; }
-.qr-fullscreen-card { width: min(92vw, 760px); max-height: 92vh; overflow: auto; display: grid; justify-items: center; gap: 18px; padding: clamp(22px, 4vw, 42px); border-radius: 18px; background: #ffffff; border: 1px solid #d5dfef; box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24); text-align: center; }
+.qr-fullscreen-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 28px; background: #05070c; color: #f8fbff; cursor: default; }
+.qr-fullscreen-card { width: min(96vw, 1120px); max-height: 94vh; overflow: auto; display: grid; justify-items: center; gap: clamp(16px, 2.4vmin, 26px); padding: clamp(20px, 3vmin, 34px); border-radius: 18px; background: #08101d; border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 28px 90px rgba(0,0,0,0.54); text-align: center; }
 .qr-fullscreen-brand { display: flex; flex-direction: column; align-items: center; gap: 9px; min-width: 0; }
-.qr-fullscreen-logo { width: 88px; max-width: 40vw; max-height: 70px; object-fit: contain; }
-.qr-fullscreen-fallback { min-width: 70px; min-height: 54px; display: none; align-items: center; justify-content: center; border-radius: 12px; background: #0f172a; color: #fff; font-size: 24px; font-weight: 800; letter-spacing: 0.03em; }
-.qr-fullscreen-org { font-size: clamp(28px, 5vw, 54px); line-height: 1; font-weight: 800; color: #0b1220; overflow-wrap: anywhere; }
-.qr-fullscreen-subtitle { font-size: clamp(14px, 2vw, 18px); color: #475569; }
-.qr-fullscreen-code { display: flex; align-items: center; justify-content: center; padding: 18px; border-radius: 18px; background: #fff; border: 1px solid #d9e3f2; }
-.qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(56vw, 48vh, 380px) !important; height: min(56vw, 48vh, 380px) !important; }
-.qr-fullscreen-trust { width: 100%; display: grid; gap: 5px; padding: 12px 14px; border-radius: 12px; background: #f1f6fd; border: 1px solid #d5dfef; color: #334155; font-size: 13px; line-height: 1.35; }
-.qr-fullscreen-trust strong { color: #0f172a; }
-.qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: #0f172a; color: #fff; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(15, 23, 42, 0.26); }
+.qr-fullscreen-logo { width: 120px; max-width: 34vw; max-height: 92px; object-fit: contain; filter: drop-shadow(0 12px 28px rgba(0,0,0,0.34)); }
+.qr-fullscreen-fallback { min-width: 92px; min-height: 70px; display: none; align-items: center; justify-content: center; border-radius: 14px; background: #f8fbff; color: #08101d; font-size: 30px; font-weight: 800; letter-spacing: 0.03em; }
+.qr-fullscreen-org { font-size: clamp(32px, 5.4vmin, 68px); line-height: 1; font-weight: 800; color: #ffffff; overflow-wrap: anywhere; }
+.qr-fullscreen-subtitle { font-size: clamp(22px, 3.4vmin, 42px); line-height: 1.12; color: #dbeafe; font-weight: 700; }
+.qr-fullscreen-code { display: flex; align-items: center; justify-content: center; padding: clamp(14px, 2vmin, 24px); border-radius: 22px; background: #fff; border: 4px solid rgba(88,166,255,0.72); box-shadow: 0 0 0 1px rgba(255,255,255,0.95), 0 24px 80px rgba(0,0,0,0.42); animation: qrBorderPulse 2s ease-in-out infinite; }
+.qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(72vmin, 840px) !important; height: min(72vmin, 840px) !important; }
+.qr-fullscreen-trust { width: min(100%, 760px); display: grid; gap: 5px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #a9b8d4; font-size: clamp(12px, 1.6vmin, 14px); line-height: 1.35; }
+.qr-fullscreen-trust strong { color: #e8f0ff; }
+.qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
+.qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
+@keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
+@keyframes doormanFlashWalkin { 0% { box-shadow: 0 0 0 rgba(210,153,34,0); } 45% { border-color: var(--orange); background: rgba(210,153,34,0.12); box-shadow: 0 0 0 3px rgba(210,153,34,0.18); } 100% { box-shadow: 0 0 0 rgba(210,153,34,0); } }
+@keyframes doormanFlashError { 0% { box-shadow: 0 0 0 rgba(248,81,73,0); } 45% { border-color: var(--red); background: rgba(248,81,73,0.12); box-shadow: 0 0 0 3px rgba(248,81,73,0.18); } 100% { box-shadow: 0 0 0 rgba(248,81,73,0); } }
+@keyframes checkoutRowSettle { 0% { background: rgba(63,185,80,0.11); } 100% { background: transparent; } }
 
 @media (max-width: 1380px) {
   .settings-shell { grid-template-columns: 1fr; }
@@ -298,7 +322,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
   .settings-grid-2, .settings-grid-3, .switch-grid { grid-template-columns: 1fr; }
   .qr-fullscreen-overlay { padding: 14px; align-items: flex-start; }
   .qr-fullscreen-card { max-height: calc(100vh - 28px); gap: 13px; padding: 18px; }
-  .qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(78vw, 46vh) !important; height: min(78vw, 46vh) !important; }
+  .qr-fullscreen-logo { width: min(44vw, 120px); }
+  .qr-fullscreen-code canvas, .qr-fullscreen-code img { width: min(78vw, 48vh) !important; height: min(78vw, 48vh) !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qr-fullscreen-code, .btn-spinner, .scan-panel.flash-success, .scan-panel.flash-walkin, .scan-panel.flash-error, .checkout-row-complete td { animation: none; }
+  .checkin-result { transition: none; }
+  .live-dot, .attendance-live-dot { animation: none; }
+  .threshold-bar-fill, .threshold-bar-marker { transition: none; }
 }
 </style>
 </head>
@@ -379,14 +410,14 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
       <div class="stats-row" id="statsRow">
         <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="statIn">12</div><div class="stat-sub" id="statInSub">18 total today</div></div>
         <div class="stat-card"><div class="stat-label">Checked Out</div><div class="stat-value blue" id="statOut">6</div></div>
-        <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value orange" id="statScore">84%</div><div class="stat-sub">Min threshold: <span id="statMin">50%</span></div></div>
+        <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value orange" id="statScore">84%</div><div class="stat-sub">Min threshold: <span id="statMin">50%</span></div><div class="threshold-bar" aria-hidden="true"><div class="threshold-bar-fill" id="scoreProgress"></div><div class="threshold-bar-marker" id="scoreThresholdMarker"></div></div></div>
         <div class="stat-card"><div class="stat-label">Bio-metric Verified</div><div class="stat-value purple" id="statBio">7</div></div>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><span class="live-dot"></span>Attendance — Today</div>
-          <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Debug data loaded</div>
+          <div class="card-title"><span class="live-dot attendance-live-dot"></span>Attendance — Today</div>
+          <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Waiting for data</div>
         </div>
         <div id="attendanceBody" style="overflow-x:auto;">
           <table class="att-table">
@@ -453,7 +484,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                     <label>Manual check-in (attendee label)</label>
                     <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
                   </div>
-                  <button class="btn btn-primary" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
+                  <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
                   <div class="checkin-result" id="manualCheckinResult"></div>
 
                   <div class="expected-delete-banner hidden" id="expectedDeleteBanner">Delete mode — click a row to remove</div>
@@ -724,6 +755,13 @@ let portalState = loadPortalState();
 let attendanceData = [];
 let attendanceStats = null;
 let venueQrPayload = null;
+let checkoutConfirmId = null;
+let checkoutBusyId = null;
+let checkoutErrors = {};
+let recentlyCheckedOutId = null;
+let statDisplayValues = { statIn: 0, statOut: 0, statScore: 0, statBio: 0 };
+let hasRenderedStats = false;
+let lastRefreshAt = null;
 let expectedAttendees = [];
 let expectedLoading = false;
 let expectedError = null;
@@ -1085,6 +1123,43 @@ function aggregateAttendees(checkins) {
 function formatTimestamp(ts) {
   return ts ? new Date(ts * 1000).toLocaleString() : '—';
 }
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+function animateStatValue(id, nextValue, suffix='') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const startValue = hasRenderedStats ? (statDisplayValues[id] || 0) : 0;
+  statDisplayValues[id] = nextValue;
+  if (prefersReducedMotion()) {
+    el.textContent = suffix && nextValue === 0 ? '—' : `${nextValue}${suffix}`;
+    return;
+  }
+  const duration = 600;
+  const start = performance.now();
+  const step = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - progress, 3);
+    const value = Math.round(startValue + (nextValue - startValue) * eased);
+    el.textContent = suffix && nextValue === 0 ? '—' : `${value}${suffix}`;
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function relativeRefreshText() {
+  if (!lastRefreshAt) return 'Waiting for data';
+  const seconds = Math.max(0, Math.floor((Date.now() - lastRefreshAt) / 1000));
+  if (seconds < 45) return 'Updated just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 1) return 'Updated 1 minute ago';
+  if (minutes < 60) return `Updated ${minutes} minutes ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours === 1 ? 'Updated 1 hour ago' : `Updated ${hours} hours ago`;
+}
+function updateRelativeRefresh() {
+  const el = document.getElementById('lastRefresh');
+  if (el) el.textContent = relativeRefreshText();
+}
 async function refreshAttendance() {
   if (!currentOrg) return;
   try {
@@ -1093,7 +1168,8 @@ async function refreshAttendance() {
     attendanceData = aggregateAttendees(payload.checkins || []);
     renderStats(attendanceData, attendanceStats);
     renderTable(attendanceData);
-    document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    lastRefreshAt = Date.now();
+    updateRelativeRefresh();
   } catch (err) {
     attendanceStats = null;
     attendanceData = [];
@@ -1108,11 +1184,17 @@ function renderStats(rows, stats) {
   const checkedOut = stats ? stats.checked_out : 0;
   const avgScore = stats ? stats.avg_score : 0;
   const bioCount = stats ? stats.bio_verified : 0;
-  document.getElementById('statIn').textContent = currentlyIn;
-  document.getElementById('statOut').textContent = checkedOut;
-  document.getElementById('statScore').textContent = avgScore ? avgScore + '%' : '—';
-  document.getElementById('statBio').textContent = bioCount;
+  animateStatValue('statIn', currentlyIn);
+  animateStatValue('statOut', checkedOut);
+  animateStatValue('statScore', avgScore, '%');
+  animateStatValue('statBio', bioCount);
   document.getElementById('statInSub').textContent = rows.length ? `${rows.length} attendees seen` : 'No attendance yet';
+  const minScore = settings.minScore || 50;
+  const scoreProgress = document.getElementById('scoreProgress');
+  const scoreThresholdMarker = document.getElementById('scoreThresholdMarker');
+  if (scoreProgress) scoreProgress.style.width = `${Math.max(0, Math.min(100, avgScore))}%`;
+  if (scoreThresholdMarker) scoreThresholdMarker.style.left = `${Math.max(0, Math.min(100, minScore))}%`;
+  hasRenderedStats = true;
 }
 function renderTable(rows) {
   if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
@@ -1120,21 +1202,56 @@ function renderTable(rows) {
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = rows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
-    const rowStatus = r.active_checkin_id ? '<span class="status-in">● IN</span>' : '<span class="status-out">◯ OUT</span>';
-    const actionHtml = r.active_checkin_id
-      ? `<button class="btn btn-secondary btn-sm" type="button" onclick="checkoutAttendee('${escapeHtml(r.active_checkin_id)}')">Check out</button>`
-      : '<span style="color:#8b949e;font-size:11px;">Done</span>';
-    return `<tr><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
+    const checkinId = r.active_checkin_id || '';
+    const rowStatus = checkinId ? '<span class="status-in">● IN</span>' : '<span class="status-out">● OUT</span>';
+    const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
+    const actionHtml = buildCheckoutAction(r);
+    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
   }).join('');
 }
-async function checkoutAttendee(checkinId) {
+function buildCheckoutAction(row) {
+  const checkinId = row.active_checkin_id || '';
+  const safeId = escapeHtml(checkinId);
+  const error = checkoutErrors[checkinId] ? `<div class="checkout-error">${escapeHtml(checkoutErrors[checkinId])}</div>` : '';
+  if (!checkinId) return '<span style="color:#8b949e;font-size:11px;">Done</span>';
+  if (checkoutBusyId === checkinId) {
+    return '<div class="checkout-actions"><button class="btn btn-confirm btn-sm btn-loading" type="button" disabled><span class="btn-spinner" aria-hidden="true"></span><span>Checking out...</span></button></div>';
+  }
+  if (checkoutConfirmId === checkinId) {
+    return `<div class="checkout-actions"><button class="btn btn-confirm btn-sm" type="button" onclick="confirmCheckout('${safeId}')">Confirm</button><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button>${error}</div>`;
+  }
+  return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Check out</button>${error}</div>`;
+}
+function requestCheckout(checkinId) {
+  checkoutConfirmId = checkinId;
+  checkoutErrors = {};
+  renderTable(attendanceData);
+}
+function cancelCheckout() {
+  checkoutConfirmId = null;
+  checkoutBusyId = null;
+  checkoutErrors = {};
+  renderTable(attendanceData);
+}
+async function confirmCheckout(checkinId) {
   if (!currentOrg) return showToast('Load an organisation first', true);
   if (!checkinId) return showToast('No active check-in found', true);
+  checkoutBusyId = checkinId;
+  checkoutErrors = {};
+  renderTable(attendanceData);
   try {
     await window.IRLidOrgApi.checkout(currentOrg.api_key, { checkin_id: checkinId });
+    const previousRow = attendanceData.find(row => row.active_checkin_id === checkinId);
+    recentlyCheckedOutId = previousRow?.id || null;
+    checkoutConfirmId = null;
+    checkoutBusyId = null;
     await refreshAttendance();
+    setTimeout(() => { recentlyCheckedOutId = null; renderTable(attendanceData); }, 700);
     showToast('Check-out recorded');
   } catch (err) {
+    checkoutBusyId = null;
+    checkoutErrors[checkinId] = err.message || 'Could not check attendee out';
+    renderTable(attendanceData);
     showToast(err.message || 'Could not check attendee out', true);
   }
 }
@@ -1156,11 +1273,43 @@ function selectMode(mode) {
   document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
   generateVenueQR();
 }
+let manualCheckinFeedbackTimer = null;
+function flashDoormanPanel(kind) {
+  const panel = document.getElementById('doormanPanel');
+  if (!panel) return;
+  panel.classList.remove('flash-success', 'flash-walkin', 'flash-error');
+  void panel.offsetWidth;
+  panel.classList.add(`flash-${kind}`);
+  setTimeout(() => panel.classList.remove(`flash-${kind}`), 340);
+}
+function setManualCheckinLoading(isLoading) {
+  const btn = document.getElementById('manualCheckinBtn');
+  if (!btn) return;
+  btn.disabled = isLoading;
+  btn.classList.toggle('btn-loading', isLoading);
+  btn.innerHTML = isLoading ? '<span class="btn-spinner" aria-hidden="true"></span><span>Checking in...</span>' : 'Record Check-in';
+}
+function showManualCheckinResult(message, kind, autoFade=false) {
+  const resultEl = document.getElementById('manualCheckinResult');
+  if (!resultEl) return;
+  clearTimeout(manualCheckinFeedbackTimer);
+  resultEl.textContent = message;
+  resultEl.className = `checkin-result ${kind}`;
+  if (autoFade) {
+    manualCheckinFeedbackTimer = setTimeout(() => {
+      resultEl.classList.add('fading');
+      manualCheckinFeedbackTimer = setTimeout(() => {
+        resultEl.textContent = '';
+        resultEl.className = 'checkin-result';
+      }, 520);
+    }, 4000);
+  }
+}
 async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
-  const resultEl = document.getElementById('manualCheckinResult');
-  if (resultEl) { resultEl.textContent = ''; resultEl.className = 'checkin-result'; }
+  showManualCheckinResult('', '');
   if (!currentOrg) return showToast('Load an organisation first', true);
+  setManualCheckinLoading(true);
   try {
     const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
       mode: 'doorman_scan',
@@ -1172,18 +1321,18 @@ async function manualCheckin() {
     document.getElementById('manualLabel').value = '';
     await refreshAttendance();
     await refreshExpectedAttendees();
-    if (resultEl && label) {
-      if (result.linked) {
-        resultEl.textContent = `✓ Matched expected attendee: ${result.expected_name || label}`;
-        resultEl.classList.add('success');
-      } else {
-        resultEl.textContent = 'Recorded as walk-in (not on expected list)';
-        resultEl.classList.add('info');
-      }
+    if (label) {
+      if (result.linked) showManualCheckinResult(`✓ Matched expected attendee: ${result.expected_name || label}`, 'success', true);
+      else showManualCheckinResult('Recorded as walk-in (not on expected list)', 'info', true);
     }
+    flashDoormanPanel(result.linked ? 'success' : 'walkin');
     showToast('Check-in recorded');
   } catch (err) {
+    flashDoormanPanel('error');
+    showManualCheckinResult(err.message || 'Could not record check-in', 'error');
     showToast(err.message || 'Could not record check-in', true);
+  } finally {
+    setManualCheckinLoading(false);
   }
 }
 function loadVenueQR() { generateVenueQR(); showToast('Debug QR refreshed'); }
@@ -1216,7 +1365,7 @@ function fullscreenQR() {
         <img class="qr-fullscreen-logo" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(orgName)} logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
         <div class="qr-fullscreen-fallback">IRL</div>
         <div class="qr-fullscreen-org">${escapeHtml(orgName)}</div>
-        <div class="qr-fullscreen-subtitle">${escapeHtml(eventName)} attendee check-in</div>
+        <div class="qr-fullscreen-subtitle">Scan to check in to ${escapeHtml(orgName)}</div>
       </div>
       <div class="qr-fullscreen-code" data-fullscreen-qr></div>
       <div class="qr-fullscreen-trust">
@@ -1235,7 +1384,7 @@ function fullscreenQR() {
   document.body.appendChild(holder);
   const qrTarget = holder.querySelector('[data-fullscreen-qr]');
   if (window.QRCode) {
-    new QRCode(qrTarget, { text: venueQrPayload, width: 380, height: 380, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrTarget, { text: venueQrPayload, width: 840, height: 840, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   } else {
     qrTarget.textContent = 'QR unavailable';
   }
@@ -1543,6 +1692,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
+  setInterval(updateRelativeRefresh, 30000);
   document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
   document.getElementById('expectedDeleteBtn')?.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -1560,6 +1710,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
     else if (event.key === 'Escape' && expectedEditId) cancelExpectedEdit();
+    else if (event.key === 'Escape' && checkoutConfirmId) cancelCheckout();
   });
   document.addEventListener('click', (event) => {
     if (!expectedDeleteMode) return;
