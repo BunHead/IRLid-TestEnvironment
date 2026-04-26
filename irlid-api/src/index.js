@@ -81,6 +81,12 @@ async function pubKeyId(pubJwk) {
   return b64urlEncode(new Uint8Array(h)).slice(0, 18);
 }
 
+async function deviceKeyFp(pubJwk) {
+  if (!pubJwk) return null;
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(pubJwk)));
+  return b64urlEncode(new Uint8Array(h)).slice(0, 16);
+}
+
 // =====================
 //  GOOGLE TOKEN VERIFY
 // =====================
@@ -742,6 +748,26 @@ async function orgGetQR(request, env) {
   return json({ payload, settings });
 }
 
+async function orgFromRequest(request, env) {
+  const url = new URL(request.url);
+  const key = request.headers.get("X-Org-Key") || url.searchParams.get("key") || url.searchParams.get("org");
+  if (!key) return null;
+  return env.DB.prepare("SELECT * FROM organisations WHERE api_key=? OR id=? OR slug=?").bind(key, key, key).first();
+}
+
+async function orgRecognize(request, env) {
+  const org = await orgFromRequest(request, env);
+  if (!org) return authErr("organisation required", 401);
+  const url = new URL(request.url);
+  const deviceFp = (url.searchParams.get("device_pub") || "").trim();
+  if (!deviceFp) return err("device_pub required");
+  const row = await env.DB.prepare(
+    "SELECT id,first_name,surname FROM org_expected WHERE org_code=? AND device_key_fp=? AND status='linked' ORDER BY linked_at DESC, id DESC LIMIT 1"
+  ).bind(org.id, deviceFp).first();
+  if (!row) return json({ recognized: false });
+  return json({ recognized: true, name: `${row.first_name || ""} ${row.surname || ""}`.trim(), expected_id: row.id });
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -757,22 +783,41 @@ async function orgCheckin(request, env) {
     gpsHash = await sha256B64url(canonical({ lat: Math.round(gps.lat * 10000) / 10000, lon: Math.round(gps.lon * 10000) / 10000 }));
   }
   const attendeeKeyId = helloPayload?.pub ? await pubKeyId(helloPayload.pub) : null;
+  const attendeePubJwk = helloPayload?.pub ? JSON.stringify(helloPayload.pub) : null;
+  const attendeeDeviceFp = helloPayload?.pub ? await deviceKeyFp(helloPayload.pub) : null;
   const label = settings.anonymousMode ? null : (attendeeLabel || null);
   const displayName = settings.anonymousMode ? null : ((name || attendeeLabel || "").trim() || null);
-  await env.DB.prepare(
-    "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at,name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
-  ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t, displayName).run();
   let link = { linked: false };
+  let expected = null;
+  let status = "checked_in";
+  let expectedId = null;
+  let conflictId = null;
   if (displayName) {
-    const expected = await env.DB.prepare(
-      "SELECT id,first_name,surname FROM org_expected WHERE org_code=? AND status='assist' AND LOWER(first_name || ' ' || surname)=LOWER(?) ORDER BY id ASC LIMIT 1"
+    expected = await env.DB.prepare(
+      "SELECT id,first_name,surname,device_key_fp FROM org_expected WHERE org_code=? AND status IN ('assist','linked') AND LOWER(first_name || ' ' || surname)=LOWER(?) ORDER BY id ASC LIMIT 1"
     ).bind(org.id, displayName).first();
     if (expected) {
-      await env.DB.prepare(
-        "UPDATE org_expected SET status='linked', linked_at=? WHERE id=? AND org_code=? AND status='assist'"
-      ).bind(t, expected.id, org.id).run();
-      link = { linked: true, expected_id: expected.id, expected_name: `${expected.first_name} ${expected.surname}`.trim() };
+      expectedId = expected.id;
+      if (expected.device_key_fp && attendeeDeviceFp && expected.device_key_fp !== attendeeDeviceFp) {
+        status = "conflict";
+      }
     }
+  }
+  await env.DB.prepare(
+    "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at,name,attendee_pub_jwk,device_key_fp,status,expected_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+  ).bind(id, org.id, mode, label, attendeeKeyId, helloHash||null, score||null, bioVerified?1:0, gpsHash, t, t, displayName, attendeePubJwk, attendeeDeviceFp, status, expectedId).run();
+  if (status === "conflict" && expected) {
+    const conflict = await env.DB.prepare(
+      "INSERT INTO attendee_conflicts (org_code,expected_id,checkin_id,bound_device_fp,claiming_device_fp,claimed_name,created_at) VALUES (?,?,?,?,?,?,?) RETURNING id"
+    ).bind(org.id, expected.id, id, expected.device_key_fp, attendeeDeviceFp, displayName, t).first();
+    conflictId = conflict?.id || null;
+    await env.DB.prepare("UPDATE org_checkins SET conflict_id=? WHERE id=? AND org_id=?").bind(conflictId, id, org.id).run();
+    link = { linked: false, conflict: true, expected_id: expected.id, conflict_id: conflictId };
+  } else if (expected) {
+      await env.DB.prepare(
+        "UPDATE org_expected SET status='linked', linked_at=COALESCE(linked_at,?), device_key_fp=COALESCE(device_key_fp,?) WHERE id=? AND org_code=?"
+      ).bind(t, attendeeDeviceFp, expected.id, org.id).run();
+      link = { linked: true, expected_id: expected.id, expected_name: `${expected.first_name} ${expected.surname}`.trim() };
   }
   return json({ checkin_id: id, checkin_at: t, org_name: org.name, settings, ...link });
 }
@@ -780,7 +825,9 @@ async function orgCheckin(request, env) {
 async function orgCheckout(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
-  const { checkin_id, attendee_key_id } = body;
+  const url = new URL(request.url);
+  const legacyCheckout = url.searchParams.get("checkout_method") === "legacy";
+  const { checkin_id, attendee_key_id, checkout_payload, signature } = body;
   if (!checkin_id && !attendee_key_id) return err("checkin_id or attendee_key_id required");
   const row = checkin_id
     ? await env.DB.prepare("SELECT * FROM org_checkins WHERE id=? AND org_id=?").bind(checkin_id, org.id).first()
@@ -789,8 +836,23 @@ async function orgCheckout(request, env) {
   if (row.checkout_at) return err("Already checked out");
   const t = now();
   const duration = t - row.checkin_at;
-  await env.DB.prepare("UPDATE org_checkins SET checkout_at=?, duration_s=? WHERE id=?").bind(t, duration, row.id).run();
-  return json({ checkin_id: row.id, checkout_at: t, duration_s: duration });
+  if (legacyCheckout) {
+    await env.DB.prepare("UPDATE org_checkins SET checkout_at=?, duration_s=?, checkout_ts=?, checkout_method=? WHERE id=?")
+      .bind(t, duration, t, "legacy_button", row.id).run();
+    return json({ ok: true, checkin_id: row.id, checkout_at: t, duration_s: duration, checkout_method: "legacy_button" });
+  }
+  if (!checkout_payload || !signature) return err("checkout_payload and signature required", 400);
+  if (checkout_payload.checkin_id !== row.id) return err("checkout payload checkin_id mismatch", 400);
+  if (!checkout_payload.nonce) return err("checkout payload nonce required", 400);
+  if (!row.attendee_pub_jwk) return err("missing_attendee_public_key", 409);
+  const pub = JSON.parse(row.attendee_pub_jwk);
+  const payloadHash = await sha256B64url(canonical(checkout_payload));
+  const valid = await verifySig(payloadHash, signature, pub);
+  if (!valid) return err("invalid_checkout_signature", 401);
+  await env.DB.prepare(
+    "UPDATE org_checkins SET checkout_at=?, duration_s=?, checkout_ts=?, checkout_payload_hash=?, checkout_signature=?, checkout_method=? WHERE id=?"
+  ).bind(t, duration, t, payloadHash, signature, "signed", row.id).run();
+  return json({ ok: true, checkin_id: row.id, checkout_at: t, duration_s: duration, checkout_method: "signed" });
 }
 
 async function orgAttendance(request, env) {
@@ -799,10 +861,10 @@ async function orgAttendance(request, env) {
   const limit = Math.min(parseInt(url.searchParams.get("limit") || "100"), 500);
   const since = url.searchParams.get("since") ? parseInt(url.searchParams.get("since")) : (now() - 86400);
   const rows = await env.DB.prepare(
-    "SELECT id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,checkout_at,duration_s,name FROM org_checkins WHERE org_id=? AND checkin_at>=? ORDER BY checkin_at DESC LIMIT ?"
+    "SELECT id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,checkout_at,duration_s,name,device_key_fp,status,expected_id,conflict_id,CASE WHEN checkout_at IS NOT NULL AND checkout_signature IS NOT NULL THEN 'signed' WHEN checkout_at IS NOT NULL THEN 'legacy_button' ELSE checkout_method END AS checkout_method,checkout_ts FROM org_checkins WHERE org_id=? AND checkin_at>=? ORDER BY checkin_at DESC LIMIT ?"
   ).bind(org.id, since, limit).all();
-  const total_in = rows.results.filter(r => !r.checkout_at).length;
-  const total_out = rows.results.filter(r => r.checkout_at).length;
+  const total_in = rows.results.filter(r => !r.checkout_at && r.status !== "invalid").length;
+  const total_out = rows.results.filter(r => r.checkout_at && r.status !== "invalid").length;
   const avg_score = rows.results.length ? Math.round(rows.results.reduce((s,r) => s+(r.score||0), 0) / rows.results.length) : 0;
   const bio_count = rows.results.filter(r => r.bio_verified).length;
   return json({ checkins: rows.results, stats: { total: rows.results.length, currently_in: total_in, checked_out: total_out, avg_score, bio_verified: bio_count } });
@@ -811,7 +873,7 @@ async function orgAttendance(request, env) {
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at,linked_at FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
   ).bind(org.id).all();
   return json({ expected: rows.results });
 }
@@ -860,6 +922,36 @@ async function orgExpectedUpdate(request, env, id) {
   return json({ expected: row });
 }
 
+async function orgResolveConflict(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const resolution = body.resolution;
+  if (!["confirmed_new_device", "rejected"].includes(resolution)) return err("resolution must be confirmed_new_device or rejected");
+  const conflict = await env.DB.prepare(
+    "SELECT * FROM attendee_conflicts WHERE id=? AND org_code=? AND resolution IS NULL"
+  ).bind(id, org.id).first();
+  if (!conflict) return err("Conflict not found", 404);
+  const t = now();
+  if (resolution === "confirmed_new_device") {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE org_expected SET status='linked', device_key_fp=?, linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=?")
+        .bind(conflict.claiming_device_fp, t, conflict.expected_id, org.id),
+      env.DB.prepare("UPDATE org_checkins SET status='checked_in' WHERE id=? AND org_id=?")
+        .bind(conflict.checkin_id, org.id),
+      env.DB.prepare("UPDATE attendee_conflicts SET resolution=?, resolved_at=? WHERE id=? AND org_code=?")
+        .bind(resolution, t, id, org.id)
+    ]);
+  } else {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE org_checkins SET status='invalid', checkout_at=COALESCE(checkout_at,?), duration_s=COALESCE(duration_s,0) WHERE id=? AND org_id=?")
+        .bind(t, conflict.checkin_id, org.id),
+      env.DB.prepare("UPDATE attendee_conflicts SET resolution=?, resolved_at=? WHERE id=? AND org_code=?")
+        .bind(resolution, t, id, org.id)
+    ]);
+  }
+  return json({ ok: true, conflict_id: id, resolution });
+}
+
 async function orgAuth(request, env) {
   const key = request.headers.get("X-Org-Key") || new URL(request.url).searchParams.get("key");
   if (!key) return authErr("X-Org-Key header required", 401);
@@ -906,6 +998,7 @@ export default {
       else if (method === "GET"  && path === "/org/settings")        response = await orgGetSettings(request, env);
       else if (method === "POST" && path === "/org/settings")        response = await orgUpdateSettings(request, env);
       else if (method === "GET"  && path === "/org/qr")              response = await orgGetQR(request, env);
+      else if (method === "GET"  && path === "/org/recognize")       response = await orgRecognize(request, env);
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
       else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
@@ -913,9 +1006,11 @@ export default {
       else if (method === "POST" && path === "/org/expected")        response = await orgExpectedCreate(request, env);
 
       else {
-        const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
+          const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
+        const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
+        else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
           if (method === "GET" && m) response = await getReceipt(request, env, m[1]);
