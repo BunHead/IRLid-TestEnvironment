@@ -179,6 +179,24 @@
 
   body.ready .hint { opacity:1; }
 
+  .next-btn{
+    display:none;
+    margin:24px auto 0;
+    border:1px solid rgba(255,255,255,0.42);
+    border-radius:999px;
+    padding:11px 18px;
+    background:rgba(0,0,0,0.2);
+    color:#fff;
+    font:inherit;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+    box-shadow:0 8px 18px rgba(0,0,0,0.18);
+  }
+
+  .next-btn.show{ display:inline-flex; }
+  .next-btn:focus-visible{ outline:3px solid rgba(255,255,255,0.7); outline-offset:3px; }
+
   @media (max-width: 700px){
     body.ready .card{
       transform:translateY(-7vh);
@@ -216,6 +234,7 @@
       <h1 class="title" id="title">Welcome to IRLid Event</h1>
       <div class="subtitle" id="subtitle">You’re checked in</div>
       <div class="meta" id="meta"></div>
+      <button class="next-btn" id="nextBtn" type="button">Next scan</button>
       <div class="hint" id="hint"></div>
     </div>
   </div>
@@ -229,12 +248,17 @@
   const mode = (params.get("mode") || "").trim().toLowerCase();
   const checkinId = (params.get("checkin") || "").trim();
   const checkoutNonce = (params.get("nonce") || "").trim();
+  const attendeeName = (params.get("attendee") || params.get("name") || "Alice Smith").trim();
+  const scoreLabel = (params.get("score") || "").trim();
+  const denyReason = (params.get("reason") || "Not on list").trim();
   const eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
   const logoUrl = (params.get("logo") || "").trim();
   const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
   const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());
+  const context = (params.get("ctx") || params.get("from") || "").trim().toLowerCase();
+  const isDoormanContext = type === "doorman" && context === "doorman";
 
   let returnTimer = null;
   let lastTapAt = 0;
@@ -249,6 +273,16 @@
 	  }
 	  return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
 	}
+
+  function returnTargetFor(state) {
+    if (isDoormanContext && (state.status === "review" || state.status === "deny")) return defaultReturnTarget();
+    return redirectUrl || defaultReturnTarget();
+  }
+
+  function goNext(target) {
+    clearTimeout(returnTimer);
+    window.location.href = target;
+  }
 
   function iconMarkup(status) {
 	  if (status === "allow") {
@@ -286,12 +320,11 @@
   function enableDoormanDoubleTap(target) {
     if (type !== "doorman") return;
     const hint = document.getElementById("hint");
-    hint.textContent = "Double tap to return faster";
+    hint.textContent = isDoormanContext ? "Press Esc or Next to scan again" : "Double tap to return faster";
     document.body.addEventListener("pointerup", () => {
       const now = Date.now();
       if (now - lastTapAt < 340) {
-        clearTimeout(returnTimer);
-        window.location.href = target;
+        goNext(target);
       }
       lastTapAt = now;
     });
@@ -303,6 +336,7 @@
     const title = document.getElementById("title");
     const subtitle = document.getElementById("subtitle");
     const meta = document.getElementById("meta");
+    const nextBtn = document.getElementById("nextBtn");
     const logo = document.getElementById("logo");
     const brandFallback = document.getElementById("brandFallback");
 
@@ -327,7 +361,11 @@
 
     requestAnimationFrame(() => body.classList.add("ready"));
 
-    const target = redirectUrl || defaultReturnTarget();
+    const target = returnTargetFor(state);
+    if (nextBtn) {
+      nextBtn.classList.toggle("show", isDoormanContext && (state.status === "review" || state.status === "deny"));
+      nextBtn.onclick = () => goNext(target);
+    }
     scheduleReturn(target);
     enableDoormanDoubleTap(target);
   }
@@ -345,6 +383,11 @@
     logo.classList.remove("show");
     brandFallback.textContent = initialsFor(eventName);
     brandFallback.classList.add("show");
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !isDoormanContext) return;
+    goNext(defaultReturnTarget());
   });
 
   function renderVenue() {
@@ -452,12 +495,13 @@
   }
 
   function renderDoormanMock() {
+  const scoreMeta = scoreLabel ? `Score ${scoreLabel}% · ${returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"}` : (returnAllowed ? "Re-entry allowed" : "Re-entry not allowed");
   if (mode === "review") {
     render({
       status: "review",
-      title: "Needs review",
-      subtitle: "Please check this attendee manually",
-      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+      title: attendeeName || "Needs review",
+      subtitle: "Needs doorman review",
+      meta: scoreMeta
     });
     return;
   }
@@ -465,9 +509,9 @@
   if (mode === "deny") {
     render({
       status: "deny",
-      title: "Not allowed",
-      subtitle: "Not on list",
-      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+      title: attendeeName || "Not allowed",
+      subtitle: denyReason,
+      meta: scoreMeta
     });
     return;
   }
@@ -475,9 +519,9 @@
   if (mode === "allow") {
     render({
       status: "allow",
-      title: "Alice Smith",
+      title: attendeeName || "Alice Smith",
       subtitle: "Expected guest",
-      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+      meta: scoreMeta
     });
     return;
   }
@@ -485,9 +529,9 @@
   if (org === "warn") {
     render({
       status: "review",
-      title: "Needs review",
+      title: attendeeName || "Needs review",
       subtitle: "Please check this attendee manually",
-      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+      meta: scoreMeta
     });
     return;
   }
@@ -495,9 +539,9 @@
   if (org === "fail") {
     render({
       status: "deny",
-      title: "Not allowed",
-      subtitle: "Not on list",
-      meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+      title: attendeeName || "Not allowed",
+      subtitle: denyReason,
+      meta: scoreMeta
     });
     return;
   }
