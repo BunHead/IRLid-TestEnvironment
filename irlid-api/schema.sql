@@ -102,6 +102,18 @@ CREATE INDEX IF NOT EXISTS idx_checkins_at ON org_checkins(org_id, checkin_at);
 -- Existing rows remain valid and keep name as NULL.
 ALTER TABLE org_checkins ADD COLUMN name TEXT;
 
+-- Batch 8 additive migration: signed attendee check-out proof.
+-- Existing rows remain valid; legacy button check-outs can be marked explicitly by the Worker.
+ALTER TABLE org_checkins ADD COLUMN attendee_pub_jwk TEXT;
+ALTER TABLE org_checkins ADD COLUMN checkout_payload_hash TEXT;
+ALTER TABLE org_checkins ADD COLUMN checkout_signature TEXT;
+ALTER TABLE org_checkins ADD COLUMN checkout_ts INTEGER;
+ALTER TABLE org_checkins ADD COLUMN checkout_method TEXT DEFAULT 'signed';
+ALTER TABLE org_checkins ADD COLUMN device_key_fp TEXT;
+ALTER TABLE org_checkins ADD COLUMN status TEXT DEFAULT 'checked_in';
+ALTER TABLE org_checkins ADD COLUMN expected_id INTEGER;
+ALTER TABLE org_checkins ADD COLUMN conflict_id INTEGER;
+
 -- Batch 3 additive migration: org-managed expected attendees.
 -- Purely additive; existing tables and rows are untouched.
 CREATE TABLE IF NOT EXISTS org_expected (
@@ -117,3 +129,19 @@ CREATE INDEX IF NOT EXISTS idx_org_expected_org ON org_expected(org_code);
 -- Batch 4 additive migration: first-seen timestamp when a new check-in links an expected attendee.
 -- Existing expected rows stay untouched with linked_at as NULL.
 ALTER TABLE org_expected ADD COLUMN linked_at INTEGER;
+ALTER TABLE org_expected ADD COLUMN device_key_fp TEXT;
+
+-- Batch 8 additive migration: name/device conflicts for expected attendees.
+CREATE TABLE IF NOT EXISTS attendee_conflicts (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_code           TEXT NOT NULL,
+  expected_id        INTEGER NOT NULL,
+  checkin_id         TEXT,
+  bound_device_fp    TEXT,
+  claiming_device_fp TEXT NOT NULL,
+  claimed_name       TEXT NOT NULL,
+  created_at         INTEGER NOT NULL,
+  resolution         TEXT DEFAULT NULL,
+  resolved_at        INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_attendee_conflicts_org ON attendee_conflicts(org_code, resolution);

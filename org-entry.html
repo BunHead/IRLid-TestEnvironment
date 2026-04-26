@@ -220,11 +220,15 @@
     </div>
   </div>
 
+<script src="js/sign.js?v=3.1"></script>
 <script>
   const params = new URLSearchParams(window.location.search);
   const type = (params.get("type") || "").trim().toLowerCase();
-  const org = (params.get("org") || "").trim().toLowerCase();
+  const orgParam = (params.get("org") || "").trim();
+  const org = orgParam.toLowerCase();
   const mode = (params.get("mode") || "").trim().toLowerCase();
+  const checkinId = (params.get("checkin") || "").trim();
+  const checkoutNonce = (params.get("nonce") || "").trim();
   const eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
@@ -236,6 +240,7 @@
   let lastTapAt = 0;
 
   const returnTo = (params.get("returnTo") || "").trim();
+  const API_BASE = "https://irlid-api-test.irlid-bunhead.workers.dev";
 
 	function defaultReturnTarget() {
 	  if (returnTo) return returnTo;
@@ -350,6 +355,100 @@
       subtitle: welcomeMessage || "You’re checked in",
       meta
     });
+    recordVenueCheckin().catch((err) => console.warn("Venue check-in record failed", err));
+  }
+
+  async function postOrg(path, body) {
+    if (!orgParam) throw new Error("Missing organisation key");
+    const response = await fetch(API_BASE + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Org-Key": orgParam },
+      body: JSON.stringify(body)
+    });
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
+    return data;
+  }
+
+  async function getOrg(path) {
+    const response = await fetch(API_BASE + path);
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
+    return data;
+  }
+
+  async function deviceKeyFingerprint(pub) {
+    const hash = await sha256Bytes(canonical(pub));
+    return b64urlEncode(hash).slice(0, 16);
+  }
+
+  async function recognizedNameForDevice(pub) {
+    const localName = localStorage.getItem(`irlid_org_name_${orgParam}`) || "";
+    const fp = await deviceKeyFingerprint(pub);
+    if (localName) return localName;
+    try {
+      const result = await getOrg(`/org/recognize?org=${encodeURIComponent(orgParam)}&device_pub=${encodeURIComponent(fp)}`);
+      if (result?.recognized && result.name) {
+        localStorage.setItem(`irlid_org_name_${orgParam}`, result.name);
+        return result.name;
+      }
+    } catch (err) {
+      console.warn("Venue recognition failed", err);
+    }
+    return "";
+  }
+
+  async function recordVenueCheckin() {
+    if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") return;
+    const pub = compactJwk(await getPublicJwk());
+    const helloPayload = { mode: "attendee_scan", org: orgParam, pub, ts: Math.floor(Date.now() / 1000), v: 1 };
+    const helloHash = await hashPayloadToB64url(helloPayload, 3);
+    const cachedName = await recognizedNameForDevice(pub);
+    const payload = await postOrg("/org/checkin", {
+      mode: "attendee_scan",
+      helloPayload,
+      helloHash,
+      attendeeLabel: cachedName,
+      name: cachedName,
+      score: 70,
+      bioVerified: false
+    });
+    if (payload?.checkin_id) localStorage.setItem(`irlid_org_last_checkin_${orgParam}`, payload.checkin_id);
+    if (payload?.expected_name) localStorage.setItem(`irlid_org_name_${orgParam}`, payload.expected_name);
+    if (payload?.conflict) {
+      render({ status: "review", title: "Identity review", subtitle: "This name is linked to another device", meta: "The doorman can confirm or reject this phone" });
+    } else if (cachedName || payload?.expected_name) {
+      const welcomeName = payload?.expected_name || cachedName;
+      render({ status: "allow", title: `Welcome back, ${welcomeName}`, subtitle: welcomeMessage || "You’re checked in", meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed" });
+    }
+  }
+
+  async function renderCheckout() {
+    if (!checkinId || !checkoutNonce) {
+      render({ status: "deny", title: "Check-out unavailable", subtitle: "Missing check-out details", meta: "Ask the doorman to retry" });
+      return;
+    }
+    try {
+      const checkoutPayload = { checkin_id: checkinId, nonce: checkoutNonce, ts: Math.floor(Date.now() / 1000), v: 1 };
+      const payloadHash = await hashPayloadToB64url(checkoutPayload, 3);
+      const signature = await signHashB64url(payloadHash);
+      const result = await postOrg("/org/checkout", { checkin_id: checkinId, checkout_payload: checkoutPayload, signature });
+      render({
+        status: "allow",
+        title: "Check-out signed",
+        subtitle: "Check-out signed and recorded",
+        meta: result.checkout_method === "signed" ? "Cryptographic proof accepted" : "Check-out recorded"
+      });
+    } catch (err) {
+      render({
+        status: "deny",
+        title: "Check-out rejected",
+        subtitle: err.message || "Could not sign this check-out",
+        meta: "Use the same phone that checked in"
+      });
+    }
   }
 
   function renderDoormanMock() {
@@ -421,7 +520,9 @@
   });
 }
 
-if (type === "venue") {
+if (type === "checkout") {
+    renderCheckout();
+  } else if (type === "venue") {
     renderVenue();
   } else if (type === "doorman") {
     renderDoormanMock();

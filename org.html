@@ -175,8 +175,16 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .score-low { background: #3d1c1c; color: var(--red); }
 .status-in { color: var(--green); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
 .status-out { color: var(--red); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
+.status-conflict { color: var(--orange); font-size: 10px; font-weight: 700; }
+.status-invalid { color: var(--muted); font-size: 10px; font-weight: 600; }
+.conflict-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .checkout-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .checkout-error { flex-basis: 100%; color: var(--red); font-size: 11px; margin-top: 3px; }
+.checkout-signed-badge { color: var(--green); font-size: 10px; font-weight: 600; margin-left: 4px; }
+.checkout-legacy-badge { color: var(--orange); font-size: 10px; font-weight: 600; margin-left: 4px; }
+.checkout-qr-panel { flex-basis: 100%; width: 172px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #0b1220; display: grid; gap: 8px; }
+.checkout-qr-box { width: 132px; height: 132px; display: grid; place-items: center; padding: 6px; background: #fff; border-radius: 6px; }
+.checkout-qr-help { color: var(--muted); font-size: 10px; line-height: 1.35; }
 .checkout-row-complete td { animation: checkoutRowSettle 420ms ease; }
 .btn-confirm { background: #da3633; color: #fff; }
 .btn-confirm:hover { background: var(--red); }
@@ -759,6 +767,9 @@ let checkoutConfirmId = null;
 let checkoutBusyId = null;
 let checkoutErrors = {};
 let recentlyCheckedOutId = null;
+let checkoutNonces = {};
+let checkoutQrRefreshId = null;
+let checkoutPollTimer = null;
 let statDisplayValues = { statIn: 0, statOut: 0, statScore: 0, statBio: 0 };
 let hasRenderedStats = false;
 let lastRefreshAt = null;
@@ -1090,7 +1101,7 @@ async function saveExpectedEdit(id) {
 function aggregateAttendees(checkins) {
   const byAttendee = new Map();
   (checkins || []).forEach((row) => {
-    const id = row.attendee_key_id || row.attendee_label || row.name || row.id;
+    const id = row.status === 'conflict' ? `conflict:${row.conflict_id || row.id}` : (row.attendee_key_id || row.attendee_label || row.name || row.id);
     const firstSeen = row.checkin_at || row.created_at || 0;
     const lastSeen = row.checkout_at || row.checkin_at || row.created_at || 0;
     const isActive = !row.checkout_at;
@@ -1104,7 +1115,11 @@ function aggregateAttendees(checkins) {
         scan_count: 1,
         active_checkin_id: isActive ? row.id : null,
         active_since: isActive ? firstSeen : null,
-        checked_out: !isActive
+        checked_out: !isActive,
+        checkout_method: row.checkout_method || null,
+        status: row.status || 'checked_in',
+        conflict_id: row.conflict_id || null,
+        expected_id: row.expected_id || null
       });
       return;
     }
@@ -1116,6 +1131,13 @@ function aggregateAttendees(checkins) {
       existing.active_checkin_id = row.id;
       existing.active_since = firstSeen;
       existing.checked_out = false;
+      existing.checkout_method = null;
+      existing.status = row.status || 'checked_in';
+      existing.conflict_id = row.conflict_id || null;
+      existing.expected_id = row.expected_id || null;
+    } else if (!isActive && !existing.active_checkin_id && row.checkout_method) {
+      existing.checkout_method = row.checkout_method;
+      existing.status = row.status || existing.status;
     }
   });
   return Array.from(byAttendee.values()).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
@@ -1203,56 +1225,95 @@ function renderTable(rows) {
   liveTbody.innerHTML = rows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
     const checkinId = r.active_checkin_id || '';
-    const rowStatus = checkinId ? '<span class="status-in">● IN</span>' : '<span class="status-out">● OUT</span>';
+    const methodBadge = r.checkout_method === 'signed'
+      ? '<span class="checkout-signed-badge">lock signed</span>'
+      : (r.checkout_method === 'legacy_button' ? '<span class="checkout-legacy-badge">legacy</span>' : '');
+    const rowStatus = r.status === 'conflict'
+      ? '<span class="status-conflict">? CONFLICT</span>'
+      : (r.status === 'invalid' ? '<span class="status-invalid">INVALID</span>' : (checkinId ? '<span class="status-in">● IN</span>' : `<span class="status-out">● OUT</span>${methodBadge}`));
     const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
     const actionHtml = buildCheckoutAction(r);
     return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
   }).join('');
 }
 function buildCheckoutAction(row) {
+  if (row.status === 'conflict' && row.conflict_id) {
+    const conflictId = escapeHtml(String(row.conflict_id));
+    return `<div class="conflict-actions"><button class="btn btn-primary btn-sm" type="button" onclick="resolveConflict('${conflictId}','confirmed_new_device')">Confirm new device</button><button class="btn btn-danger btn-sm" type="button" onclick="resolveConflict('${conflictId}','rejected')">Reject</button></div>`;
+  }
+  if (row.status === 'invalid') return '<span style="color:#8b949e;font-size:11px;">Rejected</span>';
   const checkinId = row.active_checkin_id || '';
   const safeId = escapeHtml(checkinId);
   const error = checkoutErrors[checkinId] ? `<div class="checkout-error">${escapeHtml(checkoutErrors[checkinId])}</div>` : '';
   if (!checkinId) return '<span style="color:#8b949e;font-size:11px;">Done</span>';
-  if (checkoutBusyId === checkinId) {
-    return '<div class="checkout-actions"><button class="btn btn-confirm btn-sm btn-loading" type="button" disabled><span class="btn-spinner" aria-hidden="true"></span><span>Checking out...</span></button></div>';
-  }
   if (checkoutConfirmId === checkinId) {
-    return `<div class="checkout-actions"><button class="btn btn-confirm btn-sm" type="button" onclick="confirmCheckout('${safeId}')">Confirm</button><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button>${error}</div>`;
+    return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button><div class="checkout-qr-panel"><div class="checkout-qr-box" id="checkoutQr_${safeId}"></div><div class="checkout-qr-help">Attendee scans this on the same IRLid phone to sign check-out.</div></div>${error}</div>`;
   }
-  return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Check out</button>${error}</div>`;
+  return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Initiate check-out</button>${error}</div>`;
+}
+function checkoutNonceFor(checkinId) {
+  if (!checkoutNonces[checkinId]) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    checkoutNonces[checkinId] = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  }
+  return checkoutNonces[checkinId];
+}
+function buildCheckoutUrl(checkinId) {
+  const url = new URL('org-entry.html', window.location.href);
+  url.searchParams.set('type', 'checkout');
+  url.searchParams.set('org', currentOrg?.api_key || '');
+  url.searchParams.set('checkin', checkinId);
+  url.searchParams.set('nonce', checkoutNonceFor(checkinId));
+  url.searchParams.set('event', currentOrg?.name || portalState.eventCode || 'IRLid Event');
+  if (settings.logoUrl) url.searchParams.set('logo', settings.logoUrl);
+  return url.href;
+}
+function renderCheckoutQr(checkinId) {
+  const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
+  if (!target || !window.QRCode) return;
+  target.innerHTML = '';
+  new QRCode(target, { text: buildCheckoutUrl(checkinId), width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
 }
 function requestCheckout(checkinId) {
   checkoutConfirmId = checkinId;
   checkoutErrors = {};
   renderTable(attendanceData);
+  renderCheckoutQr(checkinId);
+  clearInterval(checkoutQrRefreshId);
+  checkoutQrRefreshId = setInterval(async () => {
+    if (!checkoutConfirmId) return;
+    const activeId = checkoutConfirmId;
+    const previousRow = attendanceData.find(row => row.active_checkin_id === activeId);
+    await refreshAttendance();
+    const stillActive = attendanceData.some(row => row.active_checkin_id === activeId);
+    if (!stillActive) {
+      recentlyCheckedOutId = previousRow?.id || null;
+      cancelCheckout(false);
+      showToast('Signed check-out recorded');
+      setTimeout(() => { recentlyCheckedOutId = null; renderTable(attendanceData); }, 700);
+    } else {
+      renderCheckoutQr(activeId);
+    }
+  }, 2500);
 }
-function cancelCheckout() {
+function cancelCheckout(shouldRender = true) {
   checkoutConfirmId = null;
   checkoutBusyId = null;
   checkoutErrors = {};
-  renderTable(attendanceData);
+  clearInterval(checkoutQrRefreshId);
+  checkoutQrRefreshId = null;
+  if (shouldRender) renderTable(attendanceData);
 }
-async function confirmCheckout(checkinId) {
+async function resolveConflict(conflictId, resolution) {
   if (!currentOrg) return showToast('Load an organisation first', true);
-  if (!checkinId) return showToast('No active check-in found', true);
-  checkoutBusyId = checkinId;
-  checkoutErrors = {};
-  renderTable(attendanceData);
   try {
-    await window.IRLidOrgApi.checkout(currentOrg.api_key, { checkin_id: checkinId });
-    const previousRow = attendanceData.find(row => row.active_checkin_id === checkinId);
-    recentlyCheckedOutId = previousRow?.id || null;
-    checkoutConfirmId = null;
-    checkoutBusyId = null;
+    await window.IRLidOrgApi.resolveConflict(currentOrg.api_key, conflictId, resolution);
     await refreshAttendance();
-    setTimeout(() => { recentlyCheckedOutId = null; renderTable(attendanceData); }, 700);
-    showToast('Check-out recorded');
+    await refreshExpectedAttendees();
+    showToast(resolution === 'confirmed_new_device' ? 'New device confirmed' : 'Conflict rejected');
   } catch (err) {
-    checkoutBusyId = null;
-    checkoutErrors[checkinId] = err.message || 'Could not check attendee out';
-    renderTable(attendanceData);
-    showToast(err.message || 'Could not check attendee out', true);
+    showToast(err.message || 'Could not resolve conflict', true);
   }
 }
 function generateVenueQR() {

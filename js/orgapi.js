@@ -61,6 +61,18 @@
       });
     },
 
+    checkoutLegacy(orgKey, body) {
+      return request("/org/checkout?checkout_method=legacy", {
+        method: "POST",
+        orgKey,
+        body
+      });
+    },
+
+    recognize(orgKey, devicePub) {
+      return request(`/org/recognize?org=${encodeURIComponent(orgKey)}&device_pub=${encodeURIComponent(devicePub)}`);
+    },
+
     listExpected(orgKey) {
       return request("/org/expected", {
         orgKey
@@ -87,6 +99,14 @@
         method: "PATCH",
         orgKey,
         body
+      });
+    },
+
+    resolveConflict(orgKey, id, resolution) {
+      return request(`/org/conflicts/${encodeURIComponent(id)}/resolve`, {
+        method: "POST",
+        orgKey,
+        body: { resolution }
       });
     }
   };
