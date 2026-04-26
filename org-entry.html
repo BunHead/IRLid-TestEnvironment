@@ -38,6 +38,9 @@
     background:#3b2b00;
     overflow:auto;
   }
+  body.flash-allow { animation: scanOutcomeAllow 620ms ease-out both; }
+  body.flash-review { animation: scanOutcomeReview 620ms ease-out both; }
+  body.flash-deny { animation: scanOutcomeDeny 620ms ease-out both; }
 
   .wrap{
     width:min(92vw, 920px);
@@ -145,6 +148,24 @@
 
   @keyframes drawMark {
     to { stroke-dashoffset: 0; }
+  }
+
+  @keyframes scanOutcomeAllow {
+    0% { background:#dfffee; }
+    44% { background:#12da73; }
+    100% { background:var(--green); }
+  }
+
+  @keyframes scanOutcomeReview {
+    0% { background:#fff0bd; }
+    44% { background:#ffb300; }
+    100% { background:#3b2b00; }
+  }
+
+  @keyframes scanOutcomeDeny {
+    0% { background:#ffe0e0; }
+    44% { background:#ff4b4b; }
+    100% { background:var(--red); }
   }
 
   .title{
@@ -300,6 +321,16 @@
       max-height:38vh;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    body.flash-allow,
+    body.flash-review,
+    body.flash-deny,
+    .draw,
+    .icon-svg {
+      animation:none;
+    }
+  }
 </style>
 </head>
 <body>
@@ -432,6 +463,7 @@
 
     body.className = "";
     body.classList.add("status-" + state.status);
+    if (state.status === "allow" || state.status === "deny") body.classList.add("flash-" + state.status);
     if (identityPicker) identityPicker.classList.remove("show");
 
     iconShell.innerHTML = iconMarkup(state.status);
@@ -600,7 +632,7 @@
     const search = document.getElementById("identitySearch");
 
     body.className = "";
-    body.classList.add("status-review", "status-identity");
+    body.classList.add("status-review", "status-identity", "flash-review");
     iconShell.innerHTML = iconMarkup("review");
     title.textContent = "Choose your name";
     subtitle.textContent = "This phone is not linked yet";
