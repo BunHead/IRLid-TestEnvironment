@@ -922,6 +922,40 @@ async function orgExpectedUpdate(request, env, id) {
   return json({ expected: row });
 }
 
+async function orgExpectedRebind(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const newDeviceFp = (body.new_device_fp || "").trim();
+  const reason = body.reason ? String(body.reason).trim() : null;
+  if (!newDeviceFp) return err("new_device_fp required");
+
+  const expected = await env.DB.prepare(
+    "SELECT id,device_key_fp FROM org_expected WHERE id=? AND org_code=?"
+  ).bind(id, org.id).first();
+  if (!expected) return err("Expected attendee not found", 404);
+
+  const t = now();
+  const date = new Date(t * 1000);
+  const monthStart = Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1) / 1000);
+  const nextMonthStart = Math.floor(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) / 1000);
+  const countRow = await env.DB.prepare(
+    "SELECT COUNT(*) AS cnt FROM rebind_history WHERE org_code=? AND expected_id=? AND created_at>=? AND created_at<?"
+  ).bind(org.id, id, monthStart, nextMonthStart).first();
+  if ((countRow?.cnt || 0) >= 2) {
+    return json({ error: "rebind_limit_exceeded", retry_after: nextMonthStart }, 429);
+  }
+
+  const rebind = await env.DB.prepare(
+    "INSERT INTO rebind_history (org_code,expected_id,old_device_fp,new_device_fp,admin_signature,reason,created_at) VALUES (?,?,?,?,?,?,?) RETURNING id"
+  ).bind(org.id, id, expected.device_key_fp || null, newDeviceFp, `${org.id}:${t}`, reason || null, t).first();
+
+  await env.DB.prepare(
+    "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=?"
+  ).bind(newDeviceFp, t, id, org.id).run();
+
+  return json({ ok: true, rebind_id: rebind?.id || null });
+}
+
 async function orgResolveConflict(request, env, id) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -1006,10 +1040,12 @@ export default {
       else if (method === "POST" && path === "/org/expected")        response = await orgExpectedCreate(request, env);
 
       else {
-          const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
+        const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
+        const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
+        else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
         else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
