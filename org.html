@@ -309,6 +309,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .qr-fullscreen-trust strong { color: #e8f0ff; }
 .qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
 .qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
+.checkin-settings-cog { position: fixed; left: 14px; bottom: 14px; z-index: 120; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #151b23; color: var(--text); box-shadow: 0 12px 28px rgba(0,0,0,0.32); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 19px; }
+.checkin-settings-cog:hover, .checkin-settings-cog:focus-visible { border-color: var(--blue); outline: none; }
+body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
@@ -698,6 +701,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 </div>
 
 <div class="toast" id="toast"></div>
+<button class="checkin-settings-cog" id="checkinSettingsCog" type="button" aria-label="Open settings" title="Settings" onclick="openCheckinSettings()">⚙</button>
 <div class="expected-confirm-backdrop hidden" id="expectedConfirmDialog" role="dialog" aria-modal="true" aria-labelledby="expectedConfirmText">
   <div class="expected-confirm">
     <p id="expectedConfirmText"></p>
@@ -817,6 +821,7 @@ function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.strin
 function showPanel(name, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
+  document.body.dataset.activePanel = name;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
   else {
@@ -1623,6 +1628,9 @@ function openSettingsTo(anchorId) {
     el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.style.outline = '1px solid rgba(88,166,255,0.6)'; el.style.borderRadius = '8px';
     setTimeout(() => { el.style.outline = ''; el.style.borderRadius = ''; }, 1800);
   });
+}
+function openCheckinSettings() {
+  showPanel('settings', document.getElementById('navSettings'));
 }
 function showToast(msg, isError=false) { const t = document.getElementById('toast'); t.textContent = msg; t.style.background = isError ? '#da3633' : '#238636'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
 function copyText(text) { if (!text) return; navigator.clipboard?.writeText(text).then(() => showToast('Copied')).catch(() => window.prompt('Copy this text:', text)); }
