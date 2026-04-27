@@ -1344,14 +1344,19 @@ function hardenCheckoutQr(target) {
     node.style.maxWidth = '120px';
     node.style.maxHeight = '120px';
   });
+  const showCanvasQr = () => {
+    if (!canvas) return;
+    canvas.style.display = 'block';
+    if (img) img.style.display = 'none';
+  };
+  showCanvasQr();
   const useCanvasFallback = () => {
     if (!canvas || !img || !checkoutQrLooksBlank(img)) return;
-    canvas.style.display = 'block';
-    img.style.display = 'none';
+    showCanvasQr();
   };
   if (img && !img.complete) img.addEventListener('load', useCanvasFallback, { once: true });
-  requestAnimationFrame(useCanvasFallback);
-  setTimeout(useCanvasFallback, 250);
+  requestAnimationFrame(showCanvasQr);
+  setTimeout(showCanvasQr, 250);
 }
 function renderCheckoutQr(checkinId) {
   const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
@@ -1512,9 +1517,13 @@ function getFullscreenLogoUrl() {
 function fullscreenQR() {
   venueQrPayload = venueQrPayload || buildVenuePayload();
   if (window.IRLidQrFullscreen) {
+    const orgName = currentOrg?.name || portalState.orgCode || 'Venue check-in';
     window.IRLidQrFullscreen.open({
       payload: venueQrPayload,
-      title: currentOrg?.name || portalState.orgCode || 'Venue check-in',
+      title: orgName,
+      logoUrl: getFullscreenLogoUrl(),
+      logoAlt: `${orgName} logo`,
+      showTitle: false,
       subtitle: 'Scan to check in at this organisation'
     });
     return;
