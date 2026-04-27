@@ -86,6 +86,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .mode-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
 .mode-badge.on { background: #1f6feb33; color: var(--blue); border: 1px solid #1f6feb; }
 .mode-badge.off { background: #30363d33; color: var(--muted); border: 1px solid var(--line); }
+.checkin-mode-stage { display: grid; align-items: stretch; }
+.checkin-mode-stage > #venueQRWrap,
+.checkin-mode-stage > #doormanWrap { grid-area: 1 / 1; min-width: 0; }
+.checkin-mode-stage .mode-inactive { visibility: hidden; pointer-events: none; }
 .qr-wrap { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; align-items: center; gap: 18px; }
 .qr-box { width: 170px; height: 170px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.25); overflow: hidden; }
 .qr-box, .qr-box-small, .qr-box-large, .checkout-qr-box { cursor: zoom-in; touch-action: manipulation; }
@@ -476,31 +480,33 @@ body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
                 </div>
               </div>
 
-              <div id="venueQRWrap" class="qr-wrap">
-                <div class="qr-box" id="venueQrBox"></div>
-                <div class="qr-info">
-                  <h4>Venue Check-in QR</h4>
-                  <p>This QR is generated from a local debug URL. It is safe to test visually and generic camera scanning should treat it as a link rather than raw JSON.</p>
-                  <div class="qr-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="loadVenueQR()">↻ Refresh QR</button>
-                    <button class="btn btn-primary btn-sm" onclick="fullscreenQR()">⛶ Fullscreen</button>
-                    <button class="btn btn-secondary btn-sm" onclick="copyText(venueQrPayload)">Copy URL</button>
+              <div class="checkin-mode-stage" id="checkinModeStage">
+                <div id="venueQRWrap" class="qr-wrap" aria-hidden="false">
+                  <div class="qr-box" id="venueQrBox"></div>
+                  <div class="qr-info">
+                    <h4>Venue Check-in QR</h4>
+                    <p>This QR is generated from a local debug URL. It is safe to test visually and generic camera scanning should treat it as a link rather than raw JSON.</p>
+                    <div class="qr-actions">
+                      <button class="btn btn-secondary btn-sm" onclick="loadVenueQR()">↻ Refresh QR</button>
+                      <button class="btn btn-primary btn-sm" onclick="fullscreenQR()">⛶ Fullscreen</button>
+                      <button class="btn btn-secondary btn-sm" onclick="copyText(venueQrPayload)">Copy URL</button>
+                    </div>
+                    <div class="qr-payload-preview" id="qrPayloadPreview"></div>
                   </div>
-                  <div class="qr-payload-preview" id="qrPayloadPreview"></div>
                 </div>
-              </div>
 
-              <div id="doormanWrap" style="display:none;">
-                <div class="scan-panel" id="doormanPanel">
-                  <div class="scan-panel-title">Doorman Console</div>
-                  <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
+                <div id="doormanWrap" class="mode-inactive" aria-hidden="true">
+                  <div class="scan-panel" id="doormanPanel">
+                    <div class="scan-panel-title">Doorman Console</div>
+                    <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
 
-                  <div class="input-group" style="margin-bottom:10px;">
-                    <label>Manual check-in (attendee label)</label>
-                    <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
+                    <div class="input-group" style="margin-bottom:10px;">
+                      <label>Manual check-in (attendee label)</label>
+                      <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
+                    </div>
+                    <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
+                    <div class="checkin-result" id="manualCheckinResult"></div>
                   </div>
-                  <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
-                  <div class="checkin-result" id="manualCheckinResult"></div>
                 </div>
               </div>
 
@@ -1376,8 +1382,14 @@ function selectMode(mode) {
   document.querySelector('#modeAttendee .mode-badge').textContent = mode === 'attendee_scan' ? '✓ Active at door' : 'Switch to this';
   document.querySelector('#modeDoorman .mode-badge').className = 'mode-badge ' + (mode === 'doorman_scan' ? 'on' : 'off');
   document.querySelector('#modeDoorman .mode-badge').textContent = mode === 'doorman_scan' ? '✓ Active at door' : 'Switch to this';
-  document.getElementById('venueQRWrap').style.display = mode === 'attendee_scan' ? 'flex' : 'none';
-  document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
+  const venueWrap = document.getElementById('venueQRWrap');
+  const doormanWrap = document.getElementById('doormanWrap');
+  const venueInactive = mode !== 'attendee_scan';
+  const doormanInactive = mode !== 'doorman_scan';
+  venueWrap.classList.toggle('mode-inactive', venueInactive);
+  doormanWrap.classList.toggle('mode-inactive', doormanInactive);
+  venueWrap.setAttribute('aria-hidden', String(venueInactive));
+  doormanWrap.setAttribute('aria-hidden', String(doormanInactive));
   generateVenueQR();
 }
 let manualCheckinFeedbackTimer = null;
