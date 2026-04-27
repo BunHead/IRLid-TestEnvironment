@@ -288,6 +288,43 @@
   .identity-pill{ flex:0 0 auto; border:1px solid rgba(255,255,255,0.28); border-radius:999px; padding:3px 8px; color:rgba(255,255,255,0.78); font-size:11px; }
   .identity-error{ min-height:18px; margin-top:10px; color:#ffe4e4; font-size:13px; line-height:1.35; }
   .identity-walkin{ margin-top:12px; justify-content:center; font-weight:700; }
+  .hello-panel{
+    display:none;
+    width:min(100%, 420px);
+    margin:24px auto 0;
+    padding:14px;
+    border:1px solid rgba(255,255,255,0.24);
+    border-radius:12px;
+    background:rgba(0,0,0,0.18);
+  }
+  .hello-panel.show{ display:block; }
+  .hello-actions{ display:flex; justify-content:center; }
+  .hello-btn{
+    border:1px solid rgba(255,255,255,0.36);
+    border-radius:999px;
+    padding:11px 16px;
+    background:rgba(0,0,0,0.24);
+    color:#fff;
+    font:inherit;
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+  }
+  .hello-btn:focus-visible{ outline:3px solid rgba(255,255,255,0.7); outline-offset:3px; }
+  .hello-qr{
+    display:none;
+    width:240px;
+    height:240px;
+    margin:14px auto 0;
+    padding:10px;
+    border-radius:10px;
+    background:#fff;
+    cursor:zoom-in;
+    touch-action:manipulation;
+  }
+  .hello-qr.show{ display:grid; place-items:center; }
+  .hello-qr canvas,.hello-qr img{ max-width:220px; max-height:220px; }
+  .hello-status{ min-height:17px; margin-top:10px; color:rgba(255,255,255,0.72); font-size:12px; line-height:1.35; text-align:center; }
 
   @media (max-width: 700px){
     body.ready .card{
@@ -350,11 +387,20 @@
         <button class="identity-walkin" id="identityWalkinBtn" type="button">I'm not on the list</button>
         <div class="identity-error" id="identityError"></div>
       </div>
+      <div class="hello-panel" id="helloPanel">
+        <div class="hello-actions">
+          <button class="hello-btn" id="showHelloBtn" type="button">Show my check-in QR</button>
+        </div>
+        <div class="hello-qr" id="helloQrBox" aria-label="Attendee HELLO QR"></div>
+        <div class="hello-status" id="helloStatus"></div>
+      </div>
     </div>
   </div>
 
 <script src="js/sign.js?v=3.1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="js/orgapi.js"></script>
+<script src="js/qr-fullscreen.js"></script>
 <script>
   const params = new URLSearchParams(window.location.search);
   const type = (params.get("type") || "").trim().toLowerCase();
@@ -378,6 +424,7 @@
   let returnTimer = null;
   let lastTapAt = 0;
   let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
+  let helloQrData = "";
 
   const returnTo = (params.get("returnTo") || "").trim();
   const API_BASE = "https://irlid-api-test.irlid-bunhead.workers.dev";
@@ -460,11 +507,13 @@
     const logo = document.getElementById("logo");
     const brandFallback = document.getElementById("brandFallback");
     const identityPicker = document.getElementById("identityPicker");
+    const helloPanel = document.getElementById("helloPanel");
 
     body.className = "";
     body.classList.add("status-" + state.status);
     if (state.status === "allow" || state.status === "deny") body.classList.add("flash-" + state.status);
     if (identityPicker) identityPicker.classList.remove("show");
+    if (helloPanel) helloPanel.classList.toggle("show", type !== "checkout");
 
     iconShell.innerHTML = iconMarkup(state.status);
     title.textContent = state.title;
@@ -491,6 +540,7 @@
     }
     scheduleReturn(target);
     enableDoormanDoubleTap(target);
+    configureHelloPanel();
   }
 
   function applyBranding() {
@@ -638,6 +688,7 @@
     subtitle.textContent = "This phone is not linked yet";
     meta.textContent = "Select yourself from the expected list";
     if (nextBtn) nextBtn.classList.remove("show");
+    document.getElementById("helloPanel")?.classList.remove("show");
     applyBranding();
     picker.classList.add("show");
     requestAnimationFrame(() => body.classList.add("ready"));
@@ -736,6 +787,78 @@
     } else if (cachedName || payload?.expected_name) {
       const welcomeName = payload?.expected_name || cachedName;
       render({ status: "allow", title: `Welcome back, ${welcomeName}`, subtitle: welcomeMessage || "You’re checked in", meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed" });
+    }
+  }
+
+  function configureHelloPanel() {
+    const btn = document.getElementById("showHelloBtn");
+    if (!btn || btn.dataset.bound === "true") return;
+    btn.dataset.bound = "true";
+    btn.addEventListener("click", showHelloQr);
+  }
+
+  function setHelloStatus(message, isError=false) {
+    const el = document.getElementById("helloStatus");
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = isError ? "#ffe4e4" : "rgba(255,255,255,0.72)";
+  }
+
+  function normalizeHelloQr(target) {
+    target.querySelectorAll("canvas, img").forEach((node) => {
+      const hiddenCanvas = node.tagName === "CANVAS" && getComputedStyle(node).display === "none";
+      if (hiddenCanvas) return;
+      node.style.width = "100%";
+      node.style.height = "100%";
+      node.style.maxWidth = "100%";
+      node.style.maxHeight = "100%";
+      node.style.display = "block";
+    });
+  }
+
+  async function showHelloQr() {
+    clearTimeout(returnTimer);
+    const btn = document.getElementById("showHelloBtn");
+    const box = document.getElementById("helloQrBox");
+    if (!btn || !box) return;
+    btn.disabled = true;
+    btn.textContent = "Creating QR...";
+    setHelloStatus("Getting location and signing HELLO...");
+    try {
+      if (typeof makeSignedHelloAsync !== "function") throw new Error("Signing helpers unavailable");
+      const hello = await makeSignedHelloAsync();
+      const helloB64 = irlidEncodeJsonToB64url(hello);
+      localStorage.setItem("irlid_last_hello_b64", helloB64);
+      if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
+        helloQrData = "HZ:" + await irlidCompressToB64url(hello);
+      } else {
+        helloQrData = "H:" + helloB64;
+      }
+      box.innerHTML = "";
+      if (typeof QRCode === "function") {
+        new QRCode(box, { text: helloQrData, width: 220, height: 220, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        normalizeHelloQr(box);
+        requestAnimationFrame(() => normalizeHelloQr(box));
+      } else {
+        box.textContent = "QR unavailable";
+      }
+      box.dataset.qrFullscreenPayload = helloQrData;
+      box.dataset.qrFullscreenTitle = "My check-in QR";
+      box.dataset.qrFullscreenSubtitle = "Show this HELLO QR to the doorman";
+      box.classList.add("show");
+      setHelloStatus("Show this QR to the doorman. Double-tap it for fullscreen.");
+      if (window.IRLidQrFullscreen) {
+        window.IRLidQrFullscreen.open({
+          payload: helloQrData,
+          title: "My check-in QR",
+          subtitle: "Show this HELLO QR to the doorman"
+        });
+      }
+    } catch (err) {
+      setHelloStatus(err.message || "Could not create check-in QR", true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Refresh my check-in QR";
     }
   }
 

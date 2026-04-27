@@ -112,6 +112,9 @@
   window.makeQR = async function makeQR(elId, data, size = 320) {
     const el = elById(elId);
     clear(el);
+    el.dataset.qrFullscreenPayload = String(data);
+    if (!el.dataset.qrFullscreenTitle) el.dataset.qrFullscreenTitle = "IRLid QR";
+    if (!el.dataset.qrFullscreenSubtitle) el.dataset.qrFullscreenSubtitle = "Double-tap to view fullscreen";
 
     // Fit on screen: prefer clamping rather than forcing horizontal scroll.
     el.style.overflowX = "hidden";

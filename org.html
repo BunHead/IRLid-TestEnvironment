@@ -6,6 +6,7 @@
 <title>IRLid — Organisation Portal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="js/orgapi.js"></script>
+<script src="js/qr-fullscreen.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -85,8 +86,13 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .mode-badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
 .mode-badge.on { background: #1f6feb33; color: var(--blue); border: 1px solid #1f6feb; }
 .mode-badge.off { background: #30363d33; color: var(--muted); border: 1px solid var(--line); }
+.checkin-mode-stage { display: grid; align-items: stretch; }
+.checkin-mode-stage > #venueQRWrap,
+.checkin-mode-stage > #doormanWrap { grid-area: 1 / 1; min-width: 0; }
+.checkin-mode-stage .mode-inactive { visibility: hidden; pointer-events: none; }
 .qr-wrap { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; align-items: center; gap: 18px; }
 .qr-box { width: 170px; height: 170px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.25); overflow: hidden; }
+.qr-box, .qr-box-small, .qr-box-large, .checkout-qr-box { cursor: zoom-in; touch-action: manipulation; }
 .qr-box > div, .qr-box canvas, .qr-box img { max-width: 150px; max-height: 150px; }
 .qr-info { flex: 1; }
 .qr-info h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
@@ -307,6 +313,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .qr-fullscreen-trust strong { color: #e8f0ff; }
 .qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
 .qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
+.checkin-settings-cog { position: fixed; left: clamp(16px, calc(220px + 24px), calc(100vw - 60px)); bottom: 18px; z-index: 120; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #151b23; color: var(--text); box-shadow: 0 12px 28px rgba(0,0,0,0.32); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 19px; }
+.checkin-settings-cog:hover, .checkin-settings-cog:focus-visible { border-color: var(--blue); outline: none; }
+body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
@@ -471,31 +480,33 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
                 </div>
               </div>
 
-              <div id="venueQRWrap" class="qr-wrap">
-                <div class="qr-box" id="venueQrBox"></div>
-                <div class="qr-info">
-                  <h4>Venue Check-in QR</h4>
-                  <p>This QR is generated from a local debug URL. It is safe to test visually and generic camera scanning should treat it as a link rather than raw JSON.</p>
-                  <div class="qr-actions">
-                    <button class="btn btn-secondary btn-sm" onclick="loadVenueQR()">↻ Refresh QR</button>
-                    <button class="btn btn-primary btn-sm" onclick="fullscreenQR()">⛶ Fullscreen</button>
-                    <button class="btn btn-secondary btn-sm" onclick="copyText(venueQrPayload)">Copy URL</button>
+              <div class="checkin-mode-stage" id="checkinModeStage">
+                <div id="venueQRWrap" class="qr-wrap" aria-hidden="false">
+                  <div class="qr-box" id="venueQrBox"></div>
+                  <div class="qr-info">
+                    <h4>Venue Check-in QR</h4>
+                    <p>This QR is generated from a local debug URL. It is safe to test visually and generic camera scanning should treat it as a link rather than raw JSON.</p>
+                    <div class="qr-actions">
+                      <button class="btn btn-secondary btn-sm" onclick="loadVenueQR()">↻ Refresh QR</button>
+                      <button class="btn btn-primary btn-sm" onclick="fullscreenQR()">⛶ Fullscreen</button>
+                      <button class="btn btn-secondary btn-sm" onclick="copyText(venueQrPayload)">Copy URL</button>
+                    </div>
+                    <div class="qr-payload-preview" id="qrPayloadPreview"></div>
                   </div>
-                  <div class="qr-payload-preview" id="qrPayloadPreview"></div>
                 </div>
-              </div>
 
-              <div id="doormanWrap" style="display:none;">
-                <div class="scan-panel" id="doormanPanel">
-                  <div class="scan-panel-title">Doorman Console</div>
-                  <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
+                <div id="doormanWrap" class="mode-inactive" aria-hidden="true">
+                  <div class="scan-panel" id="doormanPanel">
+                    <div class="scan-panel-title">Doorman Console</div>
+                    <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
 
-                  <div class="input-group" style="margin-bottom:10px;">
-                    <label>Manual check-in (attendee label)</label>
-                    <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
+                    <div class="input-group" style="margin-bottom:10px;">
+                      <label>Manual check-in (attendee label)</label>
+                      <input type="text" id="manualLabel" placeholder="Name or ID (optional)" />
+                    </div>
+                    <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
+                    <div class="checkin-result" id="manualCheckinResult"></div>
                   </div>
-                  <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
-                  <div class="checkin-result" id="manualCheckinResult"></div>
                 </div>
               </div>
 
@@ -696,6 +707,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 </div>
 
 <div class="toast" id="toast"></div>
+<button class="checkin-settings-cog" id="checkinSettingsCog" type="button" aria-label="Open settings" title="Settings" onclick="openCheckinSettings()">⚙</button>
 <div class="expected-confirm-backdrop hidden" id="expectedConfirmDialog" role="dialog" aria-modal="true" aria-labelledby="expectedConfirmText">
   <div class="expected-confirm">
     <p id="expectedConfirmText"></p>
@@ -815,6 +827,7 @@ function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.strin
 function showPanel(name, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + name).classList.add('active');
+  document.body.dataset.activePanel = name;
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
   else {
@@ -1305,7 +1318,11 @@ function renderCheckoutQr(checkinId) {
   const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
   if (!target || !window.QRCode) return;
   target.innerHTML = '';
-  new QRCode(target, { text: buildCheckoutUrl(checkinId), width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  const url = buildCheckoutUrl(checkinId);
+  new QRCode(target, { text: url, width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  target.dataset.qrFullscreenPayload = url;
+  target.dataset.qrFullscreenTitle = 'Check-out QR';
+  target.dataset.qrFullscreenSubtitle = 'Attendee scans this with the same IRLid phone';
 }
 function requestCheckout(checkinId) {
   checkoutConfirmId = checkinId;
@@ -1352,6 +1369,9 @@ function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
   venueQrPayload = buildVenuePayload(); box.innerHTML = '';
   new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  box.dataset.qrFullscreenPayload = venueQrPayload;
+  box.dataset.qrFullscreenTitle = 'Venue check-in QR';
+  box.dataset.qrFullscreenSubtitle = 'Scan to check in at this organisation';
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
 function selectMode(mode) {
@@ -1362,8 +1382,14 @@ function selectMode(mode) {
   document.querySelector('#modeAttendee .mode-badge').textContent = mode === 'attendee_scan' ? '✓ Active at door' : 'Switch to this';
   document.querySelector('#modeDoorman .mode-badge').className = 'mode-badge ' + (mode === 'doorman_scan' ? 'on' : 'off');
   document.querySelector('#modeDoorman .mode-badge').textContent = mode === 'doorman_scan' ? '✓ Active at door' : 'Switch to this';
-  document.getElementById('venueQRWrap').style.display = mode === 'attendee_scan' ? 'flex' : 'none';
-  document.getElementById('doormanWrap').style.display = mode === 'doorman_scan' ? 'block' : 'none';
+  const venueWrap = document.getElementById('venueQRWrap');
+  const doormanWrap = document.getElementById('doormanWrap');
+  const venueInactive = mode !== 'attendee_scan';
+  const doormanInactive = mode !== 'doorman_scan';
+  venueWrap.classList.toggle('mode-inactive', venueInactive);
+  doormanWrap.classList.toggle('mode-inactive', doormanInactive);
+  venueWrap.setAttribute('aria-hidden', String(venueInactive));
+  doormanWrap.setAttribute('aria-hidden', String(doormanInactive));
   generateVenueQR();
 }
 let manualCheckinFeedbackTimer = null;
@@ -1445,6 +1471,14 @@ function getFullscreenLogoUrl() {
 }
 function fullscreenQR() {
   venueQrPayload = venueQrPayload || buildVenuePayload();
+  if (window.IRLidQrFullscreen) {
+    window.IRLidQrFullscreen.open({
+      payload: venueQrPayload,
+      title: currentOrg?.name || portalState.orgCode || 'Venue check-in',
+      subtitle: 'Scan to check in at this organisation'
+    });
+    return;
+  }
   const orgName = currentOrg?.name || portalState.orgCode || 'IRLid Event';
   const eventName = portalState.eventCode || currentOrg?.name || 'Venue check-in';
   const logoUrl = getFullscreenLogoUrl();
@@ -1607,6 +1641,9 @@ function openSettingsTo(anchorId) {
     setTimeout(() => { el.style.outline = ''; el.style.borderRadius = ''; }, 1800);
   });
 }
+function openCheckinSettings() {
+  showPanel('settings', document.getElementById('navSettings'));
+}
 function showToast(msg, isError=false) { const t = document.getElementById('toast'); t.textContent = msg; t.style.background = isError ? '#da3633' : '#238636'; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
 function copyText(text) { if (!text) return; navigator.clipboard?.writeText(text).then(() => showToast('Copied')).catch(() => window.prompt('Copy this text:', text)); }
 
@@ -1647,6 +1684,9 @@ function renderQr(targetId, text, size, colorLight='#ffffff', correctLevel=null)
   const target = document.getElementById(targetId); if (!target) return; target.innerHTML = '';
   if (typeof QRCode === 'undefined') { target.textContent = 'QR unavailable'; return; }
   new QRCode(target, { text, width: size, height: size, colorDark: '#000000', colorLight, correctLevel: correctLevel || QRCode.CorrectLevel.M });
+  target.dataset.qrFullscreenPayload = text;
+  target.dataset.qrFullscreenTitle = targetId === 'scanQr' ? 'Scanner QR' : 'Outcome QR';
+  target.dataset.qrFullscreenSubtitle = 'Double-tap any QR to view fullscreen';
 }
 function buildPortalSummaryText() {
   return [
