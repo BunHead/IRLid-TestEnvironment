@@ -80,6 +80,21 @@ CREATE TABLE IF NOT EXISTS organisations (
 CREATE INDEX IF NOT EXISTS idx_org_apikey ON organisations(api_key);
 CREATE INDEX IF NOT EXISTS idx_org_slug ON organisations(slug);
 
+-- Batch 13 Task 1 additive migration: short-lived staff HELLO auth sessions.
+CREATE TABLE IF NOT EXISTS org_staff_sessions (
+  id                 TEXT PRIMARY KEY,
+  org_id             TEXT NOT NULL REFERENCES organisations(id),
+  staff_pub_fp       TEXT NOT NULL,
+  staff_pub_jwk      TEXT NOT NULL,
+  hello_hash         TEXT NOT NULL,
+  verification_state TEXT NOT NULL,
+  created_at         INTEGER NOT NULL,
+  expires_at         INTEGER NOT NULL,
+  last_seen_at       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_staff_sessions_org ON org_staff_sessions(org_id, expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_sessions_org_hello ON org_staff_sessions(org_id, hello_hash);
+
 CREATE TABLE IF NOT EXISTS org_checkins (
   id              TEXT PRIMARY KEY,
   org_id          TEXT NOT NULL REFERENCES organisations(id),

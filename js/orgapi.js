@@ -53,6 +53,14 @@
       });
     },
 
+    authenticateStaff(orgKey, hello) {
+      return request("/org/staff/auth", {
+        method: "POST",
+        orgKey,
+        body: { hello }
+      });
+    },
+
     checkout(orgKey, body) {
       return request("/org/checkout", {
         method: "POST",
