@@ -105,6 +105,19 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .scan-panel.flash-error { animation: doormanFlashError 300ms ease; }
 .scan-panel-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .scan-panel-sub { font-size: 11px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+.staff-auth-panel { margin-bottom: 12px; background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.staff-auth-panel.authenticated { border-color: rgba(35,134,54,0.75); box-shadow: 0 0 0 1px rgba(35,134,54,0.12) inset; }
+.staff-auth-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.staff-auth-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.staff-auth-sub { font-size: 11px; color: var(--muted); line-height: 1.5; }
+.staff-auth-badge { flex-shrink: 0; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.staff-auth-badge.on { border-color: rgba(35,134,54,0.78); background: rgba(35,134,54,0.18); color: var(--green); }
+.staff-auth-input { width: 100%; min-height: 82px; resize: vertical; background: #0a0f15; border: 1px solid var(--line); border-radius: 7px; color: var(--text); padding: 10px; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.staff-auth-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(88,166,255,0.16); }
+.staff-auth-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.staff-auth-status { margin-top: 10px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.staff-auth-status.ok { color: var(--green); }
+.staff-auth-status.error { color: var(--red); }
 .expected-list { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #11161d; overflow: hidden; }
 .expected-head { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .expected-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
@@ -498,6 +511,21 @@ body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
                 </div>
 
                 <div id="doormanWrap" class="mode-inactive" aria-hidden="true">
+                  <div class="staff-auth-panel" id="staffAuthPanel" data-testid="staff-auth-panel">
+                    <div class="staff-auth-head">
+                      <div>
+                        <div class="staff-auth-title">Staff Auth</div>
+                        <div class="staff-auth-sub">Paste a staff HELLO QR payload to smoke-test the session endpoint. Manual check-in remains enabled.</div>
+                      </div>
+                      <div class="staff-auth-badge" id="staffAuthBadge">Unauthenticated</div>
+                    </div>
+                    <textarea class="staff-auth-input" id="staffHelloInput" data-testid="staff-hello-input" placeholder="Paste H: or HZ: HELLO payload"></textarea>
+                    <div class="staff-auth-actions">
+                      <button class="btn btn-primary btn-sm" type="button" id="staffAuthBtn">Authenticate staff</button>
+                      <button class="btn btn-secondary btn-sm" type="button" id="staffAuthClearBtn">Clear session</button>
+                    </div>
+                    <div class="staff-auth-status" id="staffAuthStatus">No staff session active.</div>
+                  </div>
                   <div class="scan-panel" id="doormanPanel">
                     <div class="scan-panel-title">Doorman Console</div>
                     <div class="scan-panel-sub">Use this mode when staff are actively admitting attendees. Preferred long-term plan: reuse the normal IRLid scan window for HELLO codes, then branch into expected-attendee matching when needed.</div>
@@ -729,6 +757,7 @@ const STORAGE_KEY_ORG = "irlid_mock_org";
 const STORAGE_KEY_SETTINGS = "irlid_mock_settings";
 const STORAGE_KEY_EXPECTED = "irlid_mock_expected_attendees";
 const STORAGE_KEY_PORTAL = 'irlid_portal_full_v1';
+const STAFF_AUTH_STORAGE_KEY = 'irlid_staff_auth_session_v1';
 const SCAN_URL = 'https://bunhead.github.io/IRLid-TestEnvironment/scan.html';
 const OUTCOME_BASES = {
   allow: 'https://bunhead.github.io/IRLid-TestEnvironment/org-entry.html?type=doorman&org=test',
@@ -798,6 +827,8 @@ let expectedDeleteMode = false;
 let expectedDeleteTargetId = null;
 let expectedEditId = null;
 let expectedEditError = '';
+let staffAuthSession = null;
+let staffAuthExpiryTimer = null;
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -879,6 +910,7 @@ function setSignedInUI(isSignedIn) {
     document.getElementById('sidebarOrgPlan').textContent = 'Load or register an organisation';
   }
   updateChromeLogo();
+  if (isSignedIn) refreshStaffAuthPanel();
 }
 async function registerOrg() {
   const name = document.getElementById('orgNameInput').value.trim();
@@ -909,7 +941,7 @@ async function loadExistingKey() {
   document.getElementById('orgNameInput').value = currentOrg.name || '';
   setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('dashboard'); showToast('Organisation loaded');
 }
-function signOutOrg() { currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
+function signOutOrg() { clearStaffAuthSession(); currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
 function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
 function buildVenuePayload() {
   const baseUrl = 'https://bunhead.github.io/IRLid-TestEnvironment';
@@ -1390,6 +1422,106 @@ function generateVenueQR() {
   box.dataset.qrFullscreenSubtitle = 'Scan to check in at this organisation';
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
+function staffAuthKey() {
+  return `${STAFF_AUTH_STORAGE_KEY}:${currentOrg?.api_key || 'none'}`;
+}
+function staffAuthNow() {
+  return Math.floor(Date.now() / 1000);
+}
+function loadStaffAuthSession() {
+  if (!currentOrg) { staffAuthSession = null; return null; }
+  try {
+    const raw = sessionStorage.getItem(staffAuthKey());
+    const saved = raw ? JSON.parse(raw) : null;
+    if (!saved || saved.org_key !== currentOrg.api_key || !saved.staff_session || !saved.expires_at) {
+      staffAuthSession = null;
+      return null;
+    }
+    if (Number(saved.expires_at) <= staffAuthNow()) {
+      sessionStorage.removeItem(staffAuthKey());
+      staffAuthSession = null;
+      return null;
+    }
+    staffAuthSession = saved;
+    return saved;
+  } catch {
+    staffAuthSession = null;
+    return null;
+  }
+}
+function saveStaffAuthSession(session) {
+  staffAuthSession = session;
+  if (currentOrg) sessionStorage.setItem(staffAuthKey(), JSON.stringify(session));
+}
+function formatStaffAuthExpiry(expiresAt) {
+  if (!expiresAt) return 'unknown';
+  return new Date(Number(expiresAt) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function scheduleStaffAuthExpiry() {
+  clearTimeout(staffAuthExpiryTimer);
+  staffAuthExpiryTimer = null;
+  if (!staffAuthSession?.expires_at) return;
+  const ms = Math.max(0, (Number(staffAuthSession.expires_at) - staffAuthNow()) * 1000);
+  staffAuthExpiryTimer = setTimeout(() => clearStaffAuthSession('Staff session expired. Paste a fresh HELLO to authenticate.'), ms + 250);
+}
+function renderStaffAuthPanel(message, isError=false) {
+  const panel = document.getElementById('staffAuthPanel');
+  const badge = document.getElementById('staffAuthBadge');
+  const status = document.getElementById('staffAuthStatus');
+  if (!panel || !badge || !status) return;
+
+  if (staffAuthSession?.expires_at && Number(staffAuthSession.expires_at) <= staffAuthNow()) {
+    clearStaffAuthSession('Staff session expired. Paste a fresh HELLO to authenticate.');
+    return;
+  }
+
+  const authenticated = !!staffAuthSession?.staff_session;
+  panel.classList.toggle('authenticated', authenticated);
+  badge.classList.toggle('on', authenticated);
+  badge.textContent = authenticated ? 'Authenticated' : 'Unauthenticated';
+  status.className = `staff-auth-status ${authenticated ? 'ok' : isError ? 'error' : ''}`;
+  if (authenticated) {
+    status.textContent = `Authenticated staff ${staffAuthSession.staff_pub_fp || 'fingerprint unavailable'} until ${formatStaffAuthExpiry(staffAuthSession.expires_at)}.`;
+  } else {
+    status.textContent = message || 'No staff session active.';
+  }
+  scheduleStaffAuthExpiry();
+}
+function clearStaffAuthSession(message='No staff session active.') {
+  if (currentOrg) sessionStorage.removeItem(staffAuthKey());
+  staffAuthSession = null;
+  clearTimeout(staffAuthExpiryTimer);
+  staffAuthExpiryTimer = null;
+  renderStaffAuthPanel(message);
+}
+async function authenticateStaffHello() {
+  const input = document.getElementById('staffHelloInput');
+  const btn = document.getElementById('staffAuthBtn');
+  const hello = (input?.value || '').trim();
+  if (!currentOrg) return renderStaffAuthPanel('Load an organisation before authenticating staff.', true);
+  if (!hello) return renderStaffAuthPanel('Paste a staff HELLO payload first.', true);
+  if (!window.IRLidOrgApi?.authenticateStaff) return renderStaffAuthPanel('Staff auth API helper unavailable.', true);
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Authenticating...'; }
+  try {
+    const result = await window.IRLidOrgApi.authenticateStaff(currentOrg.api_key, hello);
+    saveStaffAuthSession({
+      org_key: currentOrg.api_key,
+      staff_session: result.staff_session,
+      expires_at: result.expires_at,
+      staff_pub_fp: result.staff_pub_fp
+    });
+    renderStaffAuthPanel();
+  } catch (err) {
+    renderStaffAuthPanel(err.message || 'Staff auth failed.', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Authenticate staff'; }
+  }
+}
+function refreshStaffAuthPanel() {
+  loadStaffAuthSession();
+  renderStaffAuthPanel();
+}
 function selectMode(mode) {
   currentMode = mode;
   document.getElementById('modeAttendee').classList.toggle('selected', mode === 'attendee_scan');
@@ -1407,6 +1539,7 @@ function selectMode(mode) {
   venueWrap.setAttribute('aria-hidden', String(venueInactive));
   doormanWrap.setAttribute('aria-hidden', String(doormanInactive));
   generateVenueQR();
+  refreshStaffAuthPanel();
 }
 let manualCheckinFeedbackTimer = null;
 function flashDoormanPanel(kind) {
@@ -1865,6 +1998,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
+  document.getElementById('staffAuthBtn')?.addEventListener('click', authenticateStaffHello);
+  document.getElementById('staffAuthClearBtn')?.addEventListener('click', () => clearStaffAuthSession('Staff session cleared. Paste another HELLO to authenticate.'));
   setInterval(updateRelativeRefresh, 30000);
   document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
   document.getElementById('expectedDeleteBtn')?.addEventListener('click', (event) => {
