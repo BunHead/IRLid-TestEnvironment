@@ -960,6 +960,59 @@ async function orgAttendance(request, env) {
   return json({ checkins: rows.results, stats: { total: rows.results.length, currently_in: total_in, checked_out: total_out, avg_score, bio_verified: bio_count } });
 }
 
+function isDebugOrg(org) {
+  const key = String(org.api_key || "");
+  const slug = String(org.slug || "").toLowerCase();
+  return key === "org_DEV_IRLID_TEST_ENVIRONMENT" || key.startsWith("org_DEV_") || slug === "dev" || slug.startsWith("codex-");
+}
+
+async function tableExists(env, tableName) {
+  const row = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+  ).bind(tableName).first();
+  return !!row;
+}
+
+async function orgDebugClearAttendance(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  if (!isDebugOrg(org)) return err("Debug attendance clear is only available for DEV/test orgs", 403);
+
+  let body; try { body = await request.json(); } catch { body = {}; }
+  const includeExpected = !!body.include_expected;
+
+  const checkins = await env.DB.prepare("DELETE FROM org_checkins WHERE org_id=?").bind(org.id).run();
+  const conflicts = await env.DB.prepare("DELETE FROM attendee_conflicts WHERE org_code=?").bind(org.id).run();
+  let checkoutTokensCleared = 0;
+  if (await tableExists(env, "org_checkout_tokens")) {
+    const tokens = await env.DB.prepare("DELETE FROM org_checkout_tokens WHERE org_id=?").bind(org.id).run();
+    checkoutTokensCleared = tokens.meta?.changes || 0;
+  }
+
+  let expectedCleared = 0;
+  if (includeExpected) {
+    const expectedIds = await env.DB.prepare("SELECT id FROM org_expected WHERE org_code=?").bind(org.id).all();
+    const ids = (expectedIds.results || []).map(r => r.id);
+    if (ids.length && await tableExists(env, "rebind_history")) {
+      for (const id of ids) {
+        await env.DB.prepare("DELETE FROM rebind_history WHERE org_code=? AND expected_id=?").bind(org.id, id).run();
+      }
+    }
+    const expected = await env.DB.prepare("DELETE FROM org_expected WHERE org_code=?").bind(org.id).run();
+    expectedCleared = expected.meta?.changes || 0;
+  }
+
+  return json({
+    ok: true,
+    org_key: org.api_key,
+    cleared: {
+      checkins: checkins.meta?.changes || 0,
+      conflicts: conflicts.meta?.changes || 0,
+      checkout_tokens: checkoutTokensCleared,
+      expected_attendees: expectedCleared
+    }
+  });
+}
+
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
@@ -1153,6 +1206,7 @@ export default {
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
       else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
+      else if (method === "POST" && path === "/org/debug/clear-attendance") response = await orgDebugClearAttendance(request, env);
       else if (method === "GET"  && path === "/org/expected")        response = await orgExpectedList(request, env);
       else if (method === "POST" && path === "/org/expected")        response = await orgExpectedCreate(request, env);
 
