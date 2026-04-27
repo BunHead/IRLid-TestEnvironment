@@ -15,6 +15,8 @@
     overlay.innerHTML = `
       <button class="irlid-qr-fullscreen-close" type="button" aria-label="Close QR">&times;</button>
       <div class="irlid-qr-fullscreen-inner">
+        <img class="irlid-qr-fullscreen-logo" data-qr-logo alt="">
+        <div class="irlid-qr-fullscreen-fallback" data-qr-fallback>IRL</div>
         <div class="irlid-qr-fullscreen-title" data-qr-title></div>
         <div class="irlid-qr-fullscreen-holder" id="irlidQrFullscreenHolder"></div>
         <div class="irlid-qr-fullscreen-subtitle" data-qr-subtitle></div>
@@ -38,6 +40,8 @@
       .irlid-qr-fullscreen{display:none;position:fixed;inset:0;z-index:100000;background:#05070c;color:#fff;align-items:center;justify-content:center;padding:clamp(16px,3vmin,32px);box-sizing:border-box;}
       .irlid-qr-fullscreen.active{display:flex;}
       .irlid-qr-fullscreen-inner{width:min(100%,900px);display:grid;justify-items:center;gap:clamp(12px,2vmin,20px);text-align:center;}
+      .irlid-qr-fullscreen-logo{display:none;width:min(28vmin,170px);max-width:48vw;max-height:min(18vmin,150px);object-fit:contain;filter:drop-shadow(0 12px 28px rgba(0,0,0,0.34));}
+      .irlid-qr-fullscreen-fallback{display:none;min-width:min(20vmin,92px);min-height:min(15vmin,70px);align-items:center;justify-content:center;border-radius:14px;background:#f8fbff;color:#08101d;font:800 clamp(20px,5vmin,30px)/1 "Segoe UI",system-ui,sans-serif;letter-spacing:.03em;}
       .irlid-qr-fullscreen-title{min-height:1.2em;font:800 clamp(22px,4vmin,48px)/1.05 "Segoe UI",system-ui,sans-serif;}
       .irlid-qr-fullscreen-subtitle{min-height:1.2em;color:rgba(255,255,255,0.72);font:600 clamp(12px,1.6vmin,16px)/1.35 "Segoe UI",system-ui,sans-serif;}
       .irlid-qr-fullscreen-holder{width:min(76vmin,720px);aspect-ratio:1;display:grid;place-items:center;padding:clamp(10px,1.8vmin,18px);box-sizing:border-box;background:#fff;border-radius:clamp(12px,2vmin,22px);box-shadow:0 28px 90px rgba(0,0,0,0.54);}
@@ -109,7 +113,26 @@
     injectStyles();
     ensureOverlay();
     active = true;
-    overlay.querySelector("[data-qr-title]").textContent = options.title || "IRLid QR";
+    const title = overlay.querySelector("[data-qr-title]");
+    const logo = overlay.querySelector("[data-qr-logo]");
+    const fallback = overlay.querySelector("[data-qr-fallback]");
+    const logoUrl = (options.logoUrl || "").trim();
+    if (logoUrl) {
+      logo.src = logoUrl;
+      logo.alt = options.logoAlt || options.title || "IRLid logo";
+      logo.style.display = "block";
+      fallback.style.display = "none";
+      logo.onerror = () => {
+        logo.style.display = "none";
+        fallback.style.display = "flex";
+      };
+      title.textContent = options.showTitle === false ? "" : (options.title || "");
+    } else {
+      logo.removeAttribute("src");
+      logo.style.display = "none";
+      fallback.style.display = "flex";
+      title.textContent = options.title || "IRLid QR";
+    }
     overlay.querySelector("[data-qr-subtitle]").textContent = options.subtitle || "";
     overlay.classList.add("active");
     document.body.style.overflow = "hidden";
