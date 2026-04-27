@@ -45,6 +45,10 @@ Priority:
 4. Checkout token API foundation.
 5. Short checkout QR UI.
 
+Optional debug maintenance:
+
+- Add a guarded test-only dashboard action for clearing smoke/test attendance rows from the current debug org.
+
 These are protocol tasks, not visual polish. Expect Worker + D1 + frontend changes.
 
 Batch 13 was intentionally split smaller after live checkout QR debugging showed that apparently simple QR UI changes can hide browser-specific rendering failures.

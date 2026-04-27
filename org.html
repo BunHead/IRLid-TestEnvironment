@@ -1336,6 +1336,9 @@ function renderCheckoutQr(checkinId) {
   target.dataset.qrFullscreenPayload = url;
   target.dataset.qrFullscreenTitle = 'Check-out QR';
   target.dataset.qrFullscreenSubtitle = 'Attendee scans this with the same IRLid phone';
+  target.dataset.qrFullscreenLogoUrl = getFullscreenLogoUrl();
+  target.dataset.qrFullscreenLogoAlt = `${currentOrg?.name || portalState.orgCode || 'Organisation'} logo`;
+  target.dataset.qrFullscreenShowTitle = 'true';
 }
 function requestCheckout(checkinId) {
   checkoutConfirmId = checkinId;

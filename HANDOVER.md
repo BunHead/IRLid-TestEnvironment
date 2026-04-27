@@ -21,6 +21,7 @@ Move the test environment one step closer to real protocol behaviour:
 
 1. A doorman/staff device must cryptographically authenticate itself with its own signed HELLO before it can record check-ins.
 2. Checkout QR payloads should become short, scannable URLs backed by Worker-side token resolution.
+3. Debug mode should get a safe maintenance path for clearing test attendance datasets.
 
 This is not a polish batch. It touches frontend state, Worker endpoints, and D1 schema.
 
@@ -50,6 +51,29 @@ This is not a polish batch. It touches frontend state, Worker endpoints, and D1 
 - No Doorman UI gating in this task.
 
 **PR title:** `[codex] Staff auth session foundation`
+
+## Optional Debug Maintenance Task - Clear Test Attendance Dataset
+
+**Goal:** In DEV/debug mode only, allow the dashboard test attendance dataset to be cleared without touching live production data.
+
+**Files:** `org.html`, `js/orgapi.js`, `irlid-api/src/index.js`.
+
+**Behaviour:**
+
+- Add a debug-only dashboard action such as "Clear test attendance".
+- Require an explicit confirmation dialog that names the current organisation key.
+- Worker endpoint must reject non-DEV/non-test org keys.
+- Clear test check-ins, conflict rows, and any related checkout tokens for the current test org.
+- Do not clear expected attendees unless a separate checkbox is explicitly selected.
+- Never run against live `BunHead/IRLid`.
+
+**Acceptance:**
+
+- DevSmoke/Codex smoke rows can be removed from the dashboard in test mode.
+- Non-test org key returns 403.
+- Confirmation cancel leaves data untouched.
+
+**PR title:** `[codex] Debug clear test attendance dataset`
 
 ## Task 2 - Staff Auth UI Smoke Panel
 
