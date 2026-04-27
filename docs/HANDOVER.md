@@ -1,113 +1,53 @@
-IRLid Test Environment — Handover Log (Full)
-Status
+# IRLid Test Environment - Handover Log
 
-End-to-end QR → scan → entry flow operational in test environment.
+## Current Status
 
-System is frontend-driven with mocked decision logic.
+TestEnvironment is the active sandbox for organisation portal, venue QR, attendee entry, expected-attendee binding, signed check-in/check-out, and QR presentation work.
 
-Environment
-Frontend: https://bunhead.github.io/IRLid-TestEnvironment/
-Scanner: https://bunhead.github.io/IRLid-TestEnvironment/scan.html
-Portal: https://bunhead.github.io/IRLid-TestEnvironment/org.html
-Entry: https://bunhead.github.io/IRLid-TestEnvironment/org-entry.html
-Worker (test): https://irlid-api-test.irlid-bunhead.workers.dev/
-Architecture
+Live frontend:
 
-QR codes encode URLs (not JSON payloads).
+- Portal: `https://bunhead.github.io/IRLid-TestEnvironment/org.html`
+- Entry: `https://bunhead.github.io/IRLid-TestEnvironment/org-entry.html`
+- Scanner: `https://bunhead.github.io/IRLid-TestEnvironment/scan.html`
 
-Flow:
+Test Worker:
 
-QR → scan.html → redirect → org-entry.html → render state
-scan.html = router
-org-entry.html = renderer
-org.html = QR generator + config
-Parameter Contract (CRITICAL)
+- `https://irlid-api-test.irlid-bunhead.workers.dev/`
 
-org-entry.html reads:
+## Recent Landed Work
 
-type → venue | doorman
-mode → allow | review | deny (doorman only)
-org → string
-event → string
-returnAllowed → true/false
-redirect → optional URL
-logo → optional URL
-welcome → optional string
-Key Outcomes
+- Batch 8: cryptographic identity/check-out foundation.
+- Batch 9: fullscreen QR and doorman flow polish.
+- Batch 10: expected attendees in both modes and identity recovery foundation.
+- Batch 11: first-scan expected-attendee claim flow and scan outcome flashes.
+- Batch 12: fullscreen QR regression fix, attendee HELLO QR, shared QR fullscreen shell, Venue/Doorman height equalisation.
 
-✔ Frontend ↔ worker connectivity confirmed
-✔ CORS resolved
-✔ /auth/me responding
-✔ QR → scan → entry routing works
-✔ Venue QR working
-✔ Doorman QR (mode-based) working
-✔ Allow / Review / Deny states render correctly
+Batch 12 had a stacked-PR carry-forward issue: PR #37 reached `main` first, while PR #38/#39 initially landed only on stacked branches. PR #40 carried the full Batch 12 stack onto `main`.
 
-Critical Fixes (Session)
-Fixed crash:
-venueQrPayload = buildVenuePayload();
-Added mode param to QR URLs
-→ required for correct outcome rendering
-Fixed boolean parsing:
-returnAllowed
-Added mode handling in entry page:
-mode → allow / review / deny
-Known Issue (Resolved)
+## Known Live Hardening Items
 
-Bug: All scans showed green (allow)
+The user still observed after PR #40:
 
-Cause:
+- Checkout QR position sometimes appears as a white square.
+- Bottom settings/check-in controls can sit too close to the viewport/taskbar edge.
 
-Missing mode param
-Fallback default = allow
+A follow-up hardening branch should be merged before Batch 13 protocol work begins.
 
-Fix:
+## Current Protocol Direction
 
-Portal now injects mode
-Entry reads and applies it
-Behaviour
-allow → green screen + tick
-review → amber + question
-deny → red + cross
-QR System
-Venue Mode
-type=venue
+Batch 13 is drafted in root `HANDOVER.md`.
 
-→ Always allow (check-in flow)
+Priority:
 
-Doorman Mode
-type=doorman
-mode=allow|review|deny
+1. Staff/doorman self-authentication with signed HELLO before manual check-in.
+2. Short Worker-backed checkout QR tokens to reduce QR density.
 
-→ Simulates backend decision
+These are protocol tasks, not visual polish. Expect Worker + D1 + frontend changes.
 
-Limitations
-No signature validation
-No real identity verification
-Mock attendee data
-No persistence beyond localStorage
-Animations not final
-Known Quirks
-Browser cache can retain old QR behaviour
-GitHub Pages caching delay
-file:// mode uses fallback redirect
-Missing params default to allow
-Source of Truth
+## Guardrails
 
-Portal (org.html) builds all QR URLs.
-
-Entry page is stateless renderer only.
-
-Next Steps
-UX polish (animations + clarity)
-Decide: mock-first vs backend integration
-Implement signed QR payloads
-Replace mock attendee logic
-Clean legacy / duplicate settings paths
-Summary
-
-System is stable.
-QR routing is correct.
-Architecture is now coherent.
-
-Ready for external review.
+- TestEnvironment only.
+- Do not touch live `BunHead/IRLid`.
+- No retroactive database rewrites.
+- D1 migrations must be idempotent.
+- GitHub Pages deployment must be checked directly after merge.

@@ -1,85 +1,112 @@
-# HANDOVER.md — Mr. Data Brief (Batch 11 — First-Scan Identity Flow)
+# HANDOVER.md - Mr. Data Brief (Batch 13 Draft)
 
-**Issued:** 27 April 2026 (evening) by Number One
-**Repo scope:** `BunHead/IRLid-TestEnvironment` only.
-**Working rule:** 3 atomic tasks. UX + small Worker work.
+**Issued:** 27 April 2026 by Mr. Data
+**Repo scope:** `BunHead/IRLid-TestEnvironment` only. Do not touch live `BunHead/IRLid`.
+**Working rule:** 3 atomic tasks, stacked only if each PR clearly states its base branch.
+**Current main:** Batch 12 carried to `main` by PR #40.
 
-**Pre-requisite:** Batch 10 PRs #29/#30/#31 merged to main. Verify via `git log origin/main --oneline -10`. If not, stop.
+## Batch 12 Live Hardening Prerequisite
 
----
+Before starting Batch 13 protocol work, merge and deploy the live-hardening fix that:
 
-## Task 1 — First-scan: detect unrecognised device → orange flash + Expected list picker
+- Makes checkout QR rendering robust when the generated QR image appears as a white square.
+- Keeps the Check-in settings control and sidebar bottom area clear of the viewport/taskbar edge.
+- Re-tests GitHub Pages after deployment, not just local files.
 
-**Goal:** When an attendee scans the venue QR and their device key is not yet bound to any Expected Attendee for this org, present the Expected list as a picker so they can claim themselves.
+If the live site still shows a blank checkout QR or a bottom control hidden by the taskbar, stop and fix that first.
 
-**Files:** `org-entry.html` (or wherever the post-scan attendee page lives), `js/orgapi.js`.
+## Batch 13 Goal
 
-**Behaviour:**
-- On scan-arrival page load: client computes its own `device_key_fp` from its localStorage key (or generates one if first ever) and calls `GET /org/recognize?device_pub=<fp>`
-- If `recognized: true`: existing flow — proceed to check-in (this is unchanged)
-- If `recognized: false`:
-  - Background of the page flashes **orange** (matching the Review-state colour from Doorman flow) — single flash, ~600ms ease-out, then settles to a steady amber tinted background to indicate "needs identity"
-  - Page shows the org's Expected attendees list as a tappable picker
-  - Search box at the top of the list filters by First+Surname (case-insensitive, real-time)
-  - "I'm not on the list" walk-in option at the bottom (preserves current anonymous path)
-- On pick: `POST /org/expected/:id/claim` with body `{device_pub_fp}`. Worker binds `device_key_fp` on the row IF not already bound to a different device (otherwise returns 409 conflict — handled by Task 2 of Batch 8 already; surface conflict here as "Already claimed by another device — see organiser")
-- On successful claim: short success state, then return to the fullscreen venue QR (the scan window) so the attendee can scan again now-recognised
+Move the test environment one step closer to real protocol behaviour:
 
-**Acceptance:**
-- New device first scan → orange flash + Expected list with search → pick → claim succeeds → returns to scan window
-- Recognised device on subsequent scans: existing fast-path, no list shown
-- "I'm not on the list" → existing walk-in flow unchanged
-- Conflict on claim (someone else's device already bound to that name) → clear inline error, no state corruption
+1. A doorman/staff device must cryptographically authenticate itself with its own signed HELLO before it can record check-ins.
+2. Checkout QR payloads should become short, scannable URLs backed by Worker-side token resolution.
 
-**PR title:** `[codex] First-scan unrecognised flow — orange flash + Expected list picker`
+This is not a polish batch. It touches frontend state, Worker endpoints, and D1 schema.
 
----
+## Task 1 - Staff HELLO Auth Foundation
 
-## Task 2 — Outcome flashes on scan: green accept, red deny
+**Goal:** Add a Worker-backed staff authentication primitive that verifies a signed HELLO and returns a short-lived staff session.
 
-**Goal:** When a scan completes (after recognition or after fresh claim), the post-scan page background flashes green (accepted) or red (denied) before showing the welcome/redirect or the deny state.
-
-**Files:** `org-entry.html` (or post-scan handler), CSS, `accept.html` if separate.
+**Files:** `irlid-api/src/index.js`, `irlid-api/schema.sql`, `js/orgapi.js`.
 
 **Behaviour:**
-- On accept (recognised + within score threshold): background flashes green ~600ms then settles to existing welcome state (with logo + "Welcome to [org]")
-- On deny (score below threshold, or conflict, or other rejection): background flashes red ~600ms then shows deny state with reason
-- Orange flash from Task 1 (unrecognised → needs identity) coexists; no conflict
-- `prefers-reduced-motion: reduce` swaps flashes for solid colour without animation
-- Flashes are CSS-only
+
+- Add idempotent D1 migration for a staff auth/session table, for example `org_staff_sessions`.
+- Add `POST /org/staff/auth`.
+- Request body accepts the staff HELLO payload in the same compact/raw forms used by attendee HELLO QR.
+- Worker verifies the HELLO signature against the included public JWK using existing canonical/signature helpers or the closest local equivalent.
+- Worker binds the staff session to the organisation API key used by the portal request.
+- Return `{ok:true, staff_session:<opaque token>, expires_at, staff_pub_fp}`.
+- TTL should be short, suggested 15 minutes.
+- No retroactive rewrites of old check-ins.
 
 **Acceptance:**
-- Accept path: orange flash on first scan (Task 1) → claim → return → second scan green flash → welcome
-- Deny path: red flash → deny state visible
-- Reduced-motion respected
 
-**PR title:** `[codex] Scan outcome flashes — green accept, red deny`
+- Valid signed HELLO returns a staff session.
+- Tampered HELLO returns 400/401.
+- Expired timestamp returns 401.
+- Same HELLO replay within a short tolerance is either idempotent or clearly rejected, but must not corrupt state.
 
----
+**PR title:** `[codex] Staff HELLO auth foundation`
 
-## Task 3 — Worker `POST /org/expected/:id/claim` endpoint
+## Task 2 - Gate Doorman Check-in Behind Staff Auth
 
-**Goal:** Backing endpoint for Task 1's pick-from-list flow. Binds the chosen Expected Attendee's `device_key_fp` to the scanning device's key.
+**Goal:** The Doorman Console cannot record manual check-ins until the current staff/doorman device has authenticated.
 
-**Files:** `irlid-api/src/index.js`, `irlid-api/schema.sql` (no new tables — uses existing `org_expected.device_key_fp`).
+**Files:** `org.html`, `org-entry.html`, `js/orgapi.js`.
 
 **Behaviour:**
-- `POST /org/expected/:id/claim` with body `{device_pub_fp}`. Auth: org context (the scanner is on the org's check-in page; pass org's public key in headers as today, or use the same DEV auto-login pattern).
-- If `org_expected.device_key_fp` is null → set it to `device_pub_fp`, return `{ok: true, expected: <row>}`
-- If already set to same fp → idempotent success (handles double-tap)
-- If already set to a *different* fp → return `409 {error: "already_claimed", existing_fp_short: <first 8 chars>}` so client can surface "claimed by another device"
-- No new schema; piggybacks on Task 2 of Batch 8's `device_key_fp` column
+
+- In Doorman mode, show an authentication panel above the manual check-in controls.
+- Support a testable scanner path for a staff HELLO QR. If camera scanning is not available in `org.html`, provide a clear debug import/paste route for `H:` / `HZ:` HELLO payloads.
+- Store staff session in memory or `sessionStorage`, not durable localStorage.
+- Manual check-in button remains disabled until staff auth succeeds.
+- Expired staff session disables manual check-in again.
+- Existing attendee HELLO generation remains intact.
 
 **Acceptance:**
-- Live smoke: claim unbound expected → success. Claim same expected with same fp → idempotent success. Claim with different fp → 409.
-- Worker version documented in PR description
 
-**PR title:** `[codex] Worker /org/expected/:id/claim — bind device to Expected row`
+- Fresh page in Doorman mode: manual check-in disabled.
+- Valid staff HELLO auth: manual check-in enabled and shows authenticated staff fingerprint.
+- Expired/cleared session: manual check-in disabled again.
+- Existing Venue QR mode unaffected.
 
----
+**PR title:** `[codex] Gate doorman check-in behind staff HELLO auth`
 
-## Stop after Task 3
+## Task 3 - Short Checkout QR Tokens
 
-**Hard wall:** no live `IRLid` repo. No protocol changes. No retroactive rewrites.
+**Goal:** Replace long checkout URLs with short Worker-backed tokens so checkout QR codes render at scannable density on large screens and mobile devices.
 
-— Number One
+**Files:** `irlid-api/src/index.js`, `irlid-api/schema.sql`, `org.html`, `org-entry.html`, `js/orgapi.js`.
+
+**Behaviour:**
+
+- Add idempotent D1 migration for checkout token storage, for example `org_checkout_tokens`.
+- Add `POST /org/checkout-token` for the org portal to create a short token for an active check-in.
+- Add `GET /org/checkout-token/:token` or equivalent resolution endpoint.
+- QR should encode a short URL such as `org-entry.html?type=checkout&t=<token>` rather than embedding org key, check-in id, nonce, event, and logo in the visible QR.
+- `org-entry.html` resolves the token, then continues the existing signed checkout path.
+- Tokens expire quickly, suggested 5 minutes.
+- Do not backfill or rewrite old check-ins.
+
+**Acceptance:**
+
+- Checkout QR visibly contains black modules and passes a pixel/density smoke test.
+- Token URL is substantially shorter than the previous checkout URL.
+- Valid token resolves and checkout still requires the same attendee signing path.
+- Expired/unknown token shows a clear error.
+
+**PR title:** `[codex] Short checkout QR tokens`
+
+## Verification Required Per Task
+
+- Inline scripts parse with Node.
+- `node --check` for changed JS files.
+- `git diff --check` clean aside from normal Windows CRLF warnings.
+- Worker endpoints tested with local or remote smoke commands.
+- Browser smoke tests for the actual UI path, including QR pixel checks where a QR is expected.
+
+## Stop Point
+
+Stop after Task 3. Report PR links, deployment state, and any D1 migration applied.
