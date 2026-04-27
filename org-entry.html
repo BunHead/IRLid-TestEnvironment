@@ -34,6 +34,13 @@
   body.status-allow { background: var(--green); }
   body.status-review { background: var(--amber); }
   body.status-deny { background: var(--red); }
+  body.status-identity {
+    background:#3b2b00;
+    overflow:auto;
+  }
+  body.flash-allow { animation: scanOutcomeAllow 620ms ease-out both; }
+  body.flash-review { animation: scanOutcomeReview 620ms ease-out both; }
+  body.flash-deny { animation: scanOutcomeDeny 620ms ease-out both; }
 
   .wrap{
     width:min(92vw, 920px);
@@ -143,6 +150,24 @@
     to { stroke-dashoffset: 0; }
   }
 
+  @keyframes scanOutcomeAllow {
+    0% { background:#dfffee; }
+    44% { background:#12da73; }
+    100% { background:var(--green); }
+  }
+
+  @keyframes scanOutcomeReview {
+    0% { background:#fff0bd; }
+    44% { background:#ffb300; }
+    100% { background:#3b2b00; }
+  }
+
+  @keyframes scanOutcomeDeny {
+    0% { background:#ffe0e0; }
+    44% { background:#ff4b4b; }
+    100% { background:var(--red); }
+  }
+
   .title{
     margin:0;
     font-size:clamp(32px, 6vw, 72px);
@@ -197,6 +222,110 @@
   .next-btn.show{ display:inline-flex; }
   .next-btn:focus-visible{ outline:3px solid rgba(255,255,255,0.7); outline-offset:3px; }
 
+  .identity-picker{
+    display:none;
+    width:min(100%, 560px);
+    margin:24px auto 0;
+    text-align:left;
+  }
+
+  .identity-picker.show{ display:block; }
+
+  .identity-search{
+    width:100%;
+    border:1px solid rgba(255,255,255,0.36);
+    border-radius:8px;
+    padding:12px 14px;
+    background:rgba(0,0,0,0.24);
+    color:#fff;
+    font:inherit;
+    font-size:16px;
+    outline:none;
+  }
+
+  .identity-search::placeholder{ color:rgba(255,255,255,0.62); }
+
+  .identity-list{
+    margin-top:12px;
+    max-height:min(42vh, 360px);
+    overflow:auto;
+    display:grid;
+    gap:8px;
+  }
+
+  .identity-row,
+  .identity-walkin{
+    width:100%;
+    border:1px solid rgba(255,255,255,0.24);
+    border-radius:8px;
+    padding:12px 14px;
+    background:rgba(0,0,0,0.22);
+    color:#fff;
+    font:inherit;
+    text-align:left;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+
+  .identity-row:hover,
+  .identity-row:focus-visible,
+  .identity-walkin:hover,
+  .identity-walkin:focus-visible{
+    background:rgba(255,255,255,0.14);
+    outline:none;
+  }
+
+  .identity-row[disabled]{
+    opacity:0.58;
+    cursor:wait;
+  }
+
+  .identity-row-name{ font-weight:700; }
+  .identity-row-meta{ color:rgba(255,255,255,0.66); font-size:12px; margin-top:3px; }
+  .identity-pill{ flex:0 0 auto; border:1px solid rgba(255,255,255,0.28); border-radius:999px; padding:3px 8px; color:rgba(255,255,255,0.78); font-size:11px; }
+  .identity-error{ min-height:18px; margin-top:10px; color:#ffe4e4; font-size:13px; line-height:1.35; }
+  .identity-walkin{ margin-top:12px; justify-content:center; font-weight:700; }
+  .hello-panel{
+    display:none;
+    width:min(100%, 420px);
+    margin:24px auto 0;
+    padding:14px;
+    border:1px solid rgba(255,255,255,0.24);
+    border-radius:12px;
+    background:rgba(0,0,0,0.18);
+  }
+  .hello-panel.show{ display:block; }
+  .hello-actions{ display:flex; justify-content:center; }
+  .hello-btn{
+    border:1px solid rgba(255,255,255,0.36);
+    border-radius:999px;
+    padding:11px 16px;
+    background:rgba(0,0,0,0.24);
+    color:#fff;
+    font:inherit;
+    font-size:14px;
+    font-weight:800;
+    cursor:pointer;
+  }
+  .hello-btn:focus-visible{ outline:3px solid rgba(255,255,255,0.7); outline-offset:3px; }
+  .hello-qr{
+    display:none;
+    width:240px;
+    height:240px;
+    margin:14px auto 0;
+    padding:10px;
+    border-radius:10px;
+    background:#fff;
+    cursor:zoom-in;
+    touch-action:manipulation;
+  }
+  .hello-qr.show{ display:grid; place-items:center; }
+  .hello-qr canvas,.hello-qr img{ max-width:220px; max-height:220px; }
+  .hello-status{ min-height:17px; margin-top:10px; color:rgba(255,255,255,0.72); font-size:12px; line-height:1.35; text-align:center; }
+
   @media (max-width: 700px){
     body.ready .card{
       transform:translateY(-7vh);
@@ -222,6 +351,22 @@
       margin-left:auto;
       margin-right:auto;
     }
+    body.status-identity .card{
+      transform:translateY(0);
+    }
+    .identity-list{
+      max-height:38vh;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body.flash-allow,
+    body.flash-review,
+    body.flash-deny,
+    .draw,
+    .icon-svg {
+      animation:none;
+    }
   }
 </style>
 </head>
@@ -236,10 +381,26 @@
       <div class="meta" id="meta"></div>
       <button class="next-btn" id="nextBtn" type="button">Next scan</button>
       <div class="hint" id="hint"></div>
+      <div class="identity-picker" id="identityPicker">
+        <input class="identity-search" id="identitySearch" type="search" placeholder="Search expected attendees" autocomplete="off">
+        <div class="identity-list" id="identityList"></div>
+        <button class="identity-walkin" id="identityWalkinBtn" type="button">I'm not on the list</button>
+        <div class="identity-error" id="identityError"></div>
+      </div>
+      <div class="hello-panel" id="helloPanel">
+        <div class="hello-actions">
+          <button class="hello-btn" id="showHelloBtn" type="button">Show my check-in QR</button>
+        </div>
+        <div class="hello-qr" id="helloQrBox" aria-label="Attendee HELLO QR"></div>
+        <div class="hello-status" id="helloStatus"></div>
+      </div>
     </div>
   </div>
 
 <script src="js/sign.js?v=3.1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="js/orgapi.js"></script>
+<script src="js/qr-fullscreen.js"></script>
 <script>
   const params = new URLSearchParams(window.location.search);
   const type = (params.get("type") || "").trim().toLowerCase();
@@ -262,6 +423,8 @@
 
   let returnTimer = null;
   let lastTapAt = 0;
+  let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
+  let helloQrData = "";
 
   const returnTo = (params.get("returnTo") || "").trim();
   const API_BASE = "https://irlid-api-test.irlid-bunhead.workers.dev";
@@ -282,6 +445,10 @@
   function goNext(target) {
     clearTimeout(returnTimer);
     window.location.href = target;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
   function iconMarkup(status) {
@@ -339,9 +506,14 @@
     const nextBtn = document.getElementById("nextBtn");
     const logo = document.getElementById("logo");
     const brandFallback = document.getElementById("brandFallback");
+    const identityPicker = document.getElementById("identityPicker");
+    const helloPanel = document.getElementById("helloPanel");
 
     body.className = "";
     body.classList.add("status-" + state.status);
+    if (state.status === "allow" || state.status === "deny") body.classList.add("flash-" + state.status);
+    if (identityPicker) identityPicker.classList.remove("show");
+    if (helloPanel) helloPanel.classList.toggle("show", type !== "checkout");
 
     iconShell.innerHTML = iconMarkup(state.status);
     title.textContent = state.title;
@@ -368,6 +540,22 @@
     }
     scheduleReturn(target);
     enableDoormanDoubleTap(target);
+    configureHelloPanel();
+  }
+
+  function applyBranding() {
+    const logo = document.getElementById("logo");
+    const brandFallback = document.getElementById("brandFallback");
+    if (logoUrl) {
+      logo.src = logoUrl;
+      logo.classList.add("show");
+      brandFallback.classList.remove("show");
+    } else {
+      logo.removeAttribute("src");
+      logo.classList.remove("show");
+      brandFallback.textContent = initialsFor(eventName);
+      brandFallback.classList.add("show");
+    }
   }
 
   function initialsFor(value) {
@@ -390,7 +578,28 @@
     goNext(defaultReturnTarget());
   });
 
-  function renderVenue() {
+  async function renderVenue() {
+    if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") {
+      continueVenueWalkin();
+      return;
+    }
+    try {
+      const pub = compactJwk(await getPublicJwk());
+      const fp = await deviceKeyFingerprint(pub);
+      const recognized = await recognizeDevice(fp);
+      if (recognized?.recognized) {
+        if (recognized.name) localStorage.setItem(`irlid_org_name_${orgParam}`, recognized.name);
+        continueVenueWalkin();
+        return;
+      }
+      await renderIdentityPicker(pub, fp);
+    } catch (err) {
+      console.warn("Venue first-scan identity check failed", err);
+      continueVenueWalkin();
+    }
+  }
+
+  function continueVenueWalkin(options = {}) {
     const meta = returnAllowed ? "Re-entry allowed" : "Re-entry not allowed";
     render({
       status: "allow",
@@ -398,7 +607,7 @@
       subtitle: welcomeMessage || "You’re checked in",
       meta
     });
-    recordVenueCheckin().catch((err) => console.warn("Venue check-in record failed", err));
+    recordVenueCheckin(options).catch((err) => console.warn("Venue check-in record failed", err));
   }
 
   async function postOrg(path, body) {
@@ -416,6 +625,15 @@
 
   async function getOrg(path) {
     const response = await fetch(API_BASE + path);
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
+    return data;
+  }
+
+  async function getOrgAuthed(path) {
+    if (!orgParam) throw new Error("Missing organisation key");
+    const response = await fetch(API_BASE + path, { headers: { "X-Org-Key": orgParam } });
     let data = null;
     try { data = await response.json(); } catch {}
     if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
@@ -443,12 +661,116 @@
     return "";
   }
 
-  async function recordVenueCheckin() {
+  async function recognizeDevice(fp) {
+    return getOrg(`/org/recognize?org=${encodeURIComponent(orgParam)}&device_pub=${encodeURIComponent(fp)}`);
+  }
+
+  function expectedDisplayName(row) {
+    return `${row.first_name || ""} ${row.surname || ""}`.trim() || row.name || "Unnamed attendee";
+  }
+
+  async function renderIdentityPicker(pub, fp) {
+    clearTimeout(returnTimer);
+    identityState = { pub, fp, expected: [], query: "", busyId: null, error: "" };
+    const body = document.body;
+    const iconShell = document.getElementById("iconShell");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const meta = document.getElementById("meta");
+    const nextBtn = document.getElementById("nextBtn");
+    const picker = document.getElementById("identityPicker");
+    const search = document.getElementById("identitySearch");
+
+    body.className = "";
+    body.classList.add("status-review", "status-identity", "flash-review");
+    iconShell.innerHTML = iconMarkup("review");
+    title.textContent = "Choose your name";
+    subtitle.textContent = "This phone is not linked yet";
+    meta.textContent = "Select yourself from the expected list";
+    if (nextBtn) nextBtn.classList.remove("show");
+    document.getElementById("helloPanel")?.classList.remove("show");
+    applyBranding();
+    picker.classList.add("show");
+    requestAnimationFrame(() => body.classList.add("ready"));
+
+    search.value = "";
+    search.oninput = () => {
+      identityState.query = search.value.trim().toLowerCase();
+      renderIdentityRows();
+    };
+    document.getElementById("identityWalkinBtn").onclick = () => continueVenueWalkin({ anonymous: true });
+
+    try {
+      const result = await getOrgAuthed("/org/expected");
+      identityState.expected = Array.isArray(result?.expected) ? result.expected : [];
+      renderIdentityRows();
+      search.focus({ preventScroll: true });
+    } catch (err) {
+      identityState.error = err.message || "Could not load expected attendees";
+      renderIdentityRows();
+    }
+  }
+
+  function renderIdentityRows() {
+    const list = document.getElementById("identityList");
+    const error = document.getElementById("identityError");
+    if (!list || !error) return;
+    const query = identityState.query;
+    const rows = identityState.expected.filter((row) => expectedDisplayName(row).toLowerCase().includes(query));
+    error.textContent = identityState.error || "";
+    if (identityState.error) {
+      list.innerHTML = "";
+      return;
+    }
+    if (!rows.length) {
+      list.innerHTML = '<div class="identity-row-meta">No matching expected attendees</div>';
+      return;
+    }
+    list.innerHTML = rows.map((row) => {
+      const name = expectedDisplayName(row);
+      const busy = String(identityState.busyId || "") === String(row.id);
+      const meta = row.device_key_fp ? "Already linked" : "Ready to link";
+      const disabled = busy ? " disabled" : "";
+      return `<button class="identity-row" type="button" data-expected-id="${escapeHtml(row.id)}"${disabled}><span><span class="identity-row-name">${escapeHtml(name)}</span><span class="identity-row-meta">${escapeHtml(meta)}</span></span><span class="identity-pill">${busy ? "Linking..." : "Select"}</span></button>`;
+    }).join("");
+    list.querySelectorAll("[data-expected-id]").forEach((button) => {
+      button.addEventListener("click", () => claimIdentity(button.getAttribute("data-expected-id")));
+    });
+  }
+
+  async function claimIdentity(expectedId) {
+    if (!expectedId || identityState.busyId) return;
+    identityState.busyId = expectedId;
+    identityState.error = "";
+    renderIdentityRows();
+    try {
+      if (window.IRLidOrgApi?.claimExpected) {
+        await window.IRLidOrgApi.claimExpected(orgParam, expectedId, identityState.fp);
+      } else {
+        await postOrg(`/org/expected/${encodeURIComponent(expectedId)}/claim`, { device_pub_fp: identityState.fp });
+      }
+      const chosen = identityState.expected.find((row) => String(row.id) === String(expectedId));
+      const name = expectedDisplayName(chosen || {});
+      if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
+      render({
+        status: "allow",
+        title: "Identity linked",
+        subtitle: "Scan the venue QR again",
+        meta: name || "This phone is ready"
+      });
+    } catch (err) {
+      identityState.error = err.status === 409 ? "Already claimed by another device - see organiser" : (err.message || "Could not claim this attendee");
+      identityState.busyId = null;
+      renderIdentityRows();
+    }
+  }
+
+  async function recordVenueCheckin(options = {}) {
     if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") return;
     const pub = compactJwk(await getPublicJwk());
     const helloPayload = { mode: "attendee_scan", org: orgParam, pub, ts: Math.floor(Date.now() / 1000), v: 1 };
     const helloHash = await hashPayloadToB64url(helloPayload, 3);
-    const cachedName = await recognizedNameForDevice(pub);
+    const cachedName = options.anonymous ? "" : await recognizedNameForDevice(pub);
     const payload = await postOrg("/org/checkin", {
       mode: "attendee_scan",
       helloPayload,
@@ -465,6 +787,78 @@
     } else if (cachedName || payload?.expected_name) {
       const welcomeName = payload?.expected_name || cachedName;
       render({ status: "allow", title: `Welcome back, ${welcomeName}`, subtitle: welcomeMessage || "You’re checked in", meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed" });
+    }
+  }
+
+  function configureHelloPanel() {
+    const btn = document.getElementById("showHelloBtn");
+    if (!btn || btn.dataset.bound === "true") return;
+    btn.dataset.bound = "true";
+    btn.addEventListener("click", showHelloQr);
+  }
+
+  function setHelloStatus(message, isError=false) {
+    const el = document.getElementById("helloStatus");
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = isError ? "#ffe4e4" : "rgba(255,255,255,0.72)";
+  }
+
+  function normalizeHelloQr(target) {
+    target.querySelectorAll("canvas, img").forEach((node) => {
+      const hiddenCanvas = node.tagName === "CANVAS" && getComputedStyle(node).display === "none";
+      if (hiddenCanvas) return;
+      node.style.width = "100%";
+      node.style.height = "100%";
+      node.style.maxWidth = "100%";
+      node.style.maxHeight = "100%";
+      node.style.display = "block";
+    });
+  }
+
+  async function showHelloQr() {
+    clearTimeout(returnTimer);
+    const btn = document.getElementById("showHelloBtn");
+    const box = document.getElementById("helloQrBox");
+    if (!btn || !box) return;
+    btn.disabled = true;
+    btn.textContent = "Creating QR...";
+    setHelloStatus("Getting location and signing HELLO...");
+    try {
+      if (typeof makeSignedHelloAsync !== "function") throw new Error("Signing helpers unavailable");
+      const hello = await makeSignedHelloAsync();
+      const helloB64 = irlidEncodeJsonToB64url(hello);
+      localStorage.setItem("irlid_last_hello_b64", helloB64);
+      if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
+        helloQrData = "HZ:" + await irlidCompressToB64url(hello);
+      } else {
+        helloQrData = "H:" + helloB64;
+      }
+      box.innerHTML = "";
+      if (typeof QRCode === "function") {
+        new QRCode(box, { text: helloQrData, width: 220, height: 220, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        normalizeHelloQr(box);
+        requestAnimationFrame(() => normalizeHelloQr(box));
+      } else {
+        box.textContent = "QR unavailable";
+      }
+      box.dataset.qrFullscreenPayload = helloQrData;
+      box.dataset.qrFullscreenTitle = "My check-in QR";
+      box.dataset.qrFullscreenSubtitle = "Show this HELLO QR to the doorman";
+      box.classList.add("show");
+      setHelloStatus("Show this QR to the doorman. Double-tap it for fullscreen.");
+      if (window.IRLidQrFullscreen) {
+        window.IRLidQrFullscreen.open({
+          payload: helloQrData,
+          title: "My check-in QR",
+          subtitle: "Show this HELLO QR to the doorman"
+        });
+      }
+    } catch (err) {
+      setHelloStatus(err.message || "Could not create check-in QR", true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Refresh my check-in QR";
     }
   }
 

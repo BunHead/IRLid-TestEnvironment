@@ -1,0 +1,180 @@
+// Universal double-tap / double-click fullscreen QR helper for the test environment.
+(function () {
+  "use strict";
+
+  const SELECTOR = "[data-qr-fullscreen-payload]";
+  let overlay = null;
+  let holder = null;
+  let active = false;
+  let lastTapAt = 0;
+
+  function ensureOverlay() {
+    if (overlay) return;
+    overlay = document.createElement("div");
+    overlay.className = "irlid-qr-fullscreen";
+    overlay.innerHTML = `
+      <button class="irlid-qr-fullscreen-close" type="button" aria-label="Close QR">&times;</button>
+      <div class="irlid-qr-fullscreen-inner">
+        <img class="irlid-qr-fullscreen-logo" data-qr-logo alt="">
+        <div class="irlid-qr-fullscreen-fallback" data-qr-fallback>IRL</div>
+        <div class="irlid-qr-fullscreen-title" data-qr-title></div>
+        <div class="irlid-qr-fullscreen-holder" id="irlidQrFullscreenHolder"></div>
+        <div class="irlid-qr-fullscreen-subtitle" data-qr-subtitle></div>
+      </div>`;
+    document.body.appendChild(overlay);
+    holder = overlay.querySelector(".irlid-qr-fullscreen-holder");
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    });
+    overlay.querySelector(".irlid-qr-fullscreen-close").addEventListener("click", close);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && active) close();
+    });
+  }
+
+  function injectStyles() {
+    if (document.getElementById("irlidQrFullscreenStyles")) return;
+    const style = document.createElement("style");
+    style.id = "irlidQrFullscreenStyles";
+    style.textContent = `
+      .irlid-qr-fullscreen{display:none;position:fixed;inset:0;z-index:100000;background:#05070c;color:#fff;align-items:center;justify-content:center;padding:clamp(16px,3vmin,32px);box-sizing:border-box;}
+      .irlid-qr-fullscreen.active{display:flex;}
+      .irlid-qr-fullscreen-inner{width:min(100%,900px);display:grid;justify-items:center;gap:clamp(12px,2vmin,20px);text-align:center;}
+      .irlid-qr-fullscreen-logo{display:none;width:min(28vmin,170px);max-width:48vw;max-height:min(18vmin,150px);object-fit:contain;filter:drop-shadow(0 12px 28px rgba(0,0,0,0.34));}
+      .irlid-qr-fullscreen-fallback{display:none;min-width:min(20vmin,92px);min-height:min(15vmin,70px);align-items:center;justify-content:center;border-radius:14px;background:#f8fbff;color:#08101d;font:800 clamp(20px,5vmin,30px)/1 "Segoe UI",system-ui,sans-serif;letter-spacing:.03em;}
+      .irlid-qr-fullscreen-title{min-height:1.2em;font:800 clamp(22px,4vmin,48px)/1.05 "Segoe UI",system-ui,sans-serif;}
+      .irlid-qr-fullscreen-subtitle{min-height:1.2em;color:rgba(255,255,255,0.72);font:600 clamp(12px,1.6vmin,16px)/1.35 "Segoe UI",system-ui,sans-serif;}
+      .irlid-qr-fullscreen-holder{width:min(76vmin,720px);aspect-ratio:1;display:grid;place-items:center;padding:clamp(10px,1.8vmin,18px);box-sizing:border-box;background:#fff;border-radius:clamp(12px,2vmin,22px);box-shadow:0 28px 90px rgba(0,0,0,0.54);}
+      .irlid-qr-fullscreen-holder canvas,.irlid-qr-fullscreen-holder img{display:block;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain;}
+      .irlid-qr-fullscreen-close{position:fixed;top:18px;right:18px;width:42px;height:42px;border:0;border-radius:999px;background:rgba(255,255,255,0.12);color:#fff;font-size:24px;line-height:1;cursor:pointer;}
+      @media (max-width:760px){.irlid-qr-fullscreen{align-items:flex-start;overflow:auto;}.irlid-qr-fullscreen-inner{padding-top:24px;}}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function normalize(target) {
+    target.querySelectorAll("canvas, img").forEach((node) => {
+      const hiddenCanvas = node.tagName === "CANVAS" && getComputedStyle(node).display === "none";
+      if (hiddenCanvas) return;
+      node.style.width = "100%";
+      node.style.height = "100%";
+      node.style.maxWidth = "100%";
+      node.style.maxHeight = "100%";
+      node.style.display = "block";
+    });
+  }
+
+  function renderWithQrcodeJs(target, payload, size) {
+    target.innerHTML = "";
+    new QRCode(target, {
+      text: payload,
+      width: size,
+      height: size,
+      colorDark: "#000000",
+      colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel ? QRCode.CorrectLevel.M : undefined
+    });
+    normalize(target);
+    requestAnimationFrame(() => normalize(target));
+  }
+
+  async function render(target, payload) {
+    target.innerHTML = "";
+    const size = Math.floor(Math.min(window.innerWidth || 720, window.innerHeight || 720) * 0.82);
+    if (typeof window.makeQR === "function") {
+      await window.makeQR(target.id, payload, size);
+      normalize(target);
+      return;
+    }
+    if (typeof window.QRCode === "function") {
+      renderWithQrcodeJs(target, payload, Math.max(360, size));
+      return;
+    }
+    const img = document.createElement("img");
+    img.alt = "QR";
+    img.src = "https://api.qrserver.com/v1/create-qr-code/?ecc=L&margin=10&size=720x720&data=" + encodeURIComponent(payload);
+    target.appendChild(img);
+    normalize(target);
+  }
+
+  async function openFromElement(el) {
+    const payload = el.dataset.qrFullscreenPayload;
+    if (!payload) return;
+    await open({
+      payload,
+      title: el.dataset.qrFullscreenTitle || "IRLid QR",
+      subtitle: el.dataset.qrFullscreenSubtitle || "Tap outside the QR or press Escape to close",
+      logoUrl: el.dataset.qrFullscreenLogoUrl || "",
+      logoAlt: el.dataset.qrFullscreenLogoAlt || el.dataset.qrFullscreenTitle || "IRLid logo",
+      showTitle: el.dataset.qrFullscreenShowTitle !== "false"
+    });
+  }
+
+  async function open(options) {
+    const payload = options && options.payload;
+    if (!payload) return;
+    injectStyles();
+    ensureOverlay();
+    active = true;
+    const title = overlay.querySelector("[data-qr-title]");
+    const logo = overlay.querySelector("[data-qr-logo]");
+    const fallback = overlay.querySelector("[data-qr-fallback]");
+    const logoUrl = (options.logoUrl || "").trim();
+    if (logoUrl) {
+      logo.src = logoUrl;
+      logo.alt = options.logoAlt || options.title || "IRLid logo";
+      logo.style.display = "block";
+      fallback.style.display = "none";
+      logo.onerror = () => {
+        logo.style.display = "none";
+        fallback.style.display = "flex";
+      };
+      title.textContent = options.showTitle === false ? "" : (options.title || "");
+    } else {
+      logo.removeAttribute("src");
+      logo.style.display = "none";
+      fallback.style.display = "flex";
+      title.textContent = options.title || "IRLid QR";
+    }
+    overlay.querySelector("[data-qr-subtitle]").textContent = options.subtitle || "";
+    overlay.classList.add("active");
+    document.body.style.overflow = "hidden";
+    await render(holder, payload);
+  }
+
+  function close() {
+    if (!overlay) return;
+    active = false;
+    overlay.classList.remove("active");
+    document.body.style.overflow = "";
+    if (holder) holder.innerHTML = "";
+  }
+
+  function payloadElementFromEvent(event) {
+    const target = event.target && event.target.closest ? event.target.closest(SELECTOR) : null;
+    if (!target || target.dataset.qrFullscreenDisabled === "true") return null;
+    return target;
+  }
+
+  document.addEventListener("pointerup", (event) => {
+    const el = payloadElementFromEvent(event);
+    if (!el) return;
+    const now = Date.now();
+    if (now - lastTapAt < 360) {
+      event.preventDefault();
+      openFromElement(el);
+      lastTapAt = 0;
+    } else {
+      lastTapAt = now;
+    }
+  });
+
+  document.addEventListener("dblclick", (event) => {
+    const el = payloadElementFromEvent(event);
+    if (!el) return;
+    event.preventDefault();
+    openFromElement(el);
+  });
+
+  window.IRLidQrFullscreen = { open, close, normalize };
+})();
