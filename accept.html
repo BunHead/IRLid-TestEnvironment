@@ -98,6 +98,7 @@
 <script src="js/nav.js"></script>
 <script src="js/sign.js?v=3.1"></script>
 <script src="js/qr.js?v=63"></script>
+<script src="js/qr-fullscreen.js"></script>
 
 <script>
   let acceptQrData = null;  // hoisted for fullscreen access
@@ -157,6 +158,8 @@
 
       // Render QR
       const size = Math.min(400, window.innerWidth - 40);
+      qrWrap.dataset.qrFullscreenTitle = "Accept QR";
+      qrWrap.dataset.qrFullscreenSubtitle = "The other person scans this response QR";
       await makeQR("qrWrap", qrData, size);
       acceptQrData = qrData;  // save for fullscreen
 
@@ -176,88 +179,6 @@
 
   init();
 
-  // ========== Double-tap fullscreen QR ==========
-  (function(){
-    const qrEl = document.getElementById("qrWrap");
-    if (!qrEl) return;
-
-    const overlay = document.createElement("div");
-    overlay.id = "qrFullscreenOverlay";
-    overlay.style.cssText = "display:none;position:fixed;inset:0;z-index:99999;background:#000;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;";
-    const qrHolder = document.createElement("div");
-    qrHolder.id = "qrFullscreenHolder";
-    qrHolder.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
-    const hint = document.createElement("div");
-    hint.textContent = "Tap to exit";
-    hint.style.cssText = "position:absolute;bottom:max(24px,env(safe-area-inset-bottom,12px));color:rgba(255,255,255,0.35);font:500 13px/1 system-ui,sans-serif;letter-spacing:0.04em;";
-    overlay.appendChild(qrHolder);
-    overlay.appendChild(hint);
-    document.body.appendChild(overlay);
-
-    let isFullscreen = false;
-
-    async function enterFullscreenQr(){
-      if (isFullscreen || !acceptQrData) return;
-      isFullscreen = true;
-
-      try {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-        } else if (document.documentElement.webkitRequestFullscreen) {
-          document.documentElement.webkitRequestFullscreen();
-        }
-      } catch(e){}
-
-      overlay.style.display = "flex";
-      document.body.style.overflow = "hidden";
-
-      const vw = window.innerWidth || screen.width;
-      const vh = window.innerHeight || screen.height;
-      const size = Math.floor(Math.min(vw, vh) - 32);
-      qrHolder.innerHTML = "";
-      await makeQR("qrFullscreenHolder", acceptQrData, size);
-    }
-
-    function exitFullscreenQr(){
-      if (!isFullscreen) return;
-      isFullscreen = false;
-      overlay.style.display = "none";
-      document.body.style.overflow = "";
-      qrHolder.innerHTML = "";
-
-      try {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      } catch(e){}
-    }
-
-    document.addEventListener("fullscreenchange", () => {
-      if (!document.fullscreenElement && isFullscreen) exitFullscreenQr();
-    });
-    document.addEventListener("webkitfullscreenchange", () => {
-      if (!document.webkitFullscreenElement && isFullscreen) exitFullscreenQr();
-    });
-
-    overlay.addEventListener("click", exitFullscreenQr);
-
-    let lastTap = 0;
-    qrEl.addEventListener("touchend", function(e){
-      const now = Date.now();
-      if (now - lastTap < 350) {
-        e.preventDefault();
-        enterFullscreenQr();
-        lastTap = 0;
-      } else {
-        lastTap = now;
-      }
-    }, { passive: false });
-
-    qrEl.addEventListener("dblclick", function(e){
-      e.preventDefault();
-      if (isFullscreen) exitFullscreenQr();
-      else enterFullscreenQr();
-    });
-  })();
 </script>
 
 
