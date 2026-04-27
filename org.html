@@ -27,8 +27,8 @@
   --deny-pad: #ffd6d6;
   --scan-pad: #e6eef9;
 }
-body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; overflow: hidden; }
-.sidebar { width: 220px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; min-height: 100dvh; overflow: hidden; }
+.sidebar { width: 220px; max-height: 100dvh; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
 .sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; align-items: center; min-height: 76px; }
 .sidebar-logo img { display: block; height: 38px; width: auto; max-width: 160px; object-fit: contain; opacity: 0.95; }
 .sidebar-fallback { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
@@ -36,7 +36,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .org-badge .org-name { font-size: 13px; font-weight: 600; }
 .org-badge .org-plan { font-size: 11px; color: var(--blue); margin-top: 2px; }
 .nav-main { padding: 6px 0; }
-.nav-bottom { margin-top: auto; padding: 6px 0 8px; border-top: 1px solid var(--line-soft); }
+.nav-bottom { margin-top: auto; padding: 6px 0 max(18px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line-soft); }
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; font-size: 13px; color: var(--muted); cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; }
 .nav-item:hover, .nav-item.active { background: var(--panel-2); color: var(--text); }
 .nav-item.active { color: var(--blue); border-left-color: var(--blue); }
@@ -193,6 +193,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .checkout-legacy-badge { color: var(--orange); font-size: 10px; font-weight: 600; margin-left: 4px; }
 .checkout-qr-panel { flex-basis: 100%; width: 172px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #0b1220; display: grid; gap: 8px; }
 .checkout-qr-box { width: 132px; height: 132px; display: grid; place-items: center; padding: 6px; background: #fff; border-radius: 6px; }
+.checkout-qr-box canvas, .checkout-qr-box img { width: 120px !important; height: 120px !important; max-width: 120px !important; max-height: 120px !important; image-rendering: pixelated; }
 .checkout-qr-help { color: var(--muted); font-size: 10px; line-height: 1.35; }
 .checkout-row-complete td { animation: checkoutRowSettle 420ms ease; }
 .btn-confirm { background: #da3633; color: #fff; }
@@ -313,7 +314,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .qr-fullscreen-trust strong { color: #e8f0ff; }
 .qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
 .qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
-.checkin-settings-cog { position: fixed; left: clamp(16px, calc(220px + 24px), calc(100vw - 60px)); bottom: 18px; z-index: 120; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #151b23; color: var(--text); box-shadow: 0 12px 28px rgba(0,0,0,0.32); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 19px; }
+.checkin-settings-cog { position: fixed; left: clamp(16px, calc(220px + 24px), calc(100vw - 60px)); bottom: max(84px, calc(env(safe-area-inset-bottom) + 18px)); z-index: 120; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #151b23; color: var(--text); box-shadow: 0 12px 28px rgba(0,0,0,0.32); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 19px; }
 .checkin-settings-cog:hover, .checkin-settings-cog:focus-visible { border-color: var(--blue); outline: none; }
 body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
@@ -1314,12 +1315,51 @@ function buildCheckoutUrl(checkinId) {
   if (settings.logoUrl) url.searchParams.set('logo', settings.logoUrl);
   return url.href;
 }
+function checkoutQrLooksBlank(img) {
+  if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return false;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let dark = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if ((data[i] + data[i + 1] + data[i + 2]) / 3 < 96) dark++;
+      if (dark > 24) return false;
+    }
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+function hardenCheckoutQr(target) {
+  const canvas = target.querySelector('canvas');
+  const img = target.querySelector('img');
+  [canvas, img].forEach(node => {
+    if (!node) return;
+    node.style.width = '120px';
+    node.style.height = '120px';
+    node.style.maxWidth = '120px';
+    node.style.maxHeight = '120px';
+  });
+  const useCanvasFallback = () => {
+    if (!canvas || !img || !checkoutQrLooksBlank(img)) return;
+    canvas.style.display = 'block';
+    img.style.display = 'none';
+  };
+  if (img && !img.complete) img.addEventListener('load', useCanvasFallback, { once: true });
+  requestAnimationFrame(useCanvasFallback);
+  setTimeout(useCanvasFallback, 250);
+}
 function renderCheckoutQr(checkinId) {
   const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
   if (!target || !window.QRCode) return;
   target.innerHTML = '';
   const url = buildCheckoutUrl(checkinId);
-  new QRCode(target, { text: url, width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  new QRCode(target, { text: url, width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
+  hardenCheckoutQr(target);
   target.dataset.qrFullscreenPayload = url;
   target.dataset.qrFullscreenTitle = 'Check-out QR';
   target.dataset.qrFullscreenSubtitle = 'Attendee scans this with the same IRLid phone';
