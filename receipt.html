@@ -458,6 +458,7 @@
 <script src="js/nav.js"></script>
 <script src="js/sign.js?v=3.1"></script>
 <script src="js/qr.js?v=63"></script>
+<script src="js/qr-fullscreen.js"></script>
 
 <script>
   let receiptQrUrl = null;  // hoisted for fullscreen access
@@ -1274,6 +1275,8 @@
       const topQrEl = document.getElementById("topQr");
       if (qrUrl) {
         receiptQrUrl = qrUrl;  // save for fullscreen
+        topQr.dataset.qrFullscreenTitle = "Receipt QR";
+        topQr.dataset.qrFullscreenSubtitle = "Double-tap to view fullscreen";
         if (typeof makeQR === "function") makeQR("topQr", qrUrl, qrSize());
 
         // Extract the receipt key (COMB_Z or receipt= hash) for the copyable chip
@@ -1417,6 +1420,8 @@
       renderAvatar(guestAvatarWrap, null);
 
       const url = makeReceiptUrlForResponse(resp);
+      topQr.dataset.qrFullscreenTitle = "Receipt QR";
+      topQr.dataset.qrFullscreenSubtitle = "Double-tap to view fullscreen";
       if (typeof makeQR === "function") makeQR("topQr", url, qrSize());
 
       rawJson.textContent = JSON.stringify(resp, null, 2);
@@ -1558,88 +1563,6 @@
     }
   });
 
-  // ========== Double-tap fullscreen QR ==========
-  (function(){
-    const qrEl = document.getElementById("topQr");
-    if (!qrEl) return;
-
-    const overlay = document.createElement("div");
-    overlay.id = "qrFullscreenOverlay";
-    overlay.style.cssText = "display:none;position:fixed;inset:0;z-index:99999;background:#000;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;";
-    const qrHolder = document.createElement("div");
-    qrHolder.id = "qrFullscreenHolder";
-    qrHolder.style.cssText = "width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;";
-    const hint = document.createElement("div");
-    hint.textContent = "Tap to exit";
-    hint.style.cssText = "position:absolute;bottom:max(24px,env(safe-area-inset-bottom,12px));color:rgba(255,255,255,0.35);font:500 13px/1 system-ui,sans-serif;letter-spacing:0.04em;";
-    overlay.appendChild(qrHolder);
-    overlay.appendChild(hint);
-    document.body.appendChild(overlay);
-
-    let isFullscreen = false;
-
-    async function enterFullscreenQr(){
-      if (isFullscreen || !receiptQrUrl) return;
-      isFullscreen = true;
-
-      try {
-        if (document.documentElement.requestFullscreen) {
-          await document.documentElement.requestFullscreen();
-        } else if (document.documentElement.webkitRequestFullscreen) {
-          document.documentElement.webkitRequestFullscreen();
-        }
-      } catch(e){}
-
-      overlay.style.display = "flex";
-      document.body.style.overflow = "hidden";
-
-      const vw = window.innerWidth || screen.width;
-      const vh = window.innerHeight || screen.height;
-      const size = Math.floor(Math.min(vw, vh) - 32);
-      qrHolder.innerHTML = "";
-      await makeQR("qrFullscreenHolder", receiptQrUrl, size);
-    }
-
-    function exitFullscreenQr(){
-      if (!isFullscreen) return;
-      isFullscreen = false;
-      overlay.style.display = "none";
-      document.body.style.overflow = "";
-      qrHolder.innerHTML = "";
-
-      try {
-        if (document.exitFullscreen) document.exitFullscreen();
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-      } catch(e){}
-    }
-
-    document.addEventListener("fullscreenchange", () => {
-      if (!document.fullscreenElement && isFullscreen) exitFullscreenQr();
-    });
-    document.addEventListener("webkitfullscreenchange", () => {
-      if (!document.webkitFullscreenElement && isFullscreen) exitFullscreenQr();
-    });
-
-    overlay.addEventListener("click", exitFullscreenQr);
-
-    let lastTap = 0;
-    qrEl.addEventListener("touchend", function(e){
-      const now = Date.now();
-      if (now - lastTap < 350) {
-        e.preventDefault();
-        enterFullscreenQr();
-        lastTap = 0;
-      } else {
-        lastTap = now;
-      }
-    }, { passive: false });
-
-    qrEl.addEventListener("dblclick", function(e){
-      e.preventDefault();
-      if (isFullscreen) exitFullscreenQr();
-      else enterFullscreenQr();
-    });
-  })();
 </script>
 
 

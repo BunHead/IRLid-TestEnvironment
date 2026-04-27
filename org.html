@@ -6,6 +6,7 @@
 <title>IRLid — Organisation Portal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="js/orgapi.js"></script>
+<script src="js/qr-fullscreen.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -87,6 +88,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .mode-badge.off { background: #30363d33; color: var(--muted); border: 1px solid var(--line); }
 .qr-wrap { background: #0b1220; border: 1px solid var(--line); border-radius: 8px; padding: 18px; display: flex; align-items: center; gap: 18px; }
 .qr-box { width: 170px; height: 170px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 18px rgba(0,0,0,0.25); overflow: hidden; }
+.qr-box, .qr-box-small, .qr-box-large, .checkout-qr-box { cursor: zoom-in; touch-action: manipulation; }
 .qr-box > div, .qr-box canvas, .qr-box img { max-width: 150px; max-height: 150px; }
 .qr-info { flex: 1; }
 .qr-info h4 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
@@ -1305,7 +1307,11 @@ function renderCheckoutQr(checkinId) {
   const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
   if (!target || !window.QRCode) return;
   target.innerHTML = '';
-  new QRCode(target, { text: buildCheckoutUrl(checkinId), width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  const url = buildCheckoutUrl(checkinId);
+  new QRCode(target, { text: url, width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  target.dataset.qrFullscreenPayload = url;
+  target.dataset.qrFullscreenTitle = 'Check-out QR';
+  target.dataset.qrFullscreenSubtitle = 'Attendee scans this with the same IRLid phone';
 }
 function requestCheckout(checkinId) {
   checkoutConfirmId = checkinId;
@@ -1352,6 +1358,9 @@ function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
   venueQrPayload = buildVenuePayload(); box.innerHTML = '';
   new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  box.dataset.qrFullscreenPayload = venueQrPayload;
+  box.dataset.qrFullscreenTitle = 'Venue check-in QR';
+  box.dataset.qrFullscreenSubtitle = 'Scan to check in at this organisation';
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
 function selectMode(mode) {
@@ -1445,6 +1454,14 @@ function getFullscreenLogoUrl() {
 }
 function fullscreenQR() {
   venueQrPayload = venueQrPayload || buildVenuePayload();
+  if (window.IRLidQrFullscreen) {
+    window.IRLidQrFullscreen.open({
+      payload: venueQrPayload,
+      title: currentOrg?.name || portalState.orgCode || 'Venue check-in',
+      subtitle: 'Scan to check in at this organisation'
+    });
+    return;
+  }
   const orgName = currentOrg?.name || portalState.orgCode || 'IRLid Event';
   const eventName = portalState.eventCode || currentOrg?.name || 'Venue check-in';
   const logoUrl = getFullscreenLogoUrl();
@@ -1647,6 +1664,9 @@ function renderQr(targetId, text, size, colorLight='#ffffff', correctLevel=null)
   const target = document.getElementById(targetId); if (!target) return; target.innerHTML = '';
   if (typeof QRCode === 'undefined') { target.textContent = 'QR unavailable'; return; }
   new QRCode(target, { text, width: size, height: size, colorDark: '#000000', colorLight, correctLevel: correctLevel || QRCode.CorrectLevel.M });
+  target.dataset.qrFullscreenPayload = text;
+  target.dataset.qrFullscreenTitle = targetId === 'scanQr' ? 'Scanner QR' : 'Outcome QR';
+  target.dataset.qrFullscreenSubtitle = 'Double-tap any QR to view fullscreen';
 }
 function buildPortalSummaryText() {
   return [
