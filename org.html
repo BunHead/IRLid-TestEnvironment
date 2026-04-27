@@ -118,6 +118,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .staff-auth-status { margin-top: 10px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .staff-auth-status.ok { color: var(--green); }
 .staff-auth-status.error { color: var(--red); }
+.debug-maintenance { border-top: 1px solid var(--line); padding: 12px; display: flex; justify-content: space-between; gap: 14px; align-items: center; flex-wrap: wrap; }
+.debug-maintenance-title { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+.debug-maintenance-sub { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.debug-maintenance-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.debug-maintenance-check { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .expected-list { margin-top: 14px; border: 1px solid var(--line); border-radius: 8px; background: #11161d; overflow: hidden; }
 .expected-head { padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .expected-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
@@ -468,6 +473,16 @@ body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
             <tbody id="attendanceRows"></tbody>
           </table>
         </div>
+        <div class="debug-maintenance">
+          <div>
+            <div class="debug-maintenance-title">Debug maintenance</div>
+            <div class="debug-maintenance-sub">Clear test attendance rows for the signed-in DEV organisation.</div>
+          </div>
+          <div class="debug-maintenance-actions">
+            <label class="debug-maintenance-check"><input type="checkbox" id="clearExpectedCheck"> Include expected attendees</label>
+            <button class="btn btn-danger btn-sm" type="button" id="clearAttendanceBtn">Clear test attendance</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -522,7 +537,7 @@ body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
                     <textarea class="staff-auth-input" id="staffHelloInput" data-testid="staff-hello-input" placeholder="Paste H: or HZ: HELLO payload"></textarea>
                     <div class="staff-auth-actions">
                       <button class="btn btn-primary btn-sm" type="button" id="staffAuthBtn">Authenticate staff</button>
-                      <button class="btn btn-secondary btn-sm" type="button" id="staffAuthClearBtn">Clear session</button>
+                      <button class="btn btn-secondary btn-sm" type="button" id="staffAuthClearBtn">Sign out staff</button>
                     </div>
                     <div class="staff-auth-status" id="staffAuthStatus">No staff session active.</div>
                   </div>
@@ -1280,6 +1295,27 @@ async function refreshAttendance() {
     showToast(err.message || 'Could not load attendance', true);
   }
 }
+async function clearTestAttendanceDataset() {
+  if (!currentOrg?.api_key) return showToast('Load the DEV organisation first', true);
+  const includeExpected = !!document.getElementById('clearExpectedCheck')?.checked;
+  const scope = includeExpected ? 'attendance, conflicts, checkout tokens, and expected attendees' : 'attendance, conflicts, and checkout tokens';
+  const ok = confirm(`Clear ${scope} for org key:\n\n${currentOrg.api_key}\n\nThis debug action cannot be undone.`);
+  if (!ok) return;
+  const btn = document.getElementById('clearAttendanceBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Clearing...'; }
+  try {
+    const result = await window.IRLidOrgApi.clearTestAttendance(currentOrg.api_key, includeExpected);
+    cancelCheckout(false);
+    await refreshAttendance();
+    if (includeExpected) await refreshExpectedAttendees();
+    const cleared = result?.cleared || {};
+    showToast(`Cleared ${cleared.checkins || 0} check-ins and ${cleared.conflicts || 0} conflicts`);
+  } catch (err) {
+    showToast(err.message || 'Could not clear test attendance', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Clear test attendance'; }
+  }
+}
 function renderStats(rows, stats) {
   const currentlyIn = stats ? stats.currently_in : 0;
   const checkedOut = stats ? stats.checked_out : 0;
@@ -1999,7 +2035,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
   document.getElementById('staffAuthBtn')?.addEventListener('click', authenticateStaffHello);
-  document.getElementById('staffAuthClearBtn')?.addEventListener('click', () => clearStaffAuthSession('Staff session cleared. Paste another HELLO to authenticate.'));
+  document.getElementById('staffAuthClearBtn')?.addEventListener('click', () => clearStaffAuthSession('Staff signed out. Paste another HELLO to authenticate.'));
+  document.getElementById('clearAttendanceBtn')?.addEventListener('click', clearTestAttendanceDataset);
   setInterval(updateRelativeRefresh, 30000);
   document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
   document.getElementById('expectedDeleteBtn')?.addEventListener('click', (event) => {

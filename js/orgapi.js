@@ -45,6 +45,14 @@
       });
     },
 
+    clearTestAttendance(orgKey, includeExpected) {
+      return request("/org/debug/clear-attendance", {
+        method: "POST",
+        orgKey,
+        body: { include_expected: !!includeExpected }
+      });
+    },
+
     createCheckin(orgKey, body) {
       return request("/org/checkin", {
         method: "POST",
