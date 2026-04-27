@@ -1297,7 +1297,7 @@ function buildCheckoutUrl(checkinId) {
   return url.href;
 }
 function renderCheckoutQr(checkinId) {
-  const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
+  const target = document.getElementById(`checkoutQr_${checkinId}`);
   if (!target || !window.QRCode) return;
   target.innerHTML = '';
   new QRCode(target, { text: buildCheckoutUrl(checkinId), width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
