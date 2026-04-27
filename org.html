@@ -1479,6 +1479,7 @@ function fullscreenQR() {
   if (window.QRCode) {
     new QRCode(qrTarget, { text: venueQrPayload, width: 840, height: 840, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
     normalizeFullscreenQr(qrTarget);
+    requestAnimationFrame(() => normalizeFullscreenQr(qrTarget));
   } else {
     qrTarget.textContent = 'QR unavailable';
   }
@@ -1486,13 +1487,13 @@ function fullscreenQR() {
 }
 function normalizeFullscreenQr(qrTarget) {
   qrTarget.querySelectorAll('canvas, img').forEach((node) => {
-    node.removeAttribute('width');
-    node.removeAttribute('height');
+    const isHiddenCanvas = node.tagName === 'CANVAS' && getComputedStyle(node).display === 'none';
+    if (isHiddenCanvas) return;
     node.style.width = '100%';
     node.style.height = '100%';
     node.style.maxWidth = '100%';
     node.style.maxHeight = '100%';
-    if (node.tagName === 'IMG') node.style.display = 'block';
+    node.style.display = 'block';
   });
 }
 function exportCSV() {
