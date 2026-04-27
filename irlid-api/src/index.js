@@ -24,6 +24,16 @@ function b64urlDecode(str) {
   return Uint8Array.from(bin, c => c.charCodeAt(0));
 }
 
+function b64urlJsonDecode(str) {
+  return JSON.parse(new TextDecoder().decode(b64urlDecode(String(str || ""))));
+}
+
+async function inflateRawB64urlJson(str) {
+  if (typeof DecompressionStream !== "function") throw new Error("Compressed HELLO unsupported");
+  const stream = new Blob([b64urlDecode(String(str || ""))]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return JSON.parse(await new Response(stream).text());
+}
+
 function canonical(obj) {
   const keys = Object.keys(obj).sort();
   const o = {};
@@ -85,6 +95,45 @@ async function deviceKeyFp(pubJwk) {
   if (!pubJwk) return null;
   const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(pubJwk)));
   return b64urlEncode(new Uint8Array(h)).slice(0, 16);
+}
+
+async function helloHashB64url(helloObj, protocolV) {
+  const v = (protocolV != null) ? Number(protocolV) : ((helloObj && helloObj.v) ? Number(helloObj.v) : 3);
+  const str = (v >= 3) ? canonical(helloObj) : JSON.stringify(helloObj);
+  const bytes = new TextEncoder().encode(str);
+  const hashBuf = await crypto.subtle.digest("SHA-256", bytes);
+  return b64urlEncode(new Uint8Array(hashBuf));
+}
+
+async function parseHelloInput(input) {
+  if (input && typeof input === "object") return input;
+  if (typeof input !== "string") throw new Error("HELLO payload required");
+  const raw = input.trim();
+  if (raw.startsWith("H:")) return b64urlJsonDecode(raw.slice(2));
+  if (raw.startsWith("HZ:")) return inflateRawB64urlJson(raw.slice(3));
+  if (raw.startsWith("{")) return JSON.parse(raw);
+  return b64urlJsonDecode(raw);
+}
+
+async function verifySignedHello(helloObj, tsTolS = 90) {
+  if (!helloObj || helloObj.type !== "hello") return { ok: false, status: 400, error: "Invalid HELLO" };
+  if (!helloObj.pub || !helloObj.pub.kty || !helloObj.pub.crv || !helloObj.pub.x || !helloObj.pub.y) {
+    return { ok: false, status: 400, error: "Invalid HELLO (missing pub)" };
+  }
+  const offer = helloObj.offer;
+  if (!offer || !offer.payload || !offer.sig) {
+    return { ok: false, status: 400, error: "Invalid HELLO (bad offer structure)" };
+  }
+  const computed = await hashPayloadToB64url(offer.payload);
+  if (offer.hash && computed !== offer.hash) return { ok: false, status: 401, error: "HELLO offer hash mismatch" };
+  const sigOk = await verifySig(computed, offer.sig, helloObj.pub);
+  if (!sigOk) return { ok: false, status: 401, error: "HELLO offer signature invalid" };
+  const t = now();
+  const ts = Number(offer.payload.ts);
+  if (!Number.isFinite(ts)) return { ok: false, status: 400, error: "HELLO offer timestamp missing" };
+  if (ts > t + 5) return { ok: false, status: 401, error: "HELLO offer timestamp in future" };
+  if (Math.abs(t - ts) > tsTolS) return { ok: false, status: 401, error: "HELLO offer timestamp expired" };
+  return { ok: true, verification_state: "signature_verified", offer_hash: computed };
 }
 
 // =====================
@@ -768,6 +817,47 @@ async function orgRecognize(request, env) {
   return json({ recognized: true, name: `${row.first_name || ""} ${row.surname || ""}`.trim(), expected_id: row.id });
 }
 
+async function orgStaffAuth(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+
+  let hello;
+  try {
+    const helloInput = body.hello ?? body.helloPayload ?? body.staffHello ?? body.staff_hello ?? body.payload ?? body.qr;
+    hello = await parseHelloInput(helloInput ?? body);
+  } catch {
+    return err("Invalid HELLO", 400);
+  }
+
+  const verified = await verifySignedHello(hello, 90);
+  if (!verified.ok) return err(verified.error, verified.status);
+
+  const t = now();
+  const expiresAt = t + 15 * 60;
+  const staffPubFp = await deviceKeyFp(hello.pub);
+  const hHash = await helloHashB64url(hello);
+
+  const existing = await env.DB.prepare(
+    "SELECT id, expires_at FROM org_staff_sessions WHERE org_id=? AND hello_hash=?"
+  ).bind(org.id, hHash).first();
+  if (existing && existing.expires_at >= t) {
+    await env.DB.prepare(
+      "UPDATE org_staff_sessions SET last_seen_at=? WHERE id=?"
+    ).bind(t, existing.id).run();
+    return json({ ok: true, staff_session: existing.id, expires_at: existing.expires_at, staff_pub_fp: staffPubFp });
+  }
+  if (existing) {
+    await env.DB.prepare("DELETE FROM org_staff_sessions WHERE id=?").bind(existing.id).run();
+  }
+
+  const token = "staff_" + randomToken();
+  await env.DB.prepare(
+    "INSERT INTO org_staff_sessions (id,org_id,staff_pub_fp,staff_pub_jwk,hello_hash,verification_state,created_at,expires_at,last_seen_at) VALUES (?,?,?,?,?,?,?,?,?)"
+  ).bind(token, org.id, staffPubFp, JSON.stringify(hello.pub), hHash, verified.verification_state, t, expiresAt, t).run();
+
+  return json({ ok: true, staff_session: token, expires_at: expiresAt, staff_pub_fp: staffPubFp });
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -1059,6 +1149,7 @@ export default {
       else if (method === "POST" && path === "/org/settings")        response = await orgUpdateSettings(request, env);
       else if (method === "GET"  && path === "/org/qr")              response = await orgGetQR(request, env);
       else if (method === "GET"  && path === "/org/recognize")       response = await orgRecognize(request, env);
+      else if (method === "POST" && path === "/org/staff/auth")      response = await orgStaffAuth(request, env);
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
       else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
