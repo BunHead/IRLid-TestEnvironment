@@ -1453,9 +1453,13 @@ function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
   venueQrPayload = buildVenuePayload(); box.innerHTML = '';
   new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  const orgName = currentOrg?.name || portalState.orgCode || 'Venue check-in';
   box.dataset.qrFullscreenPayload = venueQrPayload;
-  box.dataset.qrFullscreenTitle = 'Venue check-in QR';
+  box.dataset.qrFullscreenTitle = orgName;
   box.dataset.qrFullscreenSubtitle = 'Scan to check in at this organisation';
+  box.dataset.qrFullscreenLogoUrl = getFullscreenLogoUrl();
+  box.dataset.qrFullscreenLogoAlt = `${orgName} logo`;
+  box.dataset.qrFullscreenShowTitle = 'false';
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
 function staffAuthKey() {
