@@ -570,7 +570,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
                     <div class="staff-auth-head">
                       <div>
                         <div class="staff-auth-title">Staff Auth</div>
-                        <div class="staff-auth-sub">Paste a staff HELLO QR payload to smoke-test the session endpoint. Manual check-in remains enabled.</div>
+                        <div class="staff-auth-sub">Paste a staff HELLO QR payload to smoke-test the session endpoint. Manual check-in unlocks after authentication.</div>
                       </div>
                       <div class="staff-auth-badge" id="staffAuthBadge">Unauthenticated</div>
                     </div>
@@ -884,6 +884,8 @@ let expectedEditId = null;
 let expectedEditError = '';
 let staffAuthSession = null;
 let staffAuthExpiryTimer = null;
+let staffAuthExpiredMessage = '';
+let manualCheckinLoading = false;
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -1520,6 +1522,7 @@ function loadStaffAuthSession() {
     if (Number(saved.expires_at) <= staffAuthNow()) {
       sessionStorage.removeItem(staffAuthKey());
       staffAuthSession = null;
+      staffAuthExpiredMessage = 'Staff session expired. Paste a fresh HELLO to authenticate.';
       return null;
     }
     staffAuthSession = saved;
@@ -1531,7 +1534,11 @@ function loadStaffAuthSession() {
 }
 function saveStaffAuthSession(session) {
   staffAuthSession = session;
+  staffAuthExpiredMessage = '';
   if (currentOrg) sessionStorage.setItem(staffAuthKey(), JSON.stringify(session));
+}
+function staffSessionIsActive() {
+  return !!staffAuthSession?.staff_session && Number(staffAuthSession.expires_at) > staffAuthNow();
 }
 function formatStaffAuthExpiry(expiresAt) {
   if (!expiresAt) return 'unknown';
@@ -1555,7 +1562,7 @@ function renderStaffAuthPanel(message, isError=false) {
     return;
   }
 
-  const authenticated = !!staffAuthSession?.staff_session;
+  const authenticated = staffSessionIsActive();
   panel.classList.toggle('authenticated', authenticated);
   badge.classList.toggle('on', authenticated);
   badge.textContent = authenticated ? 'Authenticated' : 'Unauthenticated';
@@ -1566,6 +1573,7 @@ function renderStaffAuthPanel(message, isError=false) {
     status.textContent = message || 'No staff session active.';
   }
   scheduleStaffAuthExpiry();
+  updateManualCheckinAuthState();
 }
 function clearStaffAuthSession(message='No staff session active.') {
   if (currentOrg) sessionStorage.removeItem(staffAuthKey());
@@ -1600,7 +1608,10 @@ async function authenticateStaffHello() {
 }
 function refreshStaffAuthPanel() {
   loadStaffAuthSession();
-  renderStaffAuthPanel();
+  const message = staffAuthExpiredMessage;
+  staffAuthExpiredMessage = '';
+  renderStaffAuthPanel(message, !!message);
+  return message;
 }
 function selectMode(mode) {
   currentMode = mode;
@@ -1631,11 +1642,18 @@ function flashDoormanPanel(kind) {
   setTimeout(() => panel.classList.remove(`flash-${kind}`), 340);
 }
 function setManualCheckinLoading(isLoading) {
+  manualCheckinLoading = isLoading;
+  updateManualCheckinAuthState();
+}
+function updateManualCheckinAuthState() {
   const btn = document.getElementById('manualCheckinBtn');
   if (!btn) return;
-  btn.disabled = isLoading;
-  btn.classList.toggle('btn-loading', isLoading);
-  btn.innerHTML = isLoading ? '<span class="btn-spinner" aria-hidden="true"></span><span>Checking in...</span>' : 'Record Check-in';
+  const authenticated = staffSessionIsActive();
+  btn.disabled = manualCheckinLoading || !authenticated;
+  btn.classList.toggle('btn-loading', manualCheckinLoading);
+  btn.innerHTML = manualCheckinLoading
+    ? '<span class="btn-spinner" aria-hidden="true"></span><span>Checking in...</span>'
+    : authenticated ? 'Record Check-in' : 'Authenticate staff first';
 }
 function showManualCheckinResult(message, kind, autoFade=false) {
   const resultEl = document.getElementById('manualCheckinResult');
@@ -1657,10 +1675,18 @@ async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
   showManualCheckinResult('', '');
   if (!currentOrg) return showToast('Load an organisation first', true);
+  const authMessage = refreshStaffAuthPanel();
+  if (!staffSessionIsActive()) {
+    const message = authMessage || 'Authenticate staff before manual check-in.';
+    showManualCheckinResult(message, 'error');
+    showToast(message, true);
+    return;
+  }
   setManualCheckinLoading(true);
   try {
     const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
       mode: 'doorman_scan',
+      staff_session: staffAuthSession.staff_session,
       name: settings.anonymousMode ? '' : label,
       attendeeLabel: settings.anonymousMode ? '' : label,
       score: settings.minScore || 50,
@@ -1677,6 +1703,9 @@ async function manualCheckin() {
     showToast('Check-in recorded');
   } catch (err) {
     flashDoormanPanel('error');
+    if (err.status === 401 && /staff/i.test(err.message || '')) {
+      clearStaffAuthSession(err.message || 'Staff authentication required.');
+    }
     showManualCheckinResult(err.message || 'Could not record check-in', 'error');
     showToast(err.message || 'Could not record check-in', true);
   } finally {

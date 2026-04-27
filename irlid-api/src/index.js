@@ -858,11 +858,34 @@ async function orgStaffAuth(request, env) {
   return json({ ok: true, staff_session: token, expires_at: expiresAt, staff_pub_fp: staffPubFp });
 }
 
+async function requireOrgStaffSession(env, org, staffSessionToken) {
+  const token = String(staffSessionToken || "").trim();
+  if (!token) return authErr("Staff authentication required", 401);
+
+  const session = await env.DB.prepare(
+    "SELECT id, expires_at FROM org_staff_sessions WHERE id=? AND org_id=?"
+  ).bind(token, org.id).first();
+  if (!session) return authErr("Invalid staff session", 401);
+
+  const t = now();
+  if (Number(session.expires_at) <= t) {
+    await env.DB.prepare("DELETE FROM org_staff_sessions WHERE id=?").bind(session.id).run();
+    return authErr("Staff session expired", 401);
+  }
+
+  await env.DB.prepare("UPDATE org_staff_sessions SET last_seen_at=? WHERE id=?").bind(t, session.id).run();
+  return null;
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
-  const { mode, helloPayload, helloHash, attendeeLabel, name, score, bioVerified, gps } = body;
+  const { mode, helloPayload, helloHash, attendeeLabel, name, score, bioVerified, gps, staff_session } = body;
   if (!mode || !["attendee_scan","doorman_scan"].includes(mode)) return err("mode must be attendee_scan or doorman_scan");
+  if (mode === "doorman_scan") {
+    const staffError = await requireOrgStaffSession(env, org, staff_session);
+    if (staffError) return staffError;
+  }
   const settings = JSON.parse(org.settings_json || "{}");
   const minScore = settings.minScore || 50;
   if (score !== undefined && score < minScore) return err(`Score ${score} below minimum ${minScore}`, 403);
