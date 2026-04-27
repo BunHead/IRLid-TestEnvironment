@@ -39,10 +39,19 @@ Batch 13 is drafted in root `HANDOVER.md`.
 
 Priority:
 
-1. Staff/doorman self-authentication with signed HELLO before manual check-in.
-2. Short Worker-backed checkout QR tokens to reduce QR density.
+1. Staff auth session foundation.
+2. Staff Auth UI smoke panel.
+3. Enforce staff auth for manual check-in.
+4. Checkout token API foundation.
+5. Short checkout QR UI.
+
+Optional debug maintenance:
+
+- Add a guarded test-only dashboard action for clearing smoke/test attendance rows from the current debug org.
 
 These are protocol tasks, not visual polish. Expect Worker + D1 + frontend changes.
+
+Batch 13 was intentionally split smaller after live checkout QR debugging showed that apparently simple QR UI changes can hide browser-specific rendering failures.
 
 ## Guardrails
 

@@ -194,6 +194,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .checkout-qr-panel { flex-basis: 100%; width: 172px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #0b1220; display: grid; gap: 8px; }
 .checkout-qr-box { width: 132px; height: 132px; display: grid; place-items: center; padding: 6px; background: #fff; border-radius: 6px; }
 .checkout-qr-box canvas, .checkout-qr-box img { width: 120px !important; height: 120px !important; max-width: 120px !important; max-height: 120px !important; image-rendering: pixelated; }
+.checkout-qr-img { display: block; width: 120px; height: 120px; object-fit: contain; image-rendering: pixelated; }
 .checkout-qr-help { color: var(--muted); font-size: 10px; line-height: 1.35; }
 .checkout-row-complete td { animation: checkoutRowSettle 420ms ease; }
 .btn-confirm { background: #da3633; color: #fff; }
@@ -1315,59 +1316,29 @@ function buildCheckoutUrl(checkinId) {
   if (settings.logoUrl) url.searchParams.set('logo', settings.logoUrl);
   return url.href;
 }
-function checkoutQrLooksBlank(img) {
-  if (!img || !img.complete || !img.naturalWidth || !img.naturalHeight) return false;
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    ctx.drawImage(img, 0, 0);
-    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    let dark = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      if ((data[i] + data[i + 1] + data[i + 2]) / 3 < 96) dark++;
-      if (dark > 24) return false;
-    }
-    return true;
-  } catch (err) {
-    return false;
-  }
-}
-function hardenCheckoutQr(target) {
-  const canvas = target.querySelector('canvas');
-  const img = target.querySelector('img');
-  [canvas, img].forEach(node => {
-    if (!node) return;
-    node.style.width = '120px';
-    node.style.height = '120px';
-    node.style.maxWidth = '120px';
-    node.style.maxHeight = '120px';
-  });
-  const showCanvasQr = () => {
-    if (!canvas) return;
-    canvas.style.display = 'block';
-    if (img) img.style.display = 'none';
-  };
-  showCanvasQr();
-  const useCanvasFallback = () => {
-    if (!canvas || !img || !checkoutQrLooksBlank(img)) return;
-    showCanvasQr();
-  };
-  if (img && !img.complete) img.addEventListener('load', useCanvasFallback, { once: true });
-  requestAnimationFrame(showCanvasQr);
-  setTimeout(showCanvasQr, 250);
+function checkoutQrImageUrl(payload) {
+  return 'https://api.qrserver.com/v1/create-qr-code/?ecc=L&margin=8&size=240x240&data=' + encodeURIComponent(payload);
 }
 function renderCheckoutQr(checkinId) {
   const target = document.getElementById(`checkoutQr_${CSS.escape(checkinId)}`);
-  if (!target || !window.QRCode) return;
+  if (!target) return;
   target.innerHTML = '';
   const url = buildCheckoutUrl(checkinId);
-  new QRCode(target, { text: url, width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.L });
-  hardenCheckoutQr(target);
+  const fallbackImg = document.createElement('img');
+  fallbackImg.className = 'checkout-qr-img';
+  fallbackImg.alt = 'Check-out QR';
+  fallbackImg.width = 120;
+  fallbackImg.height = 120;
+  fallbackImg.decoding = 'async';
+  fallbackImg.referrerPolicy = 'no-referrer';
+  fallbackImg.src = checkoutQrImageUrl(url);
+  target.appendChild(fallbackImg);
   target.dataset.qrFullscreenPayload = url;
   target.dataset.qrFullscreenTitle = 'Check-out QR';
   target.dataset.qrFullscreenSubtitle = 'Attendee scans this with the same IRLid phone';
+  target.dataset.qrFullscreenLogoUrl = getFullscreenLogoUrl();
+  target.dataset.qrFullscreenLogoAlt = `${currentOrg?.name || portalState.orgCode || 'Organisation'} logo`;
+  target.dataset.qrFullscreenShowTitle = 'true';
 }
 function requestCheckout(checkinId) {
   checkoutConfirmId = checkinId;

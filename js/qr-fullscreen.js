@@ -103,7 +103,10 @@
     await open({
       payload,
       title: el.dataset.qrFullscreenTitle || "IRLid QR",
-      subtitle: el.dataset.qrFullscreenSubtitle || "Tap outside the QR or press Escape to close"
+      subtitle: el.dataset.qrFullscreenSubtitle || "Tap outside the QR or press Escape to close",
+      logoUrl: el.dataset.qrFullscreenLogoUrl || "",
+      logoAlt: el.dataset.qrFullscreenLogoAlt || el.dataset.qrFullscreenTitle || "IRLid logo",
+      showTitle: el.dataset.qrFullscreenShowTitle !== "false"
     });
   }
 

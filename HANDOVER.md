@@ -2,7 +2,7 @@
 
 **Issued:** 27 April 2026 by Mr. Data
 **Repo scope:** `BunHead/IRLid-TestEnvironment` only. Do not touch live `BunHead/IRLid`.
-**Working rule:** 3 atomic tasks, stacked only if each PR clearly states its base branch.
+**Working rule:** one narrow task per PR. Do not combine Worker schema, frontend gate, and checkout-token work in one PR.
 **Current main:** Batch 12 carried to `main` by PR #40.
 
 ## Batch 12 Live Hardening Prerequisite
@@ -21,12 +21,13 @@ Move the test environment one step closer to real protocol behaviour:
 
 1. A doorman/staff device must cryptographically authenticate itself with its own signed HELLO before it can record check-ins.
 2. Checkout QR payloads should become short, scannable URLs backed by Worker-side token resolution.
+3. Debug mode should get a safe maintenance path for clearing test attendance datasets.
 
 This is not a polish batch. It touches frontend state, Worker endpoints, and D1 schema.
 
-## Task 1 - Staff HELLO Auth Foundation
+## Task 1 - Staff Auth Schema + Session Endpoint
 
-**Goal:** Add a Worker-backed staff authentication primitive that verifies a signed HELLO and returns a short-lived staff session.
+**Goal:** Add the Worker/D1 foundation for staff authentication, without changing Doorman UI behaviour yet.
 
 **Files:** `irlid-api/src/index.js`, `irlid-api/schema.sql`, `js/orgapi.js`.
 
@@ -35,7 +36,7 @@ This is not a polish batch. It touches frontend state, Worker endpoints, and D1 
 - Add idempotent D1 migration for a staff auth/session table, for example `org_staff_sessions`.
 - Add `POST /org/staff/auth`.
 - Request body accepts the staff HELLO payload in the same compact/raw forms used by attendee HELLO QR.
-- Worker verifies the HELLO signature against the included public JWK using existing canonical/signature helpers or the closest local equivalent.
+- Worker verifies the HELLO structure and, if the repository already has reusable verification helpers, verifies the signature against the included public JWK. If reusable verification is not locally available, store this as `verification_state: "structure_checked"` and document the gap in the PR rather than inventing incompatible crypto.
 - Worker binds the staff session to the organisation API key used by the portal request.
 - Return `{ok:true, staff_session:<opaque token>, expires_at, staff_pub_fp}`.
 - TTL should be short, suggested 15 minutes.
@@ -43,52 +44,115 @@ This is not a polish batch. It touches frontend state, Worker endpoints, and D1 
 
 **Acceptance:**
 
-- Valid signed HELLO returns a staff session.
-- Tampered HELLO returns 400/401.
+- Valid HELLO-shaped payload returns a staff session.
+- Missing public key / malformed HELLO returns 400/401.
 - Expired timestamp returns 401.
 - Same HELLO replay within a short tolerance is either idempotent or clearly rejected, but must not corrupt state.
+- No Doorman UI gating in this task.
 
-**PR title:** `[codex] Staff HELLO auth foundation`
+**PR title:** `[codex] Staff auth session foundation`
 
-## Task 2 - Gate Doorman Check-in Behind Staff Auth
+## Optional Debug Maintenance Task - Clear Test Attendance Dataset
 
-**Goal:** The Doorman Console cannot record manual check-ins until the current staff/doorman device has authenticated.
+**Goal:** In DEV/debug mode only, allow the dashboard test attendance dataset to be cleared without touching live production data.
+
+**Files:** `org.html`, `js/orgapi.js`, `irlid-api/src/index.js`.
+
+**Behaviour:**
+
+- Add a debug-only dashboard action such as "Clear test attendance".
+- Require an explicit confirmation dialog that names the current organisation key.
+- Worker endpoint must reject non-DEV/non-test org keys.
+- Clear test check-ins, conflict rows, and any related checkout tokens for the current test org.
+- Do not clear expected attendees unless a separate checkbox is explicitly selected.
+- Never run against live `BunHead/IRLid`.
+
+**Acceptance:**
+
+- DevSmoke/Codex smoke rows can be removed from the dashboard in test mode.
+- Non-test org key returns 403.
+- Confirmation cancel leaves data untouched.
+
+**PR title:** `[codex] Debug clear test attendance dataset`
+
+## Task 2 - Staff Auth UI Smoke Panel
+
+**Goal:** Add a visible but non-blocking Staff Auth panel in Doorman mode so the endpoint can be exercised from the portal before enforcement.
 
 **Files:** `org.html`, `org-entry.html`, `js/orgapi.js`.
 
 **Behaviour:**
 
-- In Doorman mode, show an authentication panel above the manual check-in controls.
+- In Doorman mode, show a Staff Auth panel above the manual check-in controls.
 - Support a testable scanner path for a staff HELLO QR. If camera scanning is not available in `org.html`, provide a clear debug import/paste route for `H:` / `HZ:` HELLO payloads.
 - Store staff session in memory or `sessionStorage`, not durable localStorage.
-- Manual check-in button remains disabled until staff auth succeeds.
-- Expired staff session disables manual check-in again.
+- Manual check-in remains enabled in this task; this is a smoke/testing panel only.
 - Existing attendee HELLO generation remains intact.
 
 **Acceptance:**
 
-- Fresh page in Doorman mode: manual check-in disabled.
-- Valid staff HELLO auth: manual check-in enabled and shows authenticated staff fingerprint.
-- Expired/cleared session: manual check-in disabled again.
+- Fresh page in Doorman mode: Staff Auth panel visible.
+- Valid staff HELLO auth: panel shows authenticated staff fingerprint and expiry.
+- Expired/cleared session: panel returns to unauthenticated state.
 - Existing Venue QR mode unaffected.
 
-**PR title:** `[codex] Gate doorman check-in behind staff HELLO auth`
+**PR title:** `[codex] Staff auth portal smoke panel`
 
-## Task 3 - Short Checkout QR Tokens
+## Task 3 - Enforce Staff Auth For Manual Check-in
 
-**Goal:** Replace long checkout URLs with short Worker-backed tokens so checkout QR codes render at scannable density on large screens and mobile devices.
+**Goal:** The Doorman Console cannot record manual check-ins until the current staff/doorman device has an active staff session.
 
-**Files:** `irlid-api/src/index.js`, `irlid-api/schema.sql`, `org.html`, `org-entry.html`, `js/orgapi.js`.
+**Files:** `org.html`, `js/orgapi.js`, `irlid-api/src/index.js`.
+
+**Behaviour:**
+
+- Manual check-in button is disabled until staff auth succeeds.
+- `manualCheckin()` includes the staff session token.
+- Worker rejects doorman/manual check-in requests without a valid staff session.
+- Expired session disables the button again and shows a clear message.
+- Existing Venue QR and attendee self-check-in paths are unaffected.
+
+**Acceptance:**
+
+- Fresh Doorman mode: manual check-in disabled.
+- Valid staff auth: manual check-in enabled.
+- Missing/expired staff token: Worker rejects with 401 and UI explains the issue.
+
+**PR title:** `[codex] Enforce staff auth for doorman check-in`
+
+## Task 4 - Checkout Token Schema + API
+
+**Goal:** Add Worker/D1 support for short checkout tokens, without changing the UI yet.
+
+**Files:** `irlid-api/src/index.js`, `irlid-api/schema.sql`, `js/orgapi.js`.
 
 **Behaviour:**
 
 - Add idempotent D1 migration for checkout token storage, for example `org_checkout_tokens`.
 - Add `POST /org/checkout-token` for the org portal to create a short token for an active check-in.
 - Add `GET /org/checkout-token/:token` or equivalent resolution endpoint.
-- QR should encode a short URL such as `org-entry.html?type=checkout&t=<token>` rather than embedding org key, check-in id, nonce, event, and logo in the visible QR.
-- `org-entry.html` resolves the token, then continues the existing signed checkout path.
 - Tokens expire quickly, suggested 5 minutes.
 - Do not backfill or rewrite old check-ins.
+
+**Acceptance:**
+
+- Token can be created for an active check-in.
+- Valid token resolves to the data needed by checkout entry.
+- Expired/unknown token returns clear 404/410 style response.
+
+**PR title:** `[codex] Checkout token API foundation`
+
+## Task 5 - Short Checkout QR UI
+
+**Goal:** Replace long checkout URLs with short Worker-backed tokens so checkout QR codes render at scannable density on large screens and mobile devices.
+
+**Files:** `org.html`, `org-entry.html`, `js/orgapi.js`.
+
+**Behaviour:**
+
+- QR should encode a short URL such as `org-entry.html?type=checkout&t=<token>` rather than embedding org key, check-in id, nonce, event, and logo in the visible QR.
+- `org-entry.html` resolves the token, then continues the existing signed checkout path.
+- If token creation fails, show a clear inline error and do not show a blank QR box.
 
 **Acceptance:**
 
@@ -109,4 +173,4 @@ This is not a polish batch. It touches frontend state, Worker endpoints, and D1 
 
 ## Stop Point
 
-Stop after Task 3. Report PR links, deployment state, and any D1 migration applied.
+Stop after each task. Report PR link, deployment state, and any D1 migration applied.
