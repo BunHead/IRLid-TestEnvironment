@@ -313,7 +313,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .qr-fullscreen-trust strong { color: #e8f0ff; }
 .qr-fullscreen-close { position: fixed; top: 18px; right: 18px; width: 42px; height: 42px; border: 0; border-radius: 999px; background: rgba(255,255,255,0.12); color: #fff; opacity: 0.42; font-size: 24px; line-height: 1; cursor: pointer; box-shadow: 0 10px 28px rgba(0,0,0,0.35); transition: opacity 0.16s ease, background 0.16s ease; }
 .qr-fullscreen-close:hover, .qr-fullscreen-close:focus-visible { opacity: 1; background: rgba(255,255,255,0.22); outline: none; }
-.checkin-settings-cog { position: fixed; left: 14px; bottom: 14px; z-index: 120; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #151b23; color: var(--text); box-shadow: 0 12px 28px rgba(0,0,0,0.32); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 19px; }
+.checkin-settings-cog { position: fixed; left: clamp(16px, calc(220px + 24px), calc(100vw - 60px)); bottom: 18px; z-index: 120; width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #151b23; color: var(--text); box-shadow: 0 12px 28px rgba(0,0,0,0.32); cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 19px; }
 .checkin-settings-cog:hover, .checkin-settings-cog:focus-visible { border-color: var(--blue); outline: none; }
 body[data-active-panel="checkin"] .checkin-settings-cog { display: flex; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
