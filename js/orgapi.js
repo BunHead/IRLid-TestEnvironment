@@ -85,6 +85,18 @@
       });
     },
 
+    createCheckoutToken(orgKey, checkinId) {
+      return request("/org/checkout-token", {
+        method: "POST",
+        orgKey,
+        body: { checkin_id: checkinId }
+      });
+    },
+
+    resolveCheckoutToken(token) {
+      return request(`/org/checkout-token/${encodeURIComponent(token)}`);
+    },
+
     recognize(orgKey, devicePub) {
       return request(`/org/recognize?org=${encodeURIComponent(orgKey)}&device_pub=${encodeURIComponent(devicePub)}`);
     },
