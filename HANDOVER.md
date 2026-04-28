@@ -5,6 +5,16 @@
 **Working rule:** one narrow task per PR. Do not combine Worker schema, frontend gate, and checkout-token work in one PR.
 **Current main:** Batch 12 carried to `main` by PR #40.
 
+## Current Demo State - 28 April 2026
+
+- Batch 16 checkout-token work is merged and deployed in the test environment.
+- T1 Worker/D1 token API merged via PR #52; remote D1 `org_checkout_tokens` migration was applied and smoke-tested for create, replace, consume, expired, and unknown-token paths.
+- T2 short checkout QR UI merged via PR #54; GitHub Pages deployment was verified for `org.html`, `org-entry.html`, and `js/orgapi.js`.
+- Checkout QR generation is local-first and now encodes `org-entry.html?type=checkout&t=<token>` rather than the long sensitive checkout payload.
+- Unknown/expired checkout tokens show a clear failure state on `org-entry.html`; token creation failures show inline in the QR box.
+- The floating Check-in settings cog was removed after deployment; use the sidebar Settings item or the Check-out Required Edit button to reach settings.
+- `.codex-demo-audit/` is local/untracked audit material and should not be included in PRs unless explicitly requested.
+
 ## Batch 12 Live Hardening Prerequisite
 
 Before starting Batch 13 protocol work, merge and deploy the live-hardening fix that:
