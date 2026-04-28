@@ -968,6 +968,70 @@ async function orgCheckout(request, env) {
   return json({ ok: true, checkin_id: row.id, checkout_at: t, duration_s: duration, checkout_method: "signed" });
 }
 
+async function orgCreateCheckoutToken(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const checkinId = String(body.checkin_id || "").trim();
+  if (!checkinId) return err("checkin_id required");
+
+  const checkin = await env.DB.prepare(
+    "SELECT id, checkout_at FROM org_checkins WHERE id=? AND org_id=?"
+  ).bind(checkinId, org.id).first();
+  if (!checkin) return err("Check-in record not found", 404);
+  if (checkin.checkout_at) return err("Already checked out", 409);
+
+  const t = now();
+  await env.DB.prepare(
+    "UPDATE org_checkout_tokens SET consumed_at=? WHERE org_api_key=? AND checkin_id=? AND consumed_at IS NULL AND expires_at>?"
+  ).bind(t, org.api_key, checkinId, t).run();
+
+  const token = "chk_" + randomToken();
+  const expiresAt = t + 5 * 60;
+  await env.DB.prepare(
+    "INSERT INTO org_checkout_tokens (token,checkin_id,org_api_key,created_at,expires_at,consumed_at) VALUES (?,?,?,?,?,NULL)"
+  ).bind(token, checkinId, org.api_key, t, expiresAt).run();
+
+  return json({ token, expires_at: expiresAt });
+}
+
+async function orgResolveCheckoutToken(request, env, tokenParam) {
+  const token = String(tokenParam || "").trim();
+  if (!token) return err("Checkout token not found", 404);
+
+  const row = await env.DB.prepare(
+    "SELECT token,checkin_id,org_api_key,expires_at,consumed_at FROM org_checkout_tokens WHERE token=?"
+  ).bind(token).first();
+  if (!row || row.consumed_at) return err("Checkout token not found", 404);
+
+  const t = now();
+  if (Number(row.expires_at) <= t) {
+    return err("Checkout token expired", 410);
+  }
+
+  const org = await env.DB.prepare(
+    "SELECT name,settings_json FROM organisations WHERE api_key=?"
+  ).bind(row.org_api_key).first();
+  if (!org) return err("Checkout token not found", 404);
+
+  const checkin = await env.DB.prepare(
+    "SELECT id, checkout_at FROM org_checkins WHERE id=?"
+  ).bind(row.checkin_id).first();
+  if (!checkin || checkin.checkout_at) return err("Checkout token not found", 404);
+
+  await env.DB.prepare(
+    "UPDATE org_checkout_tokens SET consumed_at=? WHERE token=? AND consumed_at IS NULL"
+  ).bind(t, token).run();
+
+  const settings = JSON.parse(org.settings_json || "{}");
+  return json({
+    org_api_key: row.org_api_key,
+    checkin_id: row.checkin_id,
+    nonce: row.token,
+    event: org.name || "IRLid Event",
+    logo: settings.logoUrl || ""
+  });
+}
+
 async function orgAttendance(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const url = new URL(request.url);
@@ -1007,7 +1071,7 @@ async function orgDebugClearAttendance(request, env) {
   const conflicts = await env.DB.prepare("DELETE FROM attendee_conflicts WHERE org_code=?").bind(org.id).run();
   let checkoutTokensCleared = 0;
   if (await tableExists(env, "org_checkout_tokens")) {
-    const tokens = await env.DB.prepare("DELETE FROM org_checkout_tokens WHERE org_id=?").bind(org.id).run();
+    const tokens = await env.DB.prepare("DELETE FROM org_checkout_tokens WHERE org_api_key=?").bind(org.api_key).run();
     checkoutTokensCleared = tokens.meta?.changes || 0;
   }
 
@@ -1228,6 +1292,7 @@ export default {
       else if (method === "POST" && path === "/org/staff/auth")      response = await orgStaffAuth(request, env);
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
+      else if (method === "POST" && path === "/org/checkout-token")  response = await orgCreateCheckoutToken(request, env);
       else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
       else if (method === "POST" && path === "/org/debug/clear-attendance") response = await orgDebugClearAttendance(request, env);
       else if (method === "GET"  && path === "/org/expected")        response = await orgExpectedList(request, env);
@@ -1238,11 +1303,13 @@ export default {
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
         const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
+        const mCheckoutToken = path.match(/^\/org\/checkout-token\/([^/]+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
         else if (method === "POST" && mExpectedClaim) response = await orgExpectedClaim(request, env, Number(mExpectedClaim[1]));
         else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
+        else if (method === "GET" && mCheckoutToken) response = await orgResolveCheckoutToken(request, env, decodeURIComponent(mCheckoutToken[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
           if (method === "GET" && m) response = await getReceipt(request, env, m[1]);
