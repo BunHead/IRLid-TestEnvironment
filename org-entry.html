@@ -409,13 +409,14 @@
   const mode = (params.get("mode") || "").trim().toLowerCase();
   const checkinId = (params.get("checkin") || "").trim();
   const checkoutNonce = (params.get("nonce") || "").trim();
+  const checkoutToken = (params.get("t") || "").trim();
   const attendeeName = (params.get("attendee") || params.get("name") || "Alice Smith").trim();
   const scoreLabel = (params.get("score") || "").trim();
   const denyReason = (params.get("reason") || "Not on list").trim();
-  const eventName = (params.get("event") || "IRLid Event").trim();
+  let eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
-  const logoUrl = (params.get("logo") || "").trim();
+  let logoUrl = (params.get("logo") || "").trim();
   const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
   const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());
   const context = (params.get("ctx") || params.get("from") || "").trim().toLowerCase();
@@ -610,16 +611,34 @@
     recordVenueCheckin(options).catch((err) => console.warn("Venue check-in record failed", err));
   }
 
-  async function postOrg(path, body) {
-    if (!orgParam) throw new Error("Missing organisation key");
+  async function postOrg(path, body, orgKey = orgParam) {
+    if (!orgKey) throw new Error("Missing organisation key");
     const response = await fetch(API_BASE + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Org-Key": orgParam },
+      headers: { "Content-Type": "application/json", "X-Org-Key": orgKey },
       body: JSON.stringify(body)
     });
     let data = null;
     try { data = await response.json(); } catch {}
     if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
+    return data;
+  }
+
+  async function resolveCheckoutToken(token) {
+    let response;
+    try {
+      response = await fetch(API_BASE + `/org/checkout-token/${encodeURIComponent(token)}`);
+    } catch {
+      throw new Error("Could not resolve this check-out QR. Ask the doorman to retry.");
+    }
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) {
+      const message = response.status === 410
+        ? "This check-out QR has expired. Ask the doorman to refresh it."
+        : "This check-out QR is no longer valid. Ask the doorman to retry.";
+      throw new Error(data?.error || message);
+    }
     return data;
   }
 
@@ -863,15 +882,38 @@
   }
 
   async function renderCheckout() {
-    if (!checkinId || !checkoutNonce) {
-      render({ status: "deny", title: "Check-out unavailable", subtitle: "Missing check-out details", meta: "Ask the doorman to retry" });
-      return;
-    }
     try {
-      const checkoutPayload = { checkin_id: checkinId, nonce: checkoutNonce, ts: Math.floor(Date.now() / 1000), v: 1 };
+      let checkoutDetails = {
+        org_api_key: orgParam,
+        checkin_id: checkinId,
+        nonce: checkoutNonce,
+        event: eventName,
+        logo: logoUrl
+      };
+      if (checkoutToken) {
+        try {
+          checkoutDetails = await resolveCheckoutToken(checkoutToken);
+        } catch (err) {
+          render({
+            status: "deny",
+            title: "Check-out unavailable",
+            subtitle: err.message || "Could not resolve this check-out QR",
+            meta: "Ask the doorman to retry"
+          });
+          return;
+        }
+        eventName = checkoutDetails.event || eventName;
+        logoUrl = checkoutDetails.logo || logoUrl;
+      }
+      if (!checkoutDetails.org_api_key || !checkoutDetails.checkin_id || !checkoutDetails.nonce) {
+        render({ status: "deny", title: "Check-out unavailable", subtitle: "Missing check-out details", meta: "Ask the doorman to retry" });
+        return;
+      }
+
+      const checkoutPayload = { checkin_id: checkoutDetails.checkin_id, nonce: checkoutDetails.nonce, ts: Math.floor(Date.now() / 1000), v: 1 };
       const payloadHash = await hashPayloadToB64url(checkoutPayload, 3);
       const signature = await signHashB64url(payloadHash);
-      const result = await postOrg("/org/checkout", { checkin_id: checkinId, checkout_payload: checkoutPayload, signature });
+      const result = await postOrg("/org/checkout", { checkin_id: checkoutDetails.checkin_id, checkout_payload: checkoutPayload, signature }, checkoutDetails.org_api_key);
       render({
         status: "allow",
         title: "Check-out signed",
