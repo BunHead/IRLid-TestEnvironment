@@ -95,6 +95,18 @@ CREATE TABLE IF NOT EXISTS org_staff_sessions (
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_org ON org_staff_sessions(org_id, expires_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_sessions_org_hello ON org_staff_sessions(org_id, hello_hash);
 
+-- Batch 16 Task 1 additive migration: short-lived checkout QR tokens.
+CREATE TABLE IF NOT EXISTS org_checkout_tokens (
+  token       TEXT PRIMARY KEY,
+  checkin_id  TEXT NOT NULL,
+  org_api_key TEXT NOT NULL,
+  created_at  INTEGER NOT NULL,
+  expires_at  INTEGER NOT NULL,
+  consumed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_checkout_tokens_checkin ON org_checkout_tokens(org_api_key, checkin_id, expires_at);
+CREATE INDEX IF NOT EXISTS idx_checkout_tokens_expires ON org_checkout_tokens(expires_at);
+
 CREATE TABLE IF NOT EXISTS org_checkins (
   id              TEXT PRIMARY KEY,
   org_id          TEXT NOT NULL REFERENCES organisations(id),
