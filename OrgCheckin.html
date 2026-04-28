@@ -376,7 +376,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 #panel-checkin #checkoutSettingsCard { margin-top: 9px !important; padding: 9px 11px !important; }
 .prototype-note { margin-bottom: 14px; padding: 10px 12px; border: 1px solid rgba(88,166,255,0.32); border-radius: 8px; background: rgba(88,166,255,0.08); color: #c9ddff; font-size: 12px; line-height: 1.45; }
 .prototype-note strong { color: #f0f6ff; }
-.prototype-checkin #panel-checkin .two-col { grid-template-columns: minmax(0, 1fr); max-width: 860px; margin: 0 auto; }
+.prototype-checkin #panel-checkin .two-col { grid-template-columns: minmax(0, 1fr); width: 100%; min-height: calc(100dvh - 182px); }
 .prototype-checkin #panel-checkin .mode-selector,
 .prototype-checkin #panel-checkin #doormanWrap,
 .prototype-checkin #panel-checkin #expectedSharedPanel,
@@ -386,19 +386,28 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .card-title::after { content: "Public QR"; margin-left: 8px; font-size: 10px; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; }
 .prototype-checkin #panel-checkin .card-body { padding: 18px; }
 .prototype-checkin #panel-checkin .checkin-mode-stage { display: block; }
-.prototype-checkin #panel-checkin #venueQRWrap { align-items: center; justify-content: center; min-height: 300px; }
-.prototype-checkin #panel-checkin .qr-box { width: 220px; height: 220px; }
+.prototype-checkin #panel-checkin #venueQRWrap { align-items: center; justify-content: center; min-height: calc(100dvh - 330px); gap: clamp(22px, 4vw, 56px); }
+.prototype-checkin #panel-checkin .qr-box { width: clamp(220px, 18vw, 320px); height: clamp(220px, 18vw, 320px); }
 .prototype-checkin #panel-checkin .qr-box canvas,
-.prototype-checkin #panel-checkin .qr-box img { max-width: 196px; max-height: 196px; }
+.prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 36px) !important; height: calc(100% - 36px) !important; max-width: none; max-height: none; }
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
 .prototype-checkin #panel-checkin .qr-info p { font-size: 13px; max-width: 46ch; }
+.prototype-checkin #panel-checkin .qr-payload-preview { max-width: 46ch; max-height: 96px; overflow: auto; }
+.prototype-checkin #panel-checkin .qr-info { max-width: 52ch; flex: 0 1 52ch; }
 .dashboard-expected-dock { margin-top: 14px; }
 .dashboard-expected-dock #expectedSharedPanel { display: block; }
 .dashboard-expected-dock .checkin-lower-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr); }
-.prototype-role-strip { margin-bottom: 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.prototype-role-toolbar { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 8px; background: #151b23; padding: 12px; }
+.prototype-role-toolbar label { display: flex; align-items: center; gap: 8px; color: #dbe6ff; font-size: 12px; }
+.prototype-role-toolbar select { min-width: 170px; border: 1px solid var(--line); border-radius: 6px; background: #0b1220; color: var(--text); padding: 7px 9px; }
+.prototype-role-toolbar span { color: var(--muted); font-size: 11px; }
+.prototype-role-strip { margin-bottom: 14px; display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
 .prototype-role-card { border: 1px solid var(--line); border-radius: 8px; background: #151b23; padding: 10px; }
+.prototype-role-card.active { border-color: rgba(63,185,80,0.7); background: rgba(35,134,54,0.14); }
 .prototype-role-card strong { display: block; color: #f0f6ff; font-size: 12px; margin-bottom: 4px; }
 .prototype-role-card span { color: var(--muted); font-size: 11px; line-height: 1.35; }
+.prototype-role-card.active span { color: #c9f7d7; }
+.prototype-role-detail { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: #0b1220; padding: 12px; color: #c9ddff; font-size: 12px; line-height: 1.45; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
@@ -510,12 +519,24 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 
     <div class="panel" id="panel-dashboard">
       <div class="prototype-note"><strong>Prototype:</strong> Dashboard is the private staff surface. Expected attendee add, edit, delete, attendance operations, and future staff management live here behind role-gated actions.</div>
-      <div class="prototype-role-strip" aria-label="Prototype role gates">
-        <div class="prototype-role-card"><strong>Staff</strong><span>View attendance and assist review cases.</span></div>
-        <div class="prototype-role-card"><strong>Manager</strong><span>Add and edit expected attendees.</span></div>
-        <div class="prototype-role-card"><strong>Lead Admin</strong><span>Delete, clear data, configure event settings.</span></div>
-        <div class="prototype-role-card"><strong>Founder</strong><span>Organisation-level controls and role assignment.</span></div>
+      <div class="prototype-role-toolbar">
+        <label for="prototypeRoleSelect">Viewing as
+          <select id="prototypeRoleSelect">
+            <option value="staff">Staff</option>
+            <option value="manager">Manager</option>
+            <option value="lead_admin" selected>Lead Admin</option>
+            <option value="founder">Founder</option>
+          </select>
+        </label>
+        <span>Prototype only: real access should come from a verified Staff HELLO role.</span>
       </div>
+      <div class="prototype-role-strip" aria-label="Prototype role gates">
+        <div class="prototype-role-card" data-role-card="staff"><strong>Staff</strong><span>View attendance and assist review cases.</span></div>
+        <div class="prototype-role-card" data-role-card="manager"><strong>Manager</strong><span>Add and edit expected attendees.</span></div>
+        <div class="prototype-role-card" data-role-card="lead_admin"><strong>Lead Admin</strong><span>Delete, clear data, configure event settings.</span></div>
+        <div class="prototype-role-card" data-role-card="founder"><strong>Founder</strong><span>Organisation-level controls and role assignment.</span></div>
+      </div>
+      <div class="prototype-role-detail" id="prototypeRoleDetail"></div>
       <div class="stats-row" id="statsRow">
         <div class="stat-card"><div class="stat-label">Checked In</div><div class="stat-value green" id="statIn">12</div><div class="stat-sub" id="statInSub">18 total today</div></div>
         <div class="stat-card"><div class="stat-label">Checked Out</div><div class="stat-value blue" id="statOut">6</div></div>
@@ -1310,7 +1331,7 @@ function aggregateAttendees(checkins) {
   return Array.from(byAttendee.values()).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
 }
 function formatTimestamp(ts) {
-  return ts ? new Date(ts * 1000).toLocaleString() : '—';
+  return ts ? new Date(ts * 1000).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 }
 function prefersReducedMotion() {
   return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -2160,6 +2181,21 @@ function applyCheckinPrototypeLayout() {
   if (attendanceCard?.nextSibling) dashboard.insertBefore(dock, attendanceCard.nextSibling);
   else dashboard.appendChild(dock);
 }
+const PROTOTYPE_ROLE_DETAILS = {
+  staff: 'Staff can view attendance and assist review cases. Expected attendee writes stay locked.',
+  manager: 'Manager can add and edit expected attendees and resolve routine review cases.',
+  lead_admin: 'Lead Admin can add, edit, delete, clear test/event data, configure event settings, and manage staff membership once Staff HELLO step-up is wired.',
+  founder: 'Founder adds organisation-level controls on top of Lead Admin, including assigning managers and lead admins.'
+};
+function setPrototypeRole(role) {
+  const value = PROTOTYPE_ROLE_DETAILS[role] ? role : 'lead_admin';
+  document.body.dataset.prototypeRole = value;
+  document.querySelectorAll('[data-role-card]').forEach(card => {
+    card.classList.toggle('active', card.dataset.roleCard === value);
+  });
+  const detail = document.getElementById('prototypeRoleDetail');
+  if (detail) detail.textContent = PROTOTYPE_ROLE_DETAILS[value];
+}
 
 window.addEventListener('DOMContentLoaded', async () => {
   settings = loadJson(STORAGE_KEY_SETTINGS, settings);
@@ -2169,6 +2205,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   setPortalFieldValues();
   wirePortalFields();
   applyCheckinPrototypeLayout();
+  const prototypeRoleSelect = document.getElementById('prototypeRoleSelect');
+  prototypeRoleSelect?.addEventListener('change', () => setPrototypeRole(prototypeRoleSelect.value));
+  setPrototypeRole(prototypeRoleSelect?.value || 'lead_admin');
   const csvFileInput = document.getElementById('csvFileInput');
   if (csvFileInput) csvFileInput.addEventListener('change', (event) => {
     const file = event.target.files && event.target.files[0];
