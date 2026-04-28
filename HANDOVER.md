@@ -13,6 +13,8 @@
 - Checkout QR generation is local-first and now encodes `org-entry.html?type=checkout&t=<token>` rather than the long sensitive checkout payload.
 - Unknown/expired checkout tokens show a clear failure state on `org-entry.html`; token creation failures show inline in the QR box.
 - The floating Check-in settings cog was removed after deployment; use the sidebar Settings item or the Check-out Required Edit button to reach settings.
+- Redesign direction captured in `docs/unified-checkin-role-dashboard.md`: collapse Venue/Doorman into one branded Check-in flow, gate Dashboard functions by explicit staff role, and require fresh Staff HELLO confirmation for privileged writes.
+- Experimental `OrgCheckin.html` prototype added alongside stable `org.html` to test the redesigned Organisation / Check-in / Dashboard shape without replacing the current demo portal.
 - `.codex-demo-audit/` is local/untracked audit material and should not be included in PRs unless explicitly requested.
 
 ## Batch 12 Live Hardening Prerequisite
