@@ -376,6 +376,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 #panel-checkin #checkoutSettingsCard { margin-top: 9px !important; padding: 9px 11px !important; }
 .prototype-note { margin-bottom: 14px; padding: 10px 12px; border: 1px solid rgba(88,166,255,0.32); border-radius: 8px; background: rgba(88,166,255,0.08); color: #c9ddff; font-size: 12px; line-height: 1.45; }
 .prototype-note strong { color: #f0f6ff; }
+.prototype-checkin .content { overflow-y: auto; scrollbar-gutter: stable; }
 .prototype-checkin #panel-checkin .two-col { grid-template-columns: minmax(0, 1fr); width: 100%; min-height: calc(100dvh - 182px); }
 .prototype-checkin #panel-checkin .mode-selector,
 .prototype-checkin #panel-checkin #doormanWrap,
@@ -386,8 +387,8 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .card-title::after { content: "Public QR"; margin-left: 8px; font-size: 10px; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; }
 .prototype-checkin #panel-checkin .card-body { padding: 18px; }
 .prototype-checkin #panel-checkin .checkin-mode-stage { display: block; }
-.prototype-checkin #panel-checkin #venueQRWrap { align-items: center; justify-content: center; min-height: calc(100dvh - 330px); gap: clamp(22px, 4vw, 56px); }
-.prototype-checkin #panel-checkin .qr-box { width: clamp(220px, 18vw, 320px); height: clamp(220px, 18vw, 320px); }
+.prototype-checkin #panel-checkin #venueQRWrap { align-items: center; justify-content: center; min-height: calc(100dvh - 330px); gap: clamp(28px, 6vw, 84px); }
+.prototype-checkin #panel-checkin .qr-box { width: clamp(320px, 33vw, 620px); height: clamp(320px, 33vw, 620px); }
 .prototype-checkin #panel-checkin .qr-box canvas,
 .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 36px) !important; height: calc(100% - 36px) !important; max-width: none; max-height: none; }
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
@@ -396,7 +397,9 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .qr-info { max-width: 52ch; flex: 0 1 52ch; }
 .dashboard-expected-dock { margin-top: 14px; }
 .dashboard-expected-dock #expectedSharedPanel { display: block; }
+.dashboard-expected-dock .expected-list { display: none; }
 .dashboard-expected-dock .checkin-lower-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr); }
+.dashboard-expected-dock .expected-admin-panel h5::after { content: " (Manager+)"; color: var(--muted); font-size: 11px; font-weight: 400; }
 .prototype-role-toolbar { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 8px; background: #151b23; padding: 12px; }
 .prototype-role-toolbar label { display: flex; align-items: center; gap: 8px; color: #dbe6ff; font-size: 12px; }
 .prototype-role-toolbar select { min-width: 170px; border: 1px solid var(--line); border-radius: 6px; background: #0b1220; color: var(--text); padding: 7px 9px; }
@@ -408,6 +411,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-role-card span { color: var(--muted); font-size: 11px; line-height: 1.35; }
 .prototype-role-card.active span { color: #c9f7d7; }
 .prototype-role-detail { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: #0b1220; padding: 12px; color: #c9ddff; font-size: 12px; line-height: 1.45; }
+.prototype-permission-disabled { opacity: 0.45; filter: grayscale(0.2); }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
@@ -531,9 +535,9 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
         <span>Prototype only: real access should come from a verified Staff HELLO role.</span>
       </div>
       <div class="prototype-role-strip" aria-label="Prototype role gates">
-        <div class="prototype-role-card" data-role-card="staff"><strong>Staff</strong><span>View attendance and assist review cases.</span></div>
+        <div class="prototype-role-card" data-role-card="staff"><strong>Staff</strong><span>View attendance and assist review cases. No add/delete.</span></div>
         <div class="prototype-role-card" data-role-card="manager"><strong>Manager</strong><span>Add and edit expected attendees.</span></div>
-        <div class="prototype-role-card" data-role-card="lead_admin"><strong>Lead Admin</strong><span>Delete, clear data, configure event settings.</span></div>
+        <div class="prototype-role-card" data-role-card="lead_admin"><strong>Lead Admin</strong><span>Manager powers plus clear data, settings, and staff roles.</span></div>
         <div class="prototype-role-card" data-role-card="founder"><strong>Founder</strong><span>Organisation-level controls and role assignment.</span></div>
       </div>
       <div class="prototype-role-detail" id="prototypeRoleDetail"></div>
@@ -656,7 +660,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 
                 <div class="checkin-lower-grid">
                   <div class="expected-admin-panel">
-                    <h5>Add expected attendee</h5>
+                    <h5>Expected attendee management</h5>
                     <div class="expected-admin-fields">
                       <div class="input-group" style="margin-bottom:0;">
                         <label for="expectedFirstName">First Name</label>
@@ -2182,19 +2186,28 @@ function applyCheckinPrototypeLayout() {
   else dashboard.appendChild(dock);
 }
 const PROTOTYPE_ROLE_DETAILS = {
-  staff: 'Staff can view attendance and assist review cases. Expected attendee writes stay locked.',
-  manager: 'Manager can add and edit expected attendees and resolve routine review cases.',
-  lead_admin: 'Lead Admin can add, edit, delete, clear test/event data, configure event settings, and manage staff membership once Staff HELLO step-up is wired.',
+  staff: 'Staff can view attendance and assist review cases. Add, edit, delete, and clear actions stay locked.',
+  manager: 'Manager can add, edit, and delete expected attendees, plus resolve routine review cases.',
+  lead_admin: 'Lead Admin has Manager powers plus clear test/event data, event settings, and staff membership once Staff HELLO step-up is wired.',
   founder: 'Founder adds organisation-level controls on top of Lead Admin, including assigning managers and lead admins.'
 };
+const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3, founder: 4 };
 function setPrototypeRole(role) {
   const value = PROTOTYPE_ROLE_DETAILS[role] ? role : 'lead_admin';
+  const rank = PROTOTYPE_ROLE_RANK[value] || 3;
   document.body.dataset.prototypeRole = value;
   document.querySelectorAll('[data-role-card]').forEach(card => {
     card.classList.toggle('active', card.dataset.roleCard === value);
   });
   const detail = document.getElementById('prototypeRoleDetail');
   if (detail) detail.textContent = PROTOTYPE_ROLE_DETAILS[value];
+  const canManageExpected = rank >= PROTOTYPE_ROLE_RANK.manager;
+  const canClear = rank >= PROTOTYPE_ROLE_RANK.lead_admin;
+  document.getElementById('expectedAddBtn')?.toggleAttribute('disabled', !canManageExpected);
+  document.getElementById('expectedDeleteBtn')?.toggleAttribute('disabled', !canManageExpected);
+  document.getElementById('clearAttendanceBtn')?.toggleAttribute('disabled', !canClear);
+  document.querySelector('.expected-admin-panel')?.classList.toggle('prototype-permission-disabled', !canManageExpected);
+  document.querySelector('.debug-maintenance')?.classList.toggle('prototype-permission-disabled', !canClear);
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
