@@ -387,14 +387,14 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .card-title::after { content: "Public QR"; margin-left: 8px; font-size: 10px; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; }
 .prototype-checkin #panel-checkin .card-body { padding: 18px; }
 .prototype-checkin #panel-checkin .checkin-mode-stage { display: block; }
-.prototype-checkin #panel-checkin #venueQRWrap { align-items: center; justify-content: center; min-height: calc(100dvh - 330px); gap: clamp(28px, 6vw, 84px); }
-.prototype-checkin #panel-checkin .qr-box { width: clamp(320px, 33vw, 620px); height: clamp(320px, 33vw, 620px); }
+.prototype-checkin #panel-checkin #venueQRWrap { display: grid; grid-template-columns: minmax(160px, 1fr) auto minmax(220px, 1fr); align-items: center; justify-items: center; min-height: calc(100dvh - 330px); gap: clamp(24px, 4vw, 72px); }
+.prototype-checkin #panel-checkin .qr-box { grid-column: 2; width: min(62vh, 44vw, 680px); height: min(62vh, 44vw, 680px); min-width: 300px; min-height: 300px; }
 .prototype-checkin #panel-checkin .qr-box canvas,
 .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 36px) !important; height: calc(100% - 36px) !important; max-width: none; max-height: none; }
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
 .prototype-checkin #panel-checkin .qr-info p { font-size: 13px; max-width: 46ch; }
 .prototype-checkin #panel-checkin .qr-payload-preview { max-width: 46ch; max-height: 96px; overflow: auto; }
-.prototype-checkin #panel-checkin .qr-info { max-width: 52ch; flex: 0 1 52ch; }
+.prototype-checkin #panel-checkin .qr-info { grid-column: 3; width: min(100%, 52ch); justify-self: start; }
 .dashboard-expected-dock { margin-top: 14px; }
 .dashboard-expected-dock #expectedSharedPanel { display: block; }
 .dashboard-expected-dock .expected-list { display: none; }
@@ -404,7 +404,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-role-toolbar label { display: flex; align-items: center; gap: 8px; color: #dbe6ff; font-size: 12px; }
 .prototype-role-toolbar select { min-width: 170px; border: 1px solid var(--line); border-radius: 6px; background: #0b1220; color: var(--text); padding: 7px 9px; }
 .prototype-role-toolbar span { color: var(--muted); font-size: 11px; }
-.prototype-role-strip { margin-bottom: 14px; display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 10px; }
+.prototype-role-strip { display: none; }
 .prototype-role-card { border: 1px solid var(--line); border-radius: 8px; background: #151b23; padding: 10px; }
 .prototype-role-card.active { border-color: rgba(63,185,80,0.7); background: rgba(35,134,54,0.14); }
 .prototype-role-card strong { display: block; color: #f0f6ff; font-size: 12px; margin-bottom: 4px; }
@@ -412,6 +412,9 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-role-card.active span { color: #c9f7d7; }
 .prototype-role-detail { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: #0b1220; padding: 12px; color: #c9ddff; font-size: 12px; line-height: 1.45; }
 .prototype-permission-disabled { opacity: 0.45; filter: grayscale(0.2); }
+.prototype-role-dock { margin-top: 12px; }
+.prototype-role-dock .prototype-role-toolbar { margin-bottom: 8px; }
+.prototype-role-dock .prototype-role-detail { margin-bottom: 0; }
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
@@ -1158,6 +1161,7 @@ function renderExpectedAttendeesApiState() {
       : `<div class="expected-name-display" onclick="startExpectedEdit('${escapeHtml(r.id)}')" title="Edit name">${escapeHtml(expectedDisplayName(r))}</div>`;
     return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div>${nameBlock}<div class="expected-meta">${escapeHtml(meta)}</div></div><span class="expected-pill ${pillClass}">${escapeHtml(status)}</span></div>`;
   }).join('');
+  renderTable(attendanceData);
 }
 renderExpectedAttendees = renderExpectedAttendeesApiState;
 async function refreshExpectedAttendees() {
@@ -1203,6 +1207,7 @@ async function addExpectedAttendee() {
     if (surnameInput) surnameInput.value = '';
     setExpectedValidation('');
     renderExpectedAttendees();
+    renderTable(attendanceData);
     showToast('Expected attendee added');
   } catch (err) {
     if (err.status === 409 && err.message === 'duplicate') {
@@ -1240,6 +1245,7 @@ async function confirmExpectedDelete() {
     await window.IRLidOrgApi.deleteExpected(currentOrg.api_key, id);
     expectedAttendees = expectedAttendees.filter(row => String(row.id) !== String(id));
     setExpectedDeleteMode(false);
+    renderTable(attendanceData);
     showToast('Expected attendee removed');
   } catch (err) {
     hideExpectedDeleteDialog();
@@ -1284,6 +1290,7 @@ async function saveExpectedEdit(id) {
     expectedEditId = null;
     expectedEditError = '';
     renderExpectedAttendees();
+    renderTable(attendanceData);
   } catch (err) {
     if (err.status === 409 && err.message === 'duplicate') expectedEditError = `${firstName} ${surname} is already on the expected list.`;
     else expectedEditError = err.status === 401 ? 'Session expired — please re-authenticate' : (err.message || 'Could not update expected attendee');
@@ -1432,20 +1439,35 @@ function renderStats(rows, stats) {
   hasRenderedStats = true;
 }
 function renderTable(rows) {
-  if (!rows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
+  const attendanceNames = new Set(rows.map(r => String(r.name || '').trim().toLowerCase()).filter(Boolean));
+  const expectedRows = expectedAttendees
+    .filter(row => !attendanceNames.has(expectedDisplayName(row).toLowerCase()))
+    .map(row => ({
+      id: `expected:${row.id}`,
+      name: expectedDisplayName(row),
+      first_seen: row.linked_at || row.created_at || null,
+      last_seen: row.linked_at || row.created_at || null,
+      scan_count: 0,
+      status: row.status === 'linked' ? 'expected_linked' : 'expected',
+      expected_only: true
+    }));
+  const displayRows = rows.concat(expectedRows);
+  if (!displayRows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
   document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th><th>Status</th><th>Action</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
   const liveTbody = document.getElementById('attendanceRows');
-  liveTbody.innerHTML = rows.map(r => {
+  liveTbody.innerHTML = displayRows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
     const checkinId = r.active_checkin_id || '';
     const methodBadge = r.checkout_method === 'signed'
       ? '<span class="checkout-signed-badge">lock signed</span>'
       : (r.checkout_method === 'legacy_button' ? '<span class="checkout-legacy-badge">legacy</span>' : '');
-    const rowStatus = r.status === 'conflict'
+    const rowStatus = r.status === 'expected' || r.status === 'expected_linked'
+      ? `<span class="expected-pill ${r.status === 'expected_linked' ? 'ok' : 'warn'}">${r.status === 'expected_linked' ? 'linked expected' : 'expected'}</span>`
+      : r.status === 'conflict'
       ? '<span class="status-conflict">? CONFLICT</span>'
       : (r.status === 'invalid' ? '<span class="status-invalid">INVALID</span>' : (checkinId ? '<span class="status-in">● IN</span>' : `<span class="status-out">● OUT</span>${methodBadge}`));
     const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
-    const actionHtml = buildCheckoutAction(r);
+    const actionHtml = r.expected_only ? '<span style="color:#8b949e;font-size:11px;">Awaiting check-in</span>' : buildCheckoutAction(r);
     return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
   }).join('');
 }
@@ -2184,6 +2206,15 @@ function applyCheckinPrototypeLayout() {
   dock.appendChild(expectedPanel);
   if (attendanceCard?.nextSibling) dashboard.insertBefore(dock, attendanceCard.nextSibling);
   else dashboard.appendChild(dock);
+  const roleToolbar = document.querySelector('.prototype-role-toolbar');
+  const roleDetail = document.getElementById('prototypeRoleDetail');
+  if (roleToolbar && roleDetail && !roleToolbar.closest('.prototype-role-dock')) {
+    const roleDock = document.createElement('div');
+    roleDock.className = 'prototype-role-dock';
+    roleDock.appendChild(roleToolbar);
+    roleDock.appendChild(roleDetail);
+    dashboard.appendChild(roleDock);
+  }
 }
 const PROTOTYPE_ROLE_DETAILS = {
   staff: 'Staff can view attendance and assist review cases. Add, edit, delete, and clear actions stay locked.',
