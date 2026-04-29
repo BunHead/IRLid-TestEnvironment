@@ -218,6 +218,7 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Enforce the prototype role gates in the Worker before any real write path: Staff add only, Manager add/delete attendee, Lead Admin full dashboard powers.
 - Use fresh Staff HELLO step-up for attempted saves/changes, rather than relying only on a timed session.
 - Investigate QR scanning reliability with webcams and Windows Hello cameras; current camera auth works, but webcam QR reading is still fragile.
+- Minor dashboard polish: resize the Attendance Today/action columns and restore the disappearing "Awaiting check-out" passive label.
 
 ## Demo Caveats
 

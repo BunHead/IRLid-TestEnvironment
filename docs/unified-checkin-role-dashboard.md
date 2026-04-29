@@ -99,7 +99,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 
 - Public Check-in now prioritises the branded event QR and hides the explanatory text when the viewport gets tight.
 - Fullscreen QR should show a deliberately subtle `Last Refreshed: mm:ss` marker and refresh just after each minute to prove the displayed QR is live.
-- Dashboard role switcher should expose only Staff, Manager, and Lead Admin.
+- Dashboard role switcher should expose Staff, Manager, Lead Admin, and Developer.
 - Staff can add attendees but cannot delete.
 - Manager can add and delete attendees.
 - Lead Admin can do everything.
@@ -114,6 +114,8 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 - Add a Staff HELLO scan/import step when adding attendee/staff/manager records, storing the derived hash/key placeholder that can later move into the enclave design.
 - Add the staff auto-add rule with a setting to disable it and a deny-list override.
 - Improve webcam QR scanning, especially with Windows Hello/camera devices that struggle to read dense QR codes.
+- Minor dashboard polish: resize the Attendance Today table/action columns so expected-row actions stay readable.
+- Minor dashboard polish: restore/clarify the disappearing "Awaiting check-out" style text where checkout state needs a passive label.
 - Keep stable `org.html` intact until the prototype direction is approved.
 
 ## Demo Guidance
