@@ -387,19 +387,19 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .card-title::after { content: "Public QR"; margin-left: 8px; font-size: 10px; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; }
 .prototype-checkin #panel-checkin .card-body { padding: 18px; }
 .prototype-checkin #panel-checkin .checkin-mode-stage { display: block; }
-.prototype-checkin #panel-checkin #venueQRWrap { display: grid; grid-template-columns: minmax(160px, 1fr) auto minmax(220px, 1fr); align-items: center; justify-items: center; min-height: calc(100dvh - 330px); gap: clamp(24px, 4vw, 72px); }
-.prototype-checkin #panel-checkin .qr-box { grid-column: 2; width: min(62vh, 44vw, 680px); height: min(62vh, 44vw, 680px); min-width: 300px; min-height: 300px; }
+.prototype-checkin #panel-checkin #venueQRWrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.55fr); align-items: center; justify-items: center; min-height: calc(100dvh - 330px); gap: clamp(18px, 3vw, 54px); overflow: hidden; }
+.prototype-checkin #panel-checkin .qr-box { grid-column: 1; width: min(68dvh, 52vw, 700px); height: min(68dvh, 52vw, 700px); min-width: min(300px, 78vw); min-height: min(300px, 78vw); }
 .prototype-checkin #panel-checkin .qr-box canvas,
 .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 36px) !important; height: calc(100% - 36px) !important; max-width: none; max-height: none; }
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
 .prototype-checkin #panel-checkin .qr-info p { font-size: 13px; max-width: 46ch; }
 .prototype-checkin #panel-checkin .qr-payload-preview { max-width: 46ch; max-height: 96px; overflow: auto; }
-.prototype-checkin #panel-checkin .qr-info { grid-column: 3; width: min(100%, 52ch); justify-self: start; }
+.prototype-checkin #panel-checkin .qr-info { grid-column: 2; width: min(100%, 52ch); justify-self: start; }
 .dashboard-expected-dock { margin-top: 14px; }
 .dashboard-expected-dock #expectedSharedPanel { display: block; }
 .dashboard-expected-dock .expected-list { display: none; }
 .dashboard-expected-dock .checkin-lower-grid { grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr); }
-.dashboard-expected-dock .expected-admin-panel h5::after { content: " (Manager+)"; color: var(--muted); font-size: 11px; font-weight: 400; }
+.dashboard-expected-dock .expected-admin-panel h5::after { content: " (Staff add, Manager+ delete)"; color: var(--muted); font-size: 11px; font-weight: 400; }
 .prototype-role-toolbar { margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 8px; background: #151b23; padding: 12px; }
 .prototype-role-toolbar label { display: flex; align-items: center; gap: 8px; color: #dbe6ff; font-size: 12px; }
 .prototype-role-toolbar select { min-width: 170px; border: 1px solid var(--line); border-radius: 6px; background: #0b1220; color: var(--text); padding: 7px 9px; }
@@ -415,6 +415,15 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-role-dock { margin-top: 12px; }
 .prototype-role-dock .prototype-role-toolbar { margin-bottom: 8px; }
 .prototype-role-dock .prototype-role-detail { margin-bottom: 0; }
+@media (max-width: 1180px) {
+  .prototype-checkin #panel-checkin #venueQRWrap { grid-template-columns: 1fr; }
+  .prototype-checkin #panel-checkin .qr-box { grid-column: 1; width: min(70dvh, 82vw, 680px); height: min(70dvh, 82vw, 680px); min-width: min(300px, 82vw); min-height: min(300px, 82vw); }
+  .prototype-checkin #panel-checkin .qr-info { display: none; }
+}
+@media (max-height: 760px) {
+  .prototype-checkin #panel-checkin #venueQRWrap { min-height: calc(100dvh - 250px); }
+  .prototype-checkin #panel-checkin .qr-box { width: min(62dvh, 70vw, 620px); height: min(62dvh, 70vw, 620px); }
+}
 @keyframes qrBorderPulse { 0%, 100% { border-color: rgba(88,166,255,0.52); } 50% { border-color: rgba(114,230,184,0.88); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes doormanFlashSuccess { 0% { box-shadow: 0 0 0 rgba(63,185,80,0); } 45% { border-color: var(--green); background: rgba(63,185,80,0.12); box-shadow: 0 0 0 3px rgba(63,185,80,0.18); } 100% { box-shadow: 0 0 0 rgba(63,185,80,0); } }
@@ -532,16 +541,14 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
             <option value="staff">Staff</option>
             <option value="manager">Manager</option>
             <option value="lead_admin" selected>Lead Admin</option>
-            <option value="founder">Founder</option>
           </select>
         </label>
         <span>Prototype only: real access should come from a verified Staff HELLO role.</span>
       </div>
       <div class="prototype-role-strip" aria-label="Prototype role gates">
-        <div class="prototype-role-card" data-role-card="staff"><strong>Staff</strong><span>View attendance and assist review cases. No add/delete.</span></div>
-        <div class="prototype-role-card" data-role-card="manager"><strong>Manager</strong><span>Add and edit expected attendees.</span></div>
-        <div class="prototype-role-card" data-role-card="lead_admin"><strong>Lead Admin</strong><span>Manager powers plus clear data, settings, and staff roles.</span></div>
-        <div class="prototype-role-card" data-role-card="founder"><strong>Founder</strong><span>Organisation-level controls and role assignment.</span></div>
+        <div class="prototype-role-card" data-role-card="staff"><strong>Staff</strong><span>Add attendees and assist review cases. No delete.</span></div>
+        <div class="prototype-role-card" data-role-card="manager"><strong>Manager</strong><span>Add, edit, and delete attendees.</span></div>
+        <div class="prototype-role-card" data-role-card="lead_admin"><strong>Lead Admin</strong><span>Everything: attendance, attendees, settings, staff roles.</span></div>
       </div>
       <div class="prototype-role-detail" id="prototypeRoleDetail"></div>
       <div class="stats-row" id="statsRow">
@@ -1444,6 +1451,7 @@ function renderTable(rows) {
     .filter(row => !attendanceNames.has(expectedDisplayName(row).toLowerCase()))
     .map(row => ({
       id: `expected:${row.id}`,
+      expected_id: row.id,
       name: expectedDisplayName(row),
       first_seen: row.linked_at || row.created_at || null,
       last_seen: row.linked_at || row.created_at || null,
@@ -1467,7 +1475,7 @@ function renderTable(rows) {
       ? '<span class="status-conflict">? CONFLICT</span>'
       : (r.status === 'invalid' ? '<span class="status-invalid">INVALID</span>' : (checkinId ? '<span class="status-in">● IN</span>' : `<span class="status-out">● OUT</span>${methodBadge}`));
     const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
-    const actionHtml = r.expected_only ? '<span style="color:#8b949e;font-size:11px;">Awaiting check-in</span>' : buildCheckoutAction(r);
+    const actionHtml = r.expected_only ? buildExpectedRowAction(r) : buildCheckoutAction(r);
     return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
   }).join('');
 }
@@ -1485,6 +1493,25 @@ function buildCheckoutAction(row) {
     return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button><div class="checkout-qr-panel"><div class="checkout-qr-box" id="checkoutQr_${safeId}"></div><div class="checkout-qr-help">Attendee scans this on the same IRLid phone to sign check-out.</div></div>${error}</div>`;
   }
   return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Initiate check-out</button>${error}</div>`;
+}
+function currentPrototypeRole() {
+  return document.body.dataset.prototypeRole || document.getElementById('prototypeRoleSelect')?.value || 'lead_admin';
+}
+function prototypeRoleRank() {
+  return PROTOTYPE_ROLE_RANK[currentPrototypeRole()] || PROTOTYPE_ROLE_RANK.lead_admin;
+}
+function buildExpectedRowAction(row) {
+  const id = escapeHtml(String(row.expected_id || '').trim());
+  if (prototypeRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
+    return `<button class="btn btn-danger btn-sm" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
+  }
+  return '<span style="color:#8b949e;font-size:11px;">Awaiting check-in</span>';
+}
+async function deleteExpectedFromAttendance(id) {
+  const row = expectedAttendees.find(item => String(item.id) === String(id));
+  if (!row) return showToast('Expected attendee not found', true);
+  if (prototypeRoleRank() < PROTOTYPE_ROLE_RANK.manager) return showToast('Manager role required to delete attendees', true);
+  showExpectedDeleteDialog(row);
 }
 function checkoutNonceFor(checkinId) {
   if (!checkoutNonces[checkinId]) {
@@ -1608,6 +1635,7 @@ function generateVenueQR() {
   box.dataset.qrFullscreenLogoUrl = getFullscreenLogoUrl();
   box.dataset.qrFullscreenLogoAlt = `${orgName} logo`;
   box.dataset.qrFullscreenShowTitle = 'false';
+  box.dataset.qrFullscreenLastRefreshed = fullscreenRefreshStamp();
   document.getElementById('qrPayloadPreview').textContent = 'Debug QR URL:\n' + venueQrPayload;
 }
 function staffAuthKey() {
@@ -1833,6 +1861,16 @@ function getFullscreenLogoUrl() {
   const logo = (settings.logoUrl || portalState.logoUrl || '').trim();
   return logo || 'logo.png';
 }
+function fullscreenRefreshStamp() {
+  return new Date().toLocaleTimeString('en-GB', { minute: '2-digit', second: '2-digit' });
+}
+function refreshVenueQrPayloadForFullscreen() {
+  generateVenueQR();
+  return {
+    payload: venueQrPayload,
+    lastRefreshedText: `Last Refreshed: ${fullscreenRefreshStamp()}`
+  };
+}
 function fullscreenQR() {
   venueQrPayload = venueQrPayload || buildVenuePayload();
   if (window.IRLidQrFullscreen) {
@@ -1843,7 +1881,9 @@ function fullscreenQR() {
       logoUrl: getFullscreenLogoUrl(),
       logoAlt: `${orgName} logo`,
       showTitle: false,
-      subtitle: 'Scan to check in at this organisation'
+      subtitle: 'Scan to check in at this organisation',
+      lastRefreshedText: `Last Refreshed: ${fullscreenRefreshStamp()}`,
+      refreshPayload: refreshVenueQrPayloadForFullscreen
     });
     return;
   }
@@ -2217,12 +2257,11 @@ function applyCheckinPrototypeLayout() {
   }
 }
 const PROTOTYPE_ROLE_DETAILS = {
-  staff: 'Staff can view attendance and assist review cases. Add, edit, delete, and clear actions stay locked.',
-  manager: 'Manager can add, edit, and delete expected attendees, plus resolve routine review cases.',
-  lead_admin: 'Lead Admin has Manager powers plus clear test/event data, event settings, and staff membership once Staff HELLO step-up is wired.',
-  founder: 'Founder adds organisation-level controls on top of Lead Admin, including assigning managers and lead admins.'
+  staff: 'Staff can add attendees and assist review cases. Delete, clear, settings, and staff-role actions stay locked.',
+  manager: 'Manager can add, edit, and delete attendees, plus resolve routine review cases.',
+  lead_admin: 'Lead Admin can do everything in this prototype: attendee management, clear test/event data, event settings, and staff membership once Staff HELLO step-up is wired.'
 };
-const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3, founder: 4 };
+const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3 };
 function setPrototypeRole(role) {
   const value = PROTOTYPE_ROLE_DETAILS[role] ? role : 'lead_admin';
   const rank = PROTOTYPE_ROLE_RANK[value] || 3;
@@ -2232,13 +2271,15 @@ function setPrototypeRole(role) {
   });
   const detail = document.getElementById('prototypeRoleDetail');
   if (detail) detail.textContent = PROTOTYPE_ROLE_DETAILS[value];
-  const canManageExpected = rank >= PROTOTYPE_ROLE_RANK.manager;
+  const canAddExpected = rank >= PROTOTYPE_ROLE_RANK.staff;
+  const canDeleteExpected = rank >= PROTOTYPE_ROLE_RANK.manager;
   const canClear = rank >= PROTOTYPE_ROLE_RANK.lead_admin;
-  document.getElementById('expectedAddBtn')?.toggleAttribute('disabled', !canManageExpected);
-  document.getElementById('expectedDeleteBtn')?.toggleAttribute('disabled', !canManageExpected);
+  document.getElementById('expectedAddBtn')?.toggleAttribute('disabled', !canAddExpected);
+  document.getElementById('expectedDeleteBtn')?.toggleAttribute('disabled', !canDeleteExpected);
   document.getElementById('clearAttendanceBtn')?.toggleAttribute('disabled', !canClear);
-  document.querySelector('.expected-admin-panel')?.classList.toggle('prototype-permission-disabled', !canManageExpected);
+  document.querySelector('.expected-admin-panel')?.classList.toggle('prototype-permission-disabled', !canAddExpected);
   document.querySelector('.debug-maintenance')?.classList.toggle('prototype-permission-disabled', !canClear);
+  renderTable(attendanceData);
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
