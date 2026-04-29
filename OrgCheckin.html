@@ -193,11 +193,18 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .slider-label span { color: var(--green); font-weight: 600; }
 input[type=range] { width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--blue) 60%, var(--line) 60%); outline: none; margin-bottom: 4px; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--blue); border-radius: 50%; cursor: pointer; }
-.att-table { width: 100%; border-collapse: collapse; }
+.att-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .att-table th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
-.att-table td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.att-table td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
 .att-table tr:last-child td { border-bottom: none; }
 .att-table tr:hover td { background: var(--panel-2); }
+.att-table th:nth-child(1), .att-table td:nth-child(1) { width: 16%; }
+.att-table th:nth-child(2), .att-table td:nth-child(2),
+.att-table th:nth-child(3), .att-table td:nth-child(3) { width: 18%; }
+.att-table th:nth-child(4), .att-table td:nth-child(4) { width: 11%; }
+.att-table th:nth-child(5), .att-table td:nth-child(5) { width: 12%; }
+.att-table th:nth-child(6), .att-table td:nth-child(6) { width: 25%; }
+.att-action-passive { color: #8b949e; font-size: 11px; display: block; white-space: nowrap; }
 .score-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
 .score-high { background: #1a4731; color: var(--green); }
 .score-med { background: #2d2a0f; color: var(--orange); }
@@ -1074,7 +1081,7 @@ function signOutOrg() { clearStaffAuthSession(); currentOrg = null; setSignedInU
 function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
 function buildVenuePayload() {
   const baseUrl = 'https://bunhead.github.io/IRLid-TestEnvironment';
-  const type = (currentMode === 'doorman_scan') ? 'doorman' : 'venue';
+  const type = (currentMode === 'doorman_scan') ? 'doorman' : 'checkin';
   const qp = new URLSearchParams({
     type,
     org: currentOrg?.api_key || 'demo',
@@ -1516,7 +1523,7 @@ function buildExpectedRowAction(row) {
   if (prototypeRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
     return `<button class="btn btn-danger btn-sm expected-row-delete" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
   }
-  return '<span style="color:#8b949e;font-size:11px;">Awaiting check-in</span>';
+  return '<span class="att-action-passive">Awaiting check-in</span>';
 }
 async function deleteExpectedFromAttendance(id) {
   const row = expectedAttendees.find(item => String(item.id) === String(id));

@@ -817,6 +817,30 @@ async function orgRecognize(request, env) {
   return json({ recognized: true, name: `${row.first_name || ""} ${row.surname || ""}`.trim(), expected_id: row.id });
 }
 
+async function orgActiveCheckin(request, env) {
+  const org = await orgFromRequest(request, env);
+  if (!org) return authErr("organisation required", 401);
+  const url = new URL(request.url);
+  const deviceFp = (url.searchParams.get("device_pub") || "").trim();
+  if (!deviceFp) return err("device_pub required");
+
+  const row = await env.DB.prepare(
+    "SELECT id,name,attendee_label,checkin_at FROM org_checkins WHERE org_id=? AND device_key_fp=? AND checkout_at IS NULL AND status!='invalid' ORDER BY checkin_at DESC LIMIT 1"
+  ).bind(org.id, deviceFp).first();
+  if (!row) return json({ active: false });
+
+  const settings = JSON.parse(org.settings_json || "{}");
+  return json({
+    active: true,
+    checkin_id: row.id,
+    nonce: "rescan_" + randomToken(),
+    name: row.name || row.attendee_label || "",
+    checkin_at: row.checkin_at,
+    event: org.name || "IRLid Event",
+    logo: settings.logoUrl || ""
+  });
+}
+
 async function orgStaffAuth(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -1289,6 +1313,7 @@ export default {
       else if (method === "POST" && path === "/org/settings")        response = await orgUpdateSettings(request, env);
       else if (method === "GET"  && path === "/org/qr")              response = await orgGetQR(request, env);
       else if (method === "GET"  && path === "/org/recognize")       response = await orgRecognize(request, env);
+      else if (method === "GET"  && path === "/org/active-checkin")  response = await orgActiveCheckin(request, env);
       else if (method === "POST" && path === "/org/staff/auth")      response = await orgStaffAuth(request, env);
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);

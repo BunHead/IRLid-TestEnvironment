@@ -100,6 +100,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 - Public Check-in now prioritises the branded event QR and hides the explanatory text when the viewport gets tight.
 - Fullscreen QR should show a deliberately subtle `Last Refreshed: mm:ss` marker and refresh just after each minute to prove the displayed QR is live.
 - Tablet/small-height layouts should constrain QR size by visible viewport height so the code never disappears below the frame; fullscreen should request browser fullscreen and gracefully fall back to an in-page overlay.
+- Public Check-in should first ask whether the scanning device has an active check-in, offer signed Check-out when it does, and otherwise continue through recognition, assisted identity, and allow/deny check-in.
 - Dashboard role switcher should expose Staff, Manager, Lead Admin, and Developer.
 - Staff can add attendees but cannot delete.
 - Manager can add and delete attendees.
@@ -111,7 +112,6 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 
 ## Tomorrow Wiring List
 
-- Fix `org-entry.html` re-scan behaviour: scanning the Check-in QR while already checked in still shows Welcome Back; it should offer Check-out.
 - Add a Staff HELLO scan/import step when adding attendee/staff/manager records, storing the derived hash/key placeholder that can later move into the enclave design.
 - Add the staff auto-add rule with a setting to disable it and a deny-list override.
 - Improve webcam QR scanning, especially with Windows Hello/camera devices that struggle to read dense QR codes.

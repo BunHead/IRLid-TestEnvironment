@@ -210,10 +210,10 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Fullscreen Check-in QR has a subtle `Last Refreshed: mm:ss` marker and should refresh just after each minute.
 - Check-in QR layout gives the QR priority and hides the explanatory text on tighter screens.
 - Check-in QR sizing is constrained by visible viewport height for older tablets; the fullscreen control requests browser fullscreen first and falls back to the in-page overlay if the browser refuses.
+- Public Check-in now checks for an existing active check-in before recognition. If the same device is already in, it offers signed Check-out; otherwise it continues through recognised / assisted identity / allow-or-deny check-in.
 
 ## Tomorrow / Next Wiring
 
-- Fix Check-in QR re-scan behaviour in `org-entry.html`: if someone is already checked in, it currently still shows Welcome Back. It should show the Check-out choice instead.
 - When adding attendee/staff/manager records, require scanning/importing their HELLO QR and save the derived hash/key placeholder for the future enclave path.
 - Add the rule that Staff, Manager, Lead Admin, and Developer are automatically present on the expected/known list unless disabled in settings or blocked by a deny list.
 - Enforce the prototype role gates in the Worker before any real write path: Staff add only, Manager add/delete attendee, Lead Admin full dashboard powers.
