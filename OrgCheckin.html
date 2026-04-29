@@ -27,7 +27,7 @@
   --deny-pad: #ffd6d6;
   --scan-pad: #e6eef9;
 }
-body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; min-height: 100dvh; overflow: hidden; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); display: flex; min-height: 100vh; min-height: 100dvh; height: 100vh; height: 100dvh; overflow: hidden; }
 .sidebar { width: 220px; max-height: 100dvh; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
 .sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; align-items: center; min-height: 76px; }
 .sidebar-logo img { display: block; height: 38px; width: auto; max-width: 160px; object-fit: contain; opacity: 0.95; }
@@ -42,11 +42,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .nav-item.active { color: var(--blue); border-left-color: var(--blue); }
 .hidden { display: none !important; }
 .sidebar-footer { padding: 8px 16px 12px; font-size: 9px; color: #6e7681; line-height: 1.4; }
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .topbar { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .topbar-title { font-size: 16px; font-weight: 600; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-.content { padding: 20px 20px 18px; overflow-y: auto; flex: 1; }
+.content { min-width: 0; min-height: 0; height: 100%; padding: 20px 20px 18px; overflow-y: auto; overscroll-behavior: contain; flex: 1; }
 .panel { display: none; }
 .panel.active { display: block; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 18px; }
@@ -193,9 +193,10 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .slider-label span { color: var(--green); font-weight: 600; }
 input[type=range] { width: 100%; -webkit-appearance: none; height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--blue) 60%, var(--line) 60%); outline: none; margin-bottom: 4px; }
 input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: var(--blue); border-radius: 50%; cursor: pointer; }
-.att-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.att-table th { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); }
-.att-table td { padding: 10px 12px; font-size: 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+#attendanceBody { max-height: clamp(210px, 34dvh, 430px); overflow: auto; scrollbar-gutter: stable; }
+.att-table { width: 100%; min-width: 920px; border-collapse: collapse; table-layout: fixed; }
+.att-table th { height: 40px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.att-table td { height: 42px; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
 .att-table tr:last-child td { border-bottom: none; }
 .att-table tr:hover td { background: var(--panel-2); }
 .att-table th:nth-child(1), .att-table td:nth-child(1) { width: 16%; }
@@ -204,7 +205,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .att-table th:nth-child(4), .att-table td:nth-child(4) { width: 11%; }
 .att-table th:nth-child(5), .att-table td:nth-child(5) { width: 12%; }
 .att-table th:nth-child(6), .att-table td:nth-child(6) { width: 25%; }
-.att-action-passive { color: #8b949e; font-size: 11px; display: block; white-space: nowrap; }
+.att-table td:nth-child(6) { overflow: visible; }
+.att-action-cell { min-height: 32px; display: flex; align-items: center; gap: 8px; }
+.att-action-cell .expected-row-delete { margin-left: auto; margin-right: 18px; }
+.att-action-passive { min-height: 28px; color: #8b949e; font-size: 11px; display: inline-flex; align-items: center; white-space: nowrap; }
 .score-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
 .score-high { background: #1a4731; color: var(--green); }
 .score-med { background: #2d2a0f; color: var(--orange); }
@@ -214,7 +218,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .status-conflict { color: var(--orange); font-size: 10px; font-weight: 700; }
 .status-invalid { color: var(--muted); font-size: 10px; font-weight: 600; }
 .conflict-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.checkout-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.checkout-actions { min-height: 32px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .checkout-error { flex-basis: 100%; color: var(--red); font-size: 11px; margin-top: 3px; }
 .checkout-signed-badge { color: var(--green); font-size: 10px; font-weight: 600; margin-left: 4px; }
 .checkout-legacy-badge { color: var(--orange); font-size: 10px; font-weight: 600; margin-left: 4px; }
@@ -394,10 +398,10 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .two-col > div:nth-child(2) { display: none !important; }
 .prototype-checkin #panel-checkin .card-header { padding: 14px 16px; }
 .prototype-checkin #panel-checkin .card-title::after { content: "Public QR"; margin-left: 8px; font-size: 10px; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; }
-.prototype-checkin #panel-checkin .card-body { padding: 18px; }
+.prototype-checkin #panel-checkin .card-body { padding: clamp(8px, 1.2vw, 18px); }
 .prototype-checkin #panel-checkin .checkin-mode-stage { display: block; }
-.prototype-checkin #panel-checkin #venueQRWrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; justify-items: center; height: clamp(260px, calc(100dvh - 330px), 720px); min-height: 0; overflow: hidden; }
-.prototype-checkin #panel-checkin .qr-box { grid-column: 1; grid-row: 1; z-index: 2; justify-self: center; align-self: center; width: clamp(220px, min(68dvh, calc(100dvh - 360px), 52vw), 700px); height: clamp(220px, min(68dvh, calc(100dvh - 360px), 52vw), 700px); min-width: 0; min-height: 0; }
+.prototype-checkin #panel-checkin #venueQRWrap { position: relative; width: 100%; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; justify-items: center; height: clamp(260px, calc(100dvh - 330px), 720px); min-height: 0; padding: clamp(8px, 1.2vw, 18px); overflow: hidden; }
+.prototype-checkin #panel-checkin .qr-box { grid-column: 1; grid-row: 1; z-index: 2; justify-self: center; align-self: center; width: clamp(190px, min(68dvh, calc(100dvh - 360px), calc(100vw - 360px), 52vw), 700px); height: clamp(190px, min(68dvh, calc(100dvh - 360px), calc(100vw - 360px), 52vw), 700px); max-width: calc(100% - 16px); max-height: calc(100% - 16px); min-width: 0; min-height: 0; }
 .prototype-checkin #panel-checkin .qr-box canvas,
 .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 36px) !important; height: calc(100% - 36px) !important; max-width: none; max-height: none; }
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
@@ -426,12 +430,12 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-role-dock .prototype-role-detail { margin-bottom: 0; }
 @media (max-width: 1180px) {
   .prototype-checkin #panel-checkin #venueQRWrap { grid-template-columns: 1fr; }
-  .prototype-checkin #panel-checkin .qr-box { grid-column: 1; width: min(70dvh, 82vw, 680px); height: min(70dvh, 82vw, 680px); min-width: min(300px, 82vw); min-height: min(300px, 82vw); }
+  .prototype-checkin #panel-checkin .qr-box { grid-column: 1; width: clamp(180px, min(70dvh, calc(100dvh - 280px), calc(100vw - 150px), 100%), 680px); height: clamp(180px, min(70dvh, calc(100dvh - 280px), calc(100vw - 150px), 100%), 680px); min-width: 0; min-height: 0; }
   .prototype-checkin #panel-checkin .qr-info { display: none; }
 }
 @media (max-height: 760px) {
   .prototype-checkin #panel-checkin #venueQRWrap { height: clamp(220px, calc(100dvh - 250px), 520px); }
-  .prototype-checkin #panel-checkin .qr-box { width: clamp(180px, min(calc(100dvh - 280px), 70vw), 520px); height: clamp(180px, min(calc(100dvh - 280px), 70vw), 520px); }
+  .prototype-checkin #panel-checkin .qr-box { width: clamp(170px, min(calc(100dvh - 280px), calc(100vw - 150px), 100%), 520px); height: clamp(170px, min(calc(100dvh - 280px), calc(100vw - 150px), 100%), 520px); }
   .qr-fullscreen-logo, .qr-fullscreen-subtitle, .qr-fullscreen-trust { display: none; }
   .qr-fullscreen-code { width: min(86vmin, calc(100dvh - 70px), 640px); max-width: min(86vmin, calc(100dvh - 70px), 640px); }
 }
@@ -451,12 +455,18 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   .switch-grid, .settings-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  body { overflow: auto; }
+  body { overflow: hidden; }
   .sidebar { width: 78px; }
   .sidebar-logo { justify-content: center; padding-inline: 10px; }
   .sidebar-logo img { height: 36px; max-width: 56px; }
   .org-badge, .sidebar-footer, .nav-item span { display: none; }
-  .content { padding: 14px; }
+  .content { height: 100dvh; padding: 14px; overflow-y: auto; }
+  #attendanceBody { max-height: clamp(220px, 42dvh, 380px); }
+  .prototype-checkin #panel-checkin .card-body { padding: 8px; }
+  .prototype-checkin #panel-checkin #venueQRWrap { height: clamp(220px, calc(100dvh - 260px), 520px); padding: 8px; }
+  .prototype-checkin #panel-checkin .qr-box { width: clamp(170px, min(calc(100vw - 118px), calc(100dvh - 286px), 100%), 460px); height: clamp(170px, min(calc(100vw - 118px), calc(100dvh - 286px), 100%), 460px); }
+  .prototype-checkin #panel-checkin .qr-box canvas,
+  .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 24px) !important; height: calc(100% - 24px) !important; }
   .checkin-lower-grid, .expected-admin-fields { grid-template-columns: 1fr; }
   .expected-admin-actions { flex-direction: column; }
   .settings-grid-2, .settings-grid-3, .switch-grid { grid-template-columns: 1fr; }
@@ -576,7 +586,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
           <div class="card-title"><span class="live-dot attendance-live-dot"></span>Attendance — Today</div>
           <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Waiting for data</div>
         </div>
-        <div id="attendanceBody" style="overflow-x:auto;">
+        <div id="attendanceBody">
           <table class="att-table">
             <thead>
               <tr>
@@ -1494,7 +1504,7 @@ function renderTable(rows) {
       : (r.status === 'invalid' ? '<span class="status-invalid">INVALID</span>' : (checkinId ? '<span class="status-in">● IN</span>' : `<span class="status-out">● OUT</span>${methodBadge}`));
     const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
     const actionHtml = r.expected_only ? buildExpectedRowAction(r) : buildCheckoutAction(r);
-    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td>${actionHtml}</td></tr>`;
+    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td><div class="att-action-cell">${actionHtml}</div></td></tr>`;
   }).join('');
 }
 function buildCheckoutAction(row) {
