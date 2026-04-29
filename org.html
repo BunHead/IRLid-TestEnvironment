@@ -1277,7 +1277,12 @@ function aggregateAttendees(checkins) {
   return Array.from(byAttendee.values()).sort((a, b) => (b.last_seen || 0) - (a.last_seen || 0));
 }
 function formatTimestamp(ts) {
-  return ts ? new Date(ts * 1000).toLocaleString() : '—';
+  return ts ? new Date(ts * 1000).toLocaleString(displayLocale(), { dateStyle: 'short', timeStyle: 'short' }) : '—';
+}
+function displayLocale() {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  if (/^Europe\/(London|Guernsey|Jersey|Isle_of_Man)$/i.test(tz)) return 'en-GB';
+  return navigator.languages?.[0] || navigator.language || undefined;
 }
 function prefersReducedMotion() {
   return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1568,7 +1573,7 @@ function staffSessionIsActive() {
 }
 function formatStaffAuthExpiry(expiresAt) {
   if (!expiresAt) return 'unknown';
-  return new Date(Number(expiresAt) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return new Date(Number(expiresAt) * 1000).toLocaleTimeString(displayLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 function scheduleStaffAuthExpiry() {
   clearTimeout(staffAuthExpiryTimer);
