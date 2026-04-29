@@ -219,6 +219,7 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Private Dashboard role markers exist as `A/S/M/L/D` badges for expected-only rows. Keep them out of public queue-facing screens.
 - Date/time formatting now prefers UK format when the device time zone is UK/Crown Dependency based, otherwise it follows the browser language. GPS/IP-derived locale remains future work; VPN tests only IP fallback, not true GPS-derived region.
 - Tablet photo from 29 April shows the Outcome QR fullscreen/in-page overlay still clipping off the bottom edge. Later QR containment batch should audit `scan.html` / shared fullscreen QR sizing so outcome QR shells fit the whole code plus title/close/safe-area padding on old tablets.
+- Prototype Dashboard add/delete now prompts for a fresh Staff HELLO payload at save time before calling the expected-attendee API. This is a live proof step, not yet final Worker-side role enforcement.
 - When adding attendee/staff/manager records, require scanning/importing their HELLO QR and save the derived hash/key placeholder for the future enclave path.
 - Add the rule that Staff, Manager, Lead Admin, and Developer are automatically present on the expected/known list unless disabled in settings or blocked by a deny list.
 - Enforce the prototype role gates in the Worker before any real write path: Staff add only, Manager add/delete attendee, Lead Admin full dashboard powers.
