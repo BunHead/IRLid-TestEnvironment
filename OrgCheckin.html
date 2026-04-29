@@ -167,7 +167,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-admin-panel { background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .expected-admin-panel h5 { font-size: 13px; margin-bottom: 12px; }
 .expected-admin-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.expected-admin-actions { display: flex; gap: 8px; margin-top: 12px; }
+.expected-admin-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+.expected-role-select { min-width: 172px; border: 1px solid var(--line); border-radius: 6px; background: #0b1220; color: var(--text); padding: 7px 9px; }
+.expected-row-delete { margin-left: 26px; }
 .btn-danger { background: #da3633; color: #fff; }
 .btn-danger:hover { background: var(--red); }
 .match-panel { margin-top: 14px; background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
@@ -387,14 +389,14 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .card-title::after { content: "Public QR"; margin-left: 8px; font-size: 10px; color: var(--green); text-transform: uppercase; letter-spacing: 0.08em; }
 .prototype-checkin #panel-checkin .card-body { padding: 18px; }
 .prototype-checkin #panel-checkin .checkin-mode-stage { display: block; }
-.prototype-checkin #panel-checkin #venueQRWrap { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 0.55fr); align-items: center; justify-items: center; min-height: calc(100dvh - 330px); gap: clamp(18px, 3vw, 54px); overflow: hidden; }
-.prototype-checkin #panel-checkin .qr-box { grid-column: 1; width: min(68dvh, 52vw, 700px); height: min(68dvh, 52vw, 700px); min-width: min(300px, 78vw); min-height: min(300px, 78vw); }
+.prototype-checkin #panel-checkin #venueQRWrap { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; justify-items: center; min-height: calc(100dvh - 330px); overflow: hidden; }
+.prototype-checkin #panel-checkin .qr-box { grid-column: 1; grid-row: 1; z-index: 2; justify-self: center; align-self: center; width: min(68dvh, 52vw, 700px); height: min(68dvh, 52vw, 700px); min-width: min(300px, 78vw); min-height: min(300px, 78vw); }
 .prototype-checkin #panel-checkin .qr-box canvas,
 .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 36px) !important; height: calc(100% - 36px) !important; max-width: none; max-height: none; }
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
 .prototype-checkin #panel-checkin .qr-info p { font-size: 13px; max-width: 46ch; }
 .prototype-checkin #panel-checkin .qr-payload-preview { max-width: 46ch; max-height: 96px; overflow: auto; }
-.prototype-checkin #panel-checkin .qr-info { grid-column: 2; width: min(100%, 52ch); justify-self: start; }
+.prototype-checkin #panel-checkin .qr-info { position: absolute; z-index: 1; right: clamp(18px, 6vw, 96px); top: 50%; transform: translateY(-50%); width: min(100%, 52ch); }
 .dashboard-expected-dock { margin-top: 14px; }
 .dashboard-expected-dock #expectedSharedPanel { display: block; }
 .dashboard-expected-dock .expected-list { display: none; }
@@ -541,6 +543,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
             <option value="staff">Staff</option>
             <option value="manager">Manager</option>
             <option value="lead_admin" selected>Lead Admin</option>
+            <option value="developer">Developer</option>
           </select>
         </label>
         <span>Prototype only: real access should come from a verified Staff HELLO role.</span>
@@ -549,6 +552,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
         <div class="prototype-role-card" data-role-card="staff"><strong>Staff</strong><span>Add attendees and assist review cases. No delete.</span></div>
         <div class="prototype-role-card" data-role-card="manager"><strong>Manager</strong><span>Add, edit, and delete attendees.</span></div>
         <div class="prototype-role-card" data-role-card="lead_admin"><strong>Lead Admin</strong><span>Everything: attendance, attendees, settings, staff roles.</span></div>
+        <div class="prototype-role-card" data-role-card="developer"><strong>Developer</strong><span>Everything plus prototype/dev diagnostics.</span></div>
       </div>
       <div class="prototype-role-detail" id="prototypeRoleDetail"></div>
       <div class="stats-row" id="statsRow">
@@ -683,7 +687,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
                     </div>
                     <div class="expected-admin-actions">
                       <button class="btn btn-primary" type="button" id="expectedAddBtn">Add</button>
-                      <button class="btn btn-danger" type="button" id="expectedDeleteBtn">Delete</button>
+                      <select id="expectedRoleSelect" class="expected-role-select" aria-label="Add as"></select>
                     </div>
                     <div class="expected-validation" id="expectedValidation"></div>
                   </div>
@@ -1200,22 +1204,27 @@ function setExpectedValidation(message) {
 async function addExpectedAttendee() {
   const firstInput = document.getElementById('expectedFirstName');
   const surnameInput = document.getElementById('expectedSurname');
+  const roleInput = document.getElementById('expectedRoleSelect');
   const firstName = firstInput?.value.trim() || '';
   const surname = surnameInput?.value.trim() || '';
+  const requestedRole = roleInput?.value || 'attendee';
   if (!firstName || !surname) {
     setExpectedValidation('Please enter both first name and surname');
     return;
   }
   if (!currentOrg) return showToast('Load an organisation first', true);
   try {
-    const payload = await window.IRLidOrgApi.createExpected(currentOrg.api_key, { first_name: firstName, surname });
-    if (payload.expected) expectedAttendees.unshift(payload.expected);
+    const payload = await window.IRLidOrgApi.createExpected(currentOrg.api_key, { first_name: firstName, surname, prototype_role: requestedRole });
+    if (payload.expected) {
+      payload.expected.prototype_role = requestedRole;
+      expectedAttendees.unshift(payload.expected);
+    }
     if (firstInput) firstInput.value = '';
     if (surnameInput) surnameInput.value = '';
     setExpectedValidation('');
     renderExpectedAttendees();
     renderTable(attendanceData);
-    showToast('Expected attendee added');
+    showToast(`${roleLabelFor(requestedRole)} added`);
   } catch (err) {
     if (err.status === 409 && err.message === 'duplicate') {
       setExpectedValidation(`${firstName} ${surname} is already on the expected list.`);
@@ -1503,7 +1512,7 @@ function prototypeRoleRank() {
 function buildExpectedRowAction(row) {
   const id = escapeHtml(String(row.expected_id || '').trim());
   if (prototypeRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
-    return `<button class="btn btn-danger btn-sm" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
+    return `<button class="btn btn-danger btn-sm expected-row-delete" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
   }
   return '<span style="color:#8b949e;font-size:11px;">Awaiting check-in</span>';
 }
@@ -2259,9 +2268,33 @@ function applyCheckinPrototypeLayout() {
 const PROTOTYPE_ROLE_DETAILS = {
   staff: 'Staff can add attendees and assist review cases. Delete, clear, settings, and staff-role actions stay locked.',
   manager: 'Manager can add, edit, and delete attendees, plus resolve routine review cases.',
-  lead_admin: 'Lead Admin can do everything in this prototype: attendee management, clear test/event data, event settings, and staff membership once Staff HELLO step-up is wired.'
+  lead_admin: 'Lead Admin can do everything in this prototype: attendee management, clear test/event data, event settings, and staff membership once Staff HELLO step-up is wired.',
+  developer: 'Developer can do everything Lead Admin can, plus prototype-only diagnostics while the real Lead Admin role stays clean.'
 };
-const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3 };
+const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3, developer: 4 };
+const EXPECTED_ROLE_OPTIONS = {
+  staff: ['attendee'],
+  manager: ['attendee', 'staff', 'manager'],
+  lead_admin: ['attendee', 'staff', 'manager', 'lead_admin', 'developer'],
+  developer: ['attendee', 'staff', 'manager', 'lead_admin', 'developer']
+};
+function roleLabelFor(role) {
+  return {
+    attendee: 'Attendee',
+    staff: 'Staff',
+    manager: 'Manager',
+    lead_admin: 'Lead Admin',
+    developer: 'Developer'
+  }[role] || 'Attendee';
+}
+function updateExpectedRoleOptions(role) {
+  const select = document.getElementById('expectedRoleSelect');
+  if (!select) return;
+  const current = select.value;
+  const options = EXPECTED_ROLE_OPTIONS[role] || EXPECTED_ROLE_OPTIONS.lead_admin;
+  select.innerHTML = options.map(value => `<option value="${value}">${roleLabelFor(value)}</option>`).join('');
+  select.value = options.includes(current) ? current : options[0];
+}
 function setPrototypeRole(role) {
   const value = PROTOTYPE_ROLE_DETAILS[role] ? role : 'lead_admin';
   const rank = PROTOTYPE_ROLE_RANK[value] || 3;
@@ -2272,13 +2305,12 @@ function setPrototypeRole(role) {
   const detail = document.getElementById('prototypeRoleDetail');
   if (detail) detail.textContent = PROTOTYPE_ROLE_DETAILS[value];
   const canAddExpected = rank >= PROTOTYPE_ROLE_RANK.staff;
-  const canDeleteExpected = rank >= PROTOTYPE_ROLE_RANK.manager;
   const canClear = rank >= PROTOTYPE_ROLE_RANK.lead_admin;
   document.getElementById('expectedAddBtn')?.toggleAttribute('disabled', !canAddExpected);
-  document.getElementById('expectedDeleteBtn')?.toggleAttribute('disabled', !canDeleteExpected);
   document.getElementById('clearAttendanceBtn')?.toggleAttribute('disabled', !canClear);
   document.querySelector('.expected-admin-panel')?.classList.toggle('prototype-permission-disabled', !canAddExpected);
   document.querySelector('.debug-maintenance')?.classList.toggle('prototype-permission-disabled', !canClear);
+  updateExpectedRoleOptions(value);
   renderTable(attendanceData);
 }
 
@@ -2305,10 +2337,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('clearAttendanceBtn')?.addEventListener('click', clearTestAttendanceDataset);
   setInterval(updateRelativeRefresh, 30000);
   document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
-  document.getElementById('expectedDeleteBtn')?.addEventListener('click', (event) => {
-    event.stopPropagation();
-    setExpectedDeleteMode(true);
-  });
   document.getElementById('expectedAttendeeList')?.addEventListener('click', handleExpectedListClick);
   document.getElementById('expectedCancelDeleteBtn')?.addEventListener('click', (event) => {
     event.stopPropagation();
@@ -2325,7 +2353,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   document.addEventListener('click', (event) => {
     if (!expectedDeleteMode) return;
-    if (event.target.closest('.expected-list') || event.target.closest('#expectedConfirmDialog') || event.target.closest('#expectedDeleteBtn')) return;
+    if (event.target.closest('.expected-list') || event.target.closest('#expectedConfirmDialog')) return;
     setExpectedDeleteMode(false);
   });
 
