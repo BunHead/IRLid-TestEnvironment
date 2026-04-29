@@ -158,6 +158,10 @@ CREATE INDEX IF NOT EXISTS idx_org_expected_org ON org_expected(org_code);
 ALTER TABLE org_expected ADD COLUMN linked_at INTEGER;
 ALTER TABLE org_expected ADD COLUMN device_key_fp TEXT;
 
+-- Batch C additive migration: prototype/member role for expected attendees.
+-- Defaults existing rows to attendee so the current list remains valid.
+ALTER TABLE org_expected ADD COLUMN prototype_role TEXT DEFAULT 'attendee';
+
 -- Batch 8 additive migration: name/device conflicts for expected attendees.
 CREATE TABLE IF NOT EXISTS attendee_conflicts (
   id                 INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -54,6 +54,13 @@ function authErr(message, status = 401) {
 
 function randomToken() { return b64urlEncode(crypto.getRandomValues(new Uint8Array(32))); }
 
+const EXPECTED_MEMBER_ROLES = new Set(["attendee", "staff", "manager", "lead_admin", "developer"]);
+
+function expectedMemberRole(value) {
+  const role = String(value || "attendee").trim().toLowerCase();
+  return EXPECTED_MEMBER_ROLES.has(role) ? role : "attendee";
+}
+
 function randomCode6() {
   const bytes = crypto.getRandomValues(new Uint8Array(4));
   const num = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
@@ -1127,7 +1134,7 @@ async function orgDebugClearAttendance(request, env) {
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
   ).bind(org.id).all();
   return json({ expected: rows.results });
 }
@@ -1137,6 +1144,7 @@ async function orgExpectedCreate(request, env) {
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
   const firstName = (body.first_name || "").trim();
   const surname = (body.surname || "").trim();
+  const prototypeRole = expectedMemberRole(body.prototype_role || body.role);
   if (!firstName || !surname) return err("first_name and surname required");
   const existing = await env.DB.prepare(
     "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
@@ -1144,8 +1152,8 @@ async function orgExpectedCreate(request, env) {
   if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
   const createdAt = now();
   const row = await env.DB.prepare(
-    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
-  ).bind(org.id, firstName, surname, "assist", createdAt).first();
+    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at,prototype_role) VALUES (?,?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+  ).bind(org.id, firstName, surname, "assist", createdAt, prototypeRole).first();
   return json({ expected: row });
 }
 
@@ -1164,14 +1172,20 @@ async function orgExpectedUpdate(request, env, id) {
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
   const firstName = (body.first_name || "").trim();
   const surname = (body.surname || "").trim();
+  const roleProvided = body.prototype_role !== undefined || body.role !== undefined;
+  const prototypeRole = roleProvided ? expectedMemberRole(body.prototype_role || body.role) : null;
   if (!firstName || !surname) return err("first_name and surname required");
   const existing = await env.DB.prepare(
     "SELECT id FROM org_expected WHERE org_code=? AND id<>? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
   ).bind(org.id, id, firstName, surname).first();
   if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
-  const row = await env.DB.prepare(
-    "UPDATE org_expected SET first_name=?, surname=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
-  ).bind(firstName, surname, id, org.id).first();
+  const row = roleProvided
+    ? await env.DB.prepare(
+      "UPDATE org_expected SET first_name=?, surname=?, prototype_role=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+    ).bind(firstName, surname, prototypeRole, id, org.id).first()
+    : await env.DB.prepare(
+      "UPDATE org_expected SET first_name=?, surname=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+    ).bind(firstName, surname, id, org.id).first();
   if (!row) return err("Expected attendee not found", 404);
   return json({ expected: row });
 }
@@ -1217,7 +1231,7 @@ async function orgExpectedClaim(request, env, id) {
   if (!devicePubFp) return err("device_pub_fp required");
 
   const expected = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp FROM org_expected WHERE id=? AND org_code=?"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role FROM org_expected WHERE id=? AND org_code=?"
   ).bind(id, org.id).first();
   if (!expected) return err("Expected attendee not found", 404);
 
@@ -1231,7 +1245,7 @@ async function orgExpectedClaim(request, env, id) {
 
   const t = now();
   const row = await env.DB.prepare(
-    "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp"
+    "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
   ).bind(devicePubFp, t, id, org.id).first();
   return json({ ok: true, expected: row });
 }
