@@ -209,6 +209,7 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Expected attendees are folded into the Attendance Today table so names do not appear twice in normal dashboard use.
 - Fullscreen Check-in QR has a subtle `Last Refreshed: mm:ss` marker and should refresh just after each minute.
 - Check-in QR layout gives the QR priority and hides the explanatory text on tighter screens.
+- Check-in QR sizing is constrained by visible viewport height for older tablets; the fullscreen control requests browser fullscreen first and falls back to the in-page overlay if the browser refuses.
 
 ## Tomorrow / Next Wiring
 
@@ -219,6 +220,7 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Use fresh Staff HELLO step-up for attempted saves/changes, rather than relying only on a timed session.
 - Investigate QR scanning reliability with webcams and Windows Hello cameras; current camera auth works, but webcam QR reading is still fragile.
 - Minor dashboard polish: resize the Attendance Today/action columns and restore the disappearing "Awaiting check-out" passive label.
+- Consider a global identity plus org-local authorization model for "THE Dev" / super-admin style recognition: recognise the same key across orgs, but grant powers only where a deliberate org or federation rule allows it.
 
 ## Demo Caveats
 
