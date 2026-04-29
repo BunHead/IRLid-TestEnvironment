@@ -99,6 +99,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 
 - Public Check-in now prioritises the branded event QR and hides the explanatory text when the viewport gets tight.
 - Fullscreen QR should show a deliberately subtle `Last Refreshed: mm:ss` marker and refresh just after each minute to prove the displayed QR is live.
+- Tablet/small-height layouts should constrain QR size by visible viewport height so the code never disappears below the frame; fullscreen should request browser fullscreen and gracefully fall back to an in-page overlay.
 - Dashboard role switcher should expose Staff, Manager, Lead Admin, and Developer.
 - Staff can add attendees but cannot delete.
 - Manager can add and delete attendees.
@@ -116,6 +117,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 - Improve webcam QR scanning, especially with Windows Hello/camera devices that struggle to read dense QR codes.
 - Minor dashboard polish: resize the Attendance Today table/action columns so expected-row actions stay readable.
 - Minor dashboard polish: restore/clarify the disappearing "Awaiting check-out" style text where checkout state needs a passive label.
+- Model "THE Dev" as global identity plus org-local/federated authorization: the same key can be recognised across orgs, but powers should remain explicit grants.
 - Keep stable `org.html` intact until the prototype direction is approved.
 
 ## Demo Guidance
