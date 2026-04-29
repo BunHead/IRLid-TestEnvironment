@@ -169,7 +169,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-admin-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .expected-admin-actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
 .expected-role-select { min-width: 172px; border: 1px solid var(--line); border-radius: 6px; background: #0b1220; color: var(--text); padding: 7px 9px; }
-.expected-row-delete { margin-left: 26px; }
+.expected-row-delete { display: block; margin-left: auto; margin-right: 18px; }
 .btn-danger { background: #da3633; color: #fff; }
 .btn-danger:hover { background: var(--red); }
 .match-panel { margin-top: 14px; background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
@@ -396,7 +396,7 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .qr-info h4 { font-size: 18px; }
 .prototype-checkin #panel-checkin .qr-info p { font-size: 13px; max-width: 46ch; }
 .prototype-checkin #panel-checkin .qr-payload-preview { max-width: 46ch; max-height: 96px; overflow: auto; }
-.prototype-checkin #panel-checkin .qr-info { position: absolute; z-index: 1; right: clamp(18px, 6vw, 96px); top: 50%; transform: translateY(-50%); width: min(100%, 52ch); }
+.prototype-checkin #panel-checkin .qr-info { position: absolute; z-index: 1; right: clamp(-140px, -6vw, -48px); top: 50%; transform: translateY(-50%); width: min(100%, 52ch); }
 .dashboard-expected-dock { margin-top: 14px; }
 .dashboard-expected-dock #expectedSharedPanel { display: block; }
 .dashboard-expected-dock .expected-list { display: none; }
@@ -2275,7 +2275,7 @@ const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3, developer: 4 
 const EXPECTED_ROLE_OPTIONS = {
   staff: ['attendee'],
   manager: ['attendee', 'staff', 'manager'],
-  lead_admin: ['attendee', 'staff', 'manager', 'lead_admin', 'developer'],
+  lead_admin: ['attendee', 'staff', 'manager'],
   developer: ['attendee', 'staff', 'manager', 'lead_admin', 'developer']
 };
 function roleLabelFor(role) {

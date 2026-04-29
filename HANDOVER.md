@@ -205,7 +205,7 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Manager can add and delete attendees.
 - Lead Admin can do everything shown in the prototype.
 - Developer can do everything Lead Admin can, plus prototype/dev diagnostics.
-- Expected attendee management uses Add plus an add-as selector. Staff can add Attendee only; Manager can add Attendee/Staff/Manager; Lead Admin and Developer can add everything.
+- Expected attendee management uses Add plus an add-as selector. Staff can add Attendee only; Manager and Lead Admin can add Attendee/Staff/Manager; Developer can add everything.
 - Expected attendees are folded into the Attendance Today table so names do not appear twice in normal dashboard use.
 - Fullscreen Check-in QR has a subtle `Last Refreshed: mm:ss` marker and should refresh just after each minute.
 - Check-in QR layout gives the QR priority and hides the explanatory text on tighter screens.

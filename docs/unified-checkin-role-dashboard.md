@@ -104,7 +104,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 - Manager can add and delete attendees.
 - Lead Admin can do everything.
 - Developer can do everything Lead Admin can, plus prototype/dev diagnostics.
-- The dashboard add control should be Add plus an add-as selector: Staff can add Attendee only; Manager can add Attendee/Staff/Manager; Lead Admin and Developer can add everything.
+- The dashboard add control should be Add plus an add-as selector: Staff can add Attendee only; Manager and Lead Admin can add Attendee/Staff/Manager; Developer can add everything.
 - Expected attendees are folded into the Attendance Today table so the separate expected list does not duplicate names.
 - Add/delete is still prototype UI. The next real wiring pass should enforce roles in the Worker and request a fresh Staff HELLO proof for privileged saves.
 
