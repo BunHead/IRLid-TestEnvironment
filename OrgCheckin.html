@@ -1237,6 +1237,8 @@ async function addExpectedAttendee() {
     return;
   }
   if (!currentOrg) return showToast('Load an organisation first', true);
+  const proof = await requireFreshStaffProof(`add ${roleLabelFor(requestedRole)}`);
+  if (!proof) return;
   try {
     const payload = await window.IRLidOrgApi.createExpected(currentOrg.api_key, { first_name: firstName, surname, prototype_role: requestedRole });
     if (payload.expected) {
@@ -1280,6 +1282,9 @@ function hideExpectedDeleteDialog() {
 async function confirmExpectedDelete() {
   if (!expectedDeleteTargetId || !currentOrg) return;
   const id = expectedDeleteTargetId;
+  const row = expectedAttendees.find(item => String(item.id) === String(id));
+  const proof = await requireFreshStaffProof(`delete ${row ? expectedDisplayName(row) : 'expected attendee'}`);
+  if (!proof) return;
   cancelExpectedEdit();
   try {
     await window.IRLidOrgApi.deleteExpected(currentOrg.api_key, id);
@@ -1767,22 +1772,48 @@ async function authenticateStaffHello() {
   const hello = (input?.value || '').trim();
   if (!currentOrg) return renderStaffAuthPanel('Load an organisation before authenticating staff.', true);
   if (!hello) return renderStaffAuthPanel('Paste a staff HELLO payload first.', true);
-  if (!window.IRLidOrgApi?.authenticateStaff) return renderStaffAuthPanel('Staff auth API helper unavailable.', true);
 
   if (btn) { btn.disabled = true; btn.textContent = 'Authenticating...'; }
   try {
-    const result = await window.IRLidOrgApi.authenticateStaff(currentOrg.api_key, hello);
-    saveStaffAuthSession({
-      org_key: currentOrg.api_key,
-      staff_session: result.staff_session,
-      expires_at: result.expires_at,
-      staff_pub_fp: result.staff_pub_fp
-    });
+    await authenticateStaffHelloPayload(hello);
     renderStaffAuthPanel();
   } catch (err) {
     renderStaffAuthPanel(err.message || 'Staff auth failed.', true);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Authenticate staff'; }
+  }
+}
+async function authenticateStaffHelloPayload(hello) {
+  if (!currentOrg) throw new Error('Load an organisation before authenticating staff.');
+  if (!hello) throw new Error('Paste a staff HELLO payload first.');
+  if (!window.IRLidOrgApi?.authenticateStaff) throw new Error('Staff auth API helper unavailable.');
+  const result = await window.IRLidOrgApi.authenticateStaff(currentOrg.api_key, hello);
+  saveStaffAuthSession({
+    org_key: currentOrg.api_key,
+    staff_session: result.staff_session,
+    expires_at: result.expires_at,
+    staff_pub_fp: result.staff_pub_fp
+  });
+  return staffAuthSession;
+}
+async function requireFreshStaffProof(actionLabel) {
+  if (!currentOrg) {
+    showToast('Load an organisation first', true);
+    return null;
+  }
+  const hello = window.prompt(`Staff HELLO required to ${actionLabel}. Paste or scan the Staff HELLO QR payload.`);
+  if (!hello || !hello.trim()) {
+    showToast('Staff HELLO proof cancelled', true);
+    return null;
+  }
+  try {
+    const session = await authenticateStaffHelloPayload(hello.trim());
+    renderStaffAuthPanel(`Staff proof accepted for ${actionLabel}.`);
+    return session;
+  } catch (err) {
+    clearStaffAuthSession(err.message || 'Staff authentication required.');
+    showToast(err.message || 'Staff authentication required', true);
+    return null;
   }
 }
 function refreshStaffAuthPanel() {
