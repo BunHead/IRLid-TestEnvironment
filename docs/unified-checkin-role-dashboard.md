@@ -51,10 +51,11 @@ Recommended role ladder:
 - `staff`: can verify Staff HELLO, view attendance, add attendees, and assist review cases. Staff cannot delete attendees, clear data, configure settings, or manage staff roles.
 - `manager`: can add, edit, and delete attendees, resolve routine review cases, and perform routine event attendance operations.
 - `lead_admin`: can do everything in the event dashboard, including attendee management, clear test/event data, configure event settings, and manage staff membership.
+- `developer`: a prototype/dev-only working role with Lead Admin powers plus diagnostics, so the real Lead Admin role can stay clean during implementation.
 
 Founder remains an honorary/organisation concept for now, not a separate dashboard view. The exact role names can be refined, but authorization should remain role-based. If a trust score or reputation score is added later, it should sit beside role rather than replacing it.
 
-Staff, Manager, and Lead Admin members should be auto-added to the expected attendee surface when they are known to the organisation, unless a future setting disables staff auto-add or they are explicitly on a deny list.
+Staff, Manager, Lead Admin, and Developer members should be auto-added to the expected attendee surface when they are known to the organisation, unless a future setting disables staff auto-add or they are explicitly on a deny list.
 
 ## Staff HELLO Confirmation
 
@@ -102,12 +103,14 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 - Staff can add attendees but cannot delete.
 - Manager can add and delete attendees.
 - Lead Admin can do everything.
+- Developer can do everything Lead Admin can, plus prototype/dev diagnostics.
+- The dashboard add control should be Add plus an add-as selector: Staff can add Attendee only; Manager can add Attendee/Staff/Manager; Lead Admin and Developer can add everything.
 - Expected attendees are folded into the Attendance Today table so the separate expected list does not duplicate names.
 - Add/delete is still prototype UI. The next real wiring pass should enforce roles in the Worker and request a fresh Staff HELLO proof for privileged saves.
 
 ## Tomorrow Wiring List
 
-- Fix `org-entry.html` re-scan behaviour: scanning the Check-in QR while already checked in should offer Check-out, not only a Welcome Back state.
+- Fix `org-entry.html` re-scan behaviour: scanning the Check-in QR while already checked in still shows Welcome Back; it should offer Check-out.
 - Add a Staff HELLO scan/import step when adding attendee/staff/manager records, storing the derived hash/key placeholder that can later move into the enclave design.
 - Add the staff auto-add rule with a setting to disable it and a deny-list override.
 - Improve webcam QR scanning, especially with Windows Hello/camera devices that struggle to read dense QR codes.

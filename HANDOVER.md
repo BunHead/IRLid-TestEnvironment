@@ -200,19 +200,21 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 - Navigation direction is Organisation, Check-in, Dashboard, with Settings separated at the bottom.
 - Check-in is the public-safe branded event QR screen.
 - Dashboard is the private staff surface for attendance, expected attendees, and role-gated actions.
-- Role switcher is Staff, Manager, Lead Admin only. Founder is honorary for now, not a dashboard view.
+- Role switcher is Staff, Manager, Lead Admin, and Developer. Founder is honorary for now, not a dashboard view.
 - Staff can add attendees, but cannot delete attendees or clear data.
 - Manager can add and delete attendees.
 - Lead Admin can do everything shown in the prototype.
+- Developer can do everything Lead Admin can, plus prototype/dev diagnostics.
+- Expected attendee management uses Add plus an add-as selector. Staff can add Attendee only; Manager can add Attendee/Staff/Manager; Lead Admin and Developer can add everything.
 - Expected attendees are folded into the Attendance Today table so names do not appear twice in normal dashboard use.
 - Fullscreen Check-in QR has a subtle `Last Refreshed: mm:ss` marker and should refresh just after each minute.
 - Check-in QR layout gives the QR priority and hides the explanatory text on tighter screens.
 
 ## Tomorrow / Next Wiring
 
-- Fix Check-in QR re-scan behaviour in `org-entry.html`: if someone is already checked in, show the Check-out choice instead of only Welcome Back.
+- Fix Check-in QR re-scan behaviour in `org-entry.html`: if someone is already checked in, it currently still shows Welcome Back. It should show the Check-out choice instead.
 - When adding attendee/staff/manager records, require scanning/importing their HELLO QR and save the derived hash/key placeholder for the future enclave path.
-- Add the rule that Staff, Manager, and Lead Admin are automatically present on the expected/known list unless disabled in settings or blocked by a deny list.
+- Add the rule that Staff, Manager, Lead Admin, and Developer are automatically present on the expected/known list unless disabled in settings or blocked by a deny list.
 - Enforce the prototype role gates in the Worker before any real write path: Staff add only, Manager add/delete attendee, Lead Admin full dashboard powers.
 - Use fresh Staff HELLO step-up for attempted saves/changes, rather than relying only on a timed session.
 - Investigate QR scanning reliability with webcams and Windows Hello cameras; current camera auth works, but webcam QR reading is still fragile.
