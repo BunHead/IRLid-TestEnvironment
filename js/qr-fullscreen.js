@@ -6,6 +6,8 @@
   let overlay = null;
   let holder = null;
   let active = false;
+  let activeOptions = null;
+  let refreshTimer = null;
   let lastTapAt = 0;
 
   function ensureOverlay() {
@@ -21,6 +23,10 @@
         <div class="irlid-qr-fullscreen-holder" id="irlidQrFullscreenHolder"></div>
         <div class="irlid-qr-fullscreen-subtitle" data-qr-subtitle></div>
       </div>`;
+    const refresh = document.createElement("div");
+    refresh.className = "irlid-qr-fullscreen-refresh";
+    refresh.setAttribute("data-qr-refresh", "");
+    overlay.appendChild(refresh);
     document.body.appendChild(overlay);
     holder = overlay.querySelector(".irlid-qr-fullscreen-holder");
     overlay.addEventListener("click", (event) => {
@@ -47,6 +53,7 @@
       .irlid-qr-fullscreen-holder{width:min(76vmin,720px);aspect-ratio:1;display:grid;place-items:center;padding:clamp(10px,1.8vmin,18px);box-sizing:border-box;background:#fff;border-radius:clamp(12px,2vmin,22px);box-shadow:0 28px 90px rgba(0,0,0,0.54);}
       .irlid-qr-fullscreen-holder canvas,.irlid-qr-fullscreen-holder img{display:block;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain;}
       .irlid-qr-fullscreen-close{position:fixed;top:18px;right:18px;width:42px;height:42px;border:0;border-radius:999px;background:rgba(255,255,255,0.12);color:#fff;font-size:24px;line-height:1;cursor:pointer;}
+      .irlid-qr-fullscreen-refresh{position:fixed;right:16px;bottom:12px;color:rgba(255,255,255,0.26);font:600 11px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:0.01em;pointer-events:none;user-select:none;}
       @media (max-width:760px){.irlid-qr-fullscreen{align-items:flex-start;overflow:auto;}.irlid-qr-fullscreen-inner{padding-top:24px;}}
     `;
     document.head.appendChild(style);
@@ -97,6 +104,48 @@
     normalize(target);
   }
 
+  function setRefreshText(text) {
+    const node = overlay && overlay.querySelector("[data-qr-refresh]");
+    if (node) node.textContent = text || "";
+  }
+
+  function defaultRefreshText() {
+    return "Last Refreshed: " + new Date().toLocaleTimeString("en-GB", { minute: "2-digit", second: "2-digit" });
+  }
+
+  function clearRefreshTimer() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+
+  function nextMinuteDelay() {
+    const now = new Date();
+    return Math.max(1200, (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 1200);
+  }
+
+  function scheduleRefresh() {
+    clearRefreshTimer();
+    if (!active || !activeOptions || typeof activeOptions.refreshPayload !== "function") return;
+    refreshTimer = setTimeout(refreshPayload, nextMinuteDelay());
+  }
+
+  async function refreshPayload() {
+    if (!active || !activeOptions || typeof activeOptions.refreshPayload !== "function") return;
+    try {
+      const next = await activeOptions.refreshPayload(activeOptions);
+      const payload = typeof next === "string" ? next : next && next.payload;
+      if (payload) {
+        activeOptions.payload = payload;
+        await render(holder, payload);
+      }
+      setRefreshText((next && next.lastRefreshedText) || defaultRefreshText());
+    } catch {
+      setRefreshText("Last Refreshed: retry pending");
+    } finally {
+      scheduleRefresh();
+    }
+  }
+
   async function openFromElement(el) {
     const payload = el.dataset.qrFullscreenPayload;
     if (!payload) return;
@@ -116,6 +165,7 @@
     injectStyles();
     ensureOverlay();
     active = true;
+    activeOptions = { ...options };
     const title = overlay.querySelector("[data-qr-title]");
     const logo = overlay.querySelector("[data-qr-logo]");
     const fallback = overlay.querySelector("[data-qr-fallback]");
@@ -137,17 +187,22 @@
       title.textContent = options.title || "IRLid QR";
     }
     overlay.querySelector("[data-qr-subtitle]").textContent = options.subtitle || "";
+    setRefreshText(options.lastRefreshedText || (options.refreshPayload ? defaultRefreshText() : ""));
     overlay.classList.add("active");
     document.body.style.overflow = "hidden";
     await render(holder, payload);
+    scheduleRefresh();
   }
 
   function close() {
     if (!overlay) return;
     active = false;
+    activeOptions = null;
+    clearRefreshTimer();
     overlay.classList.remove("active");
     document.body.style.overflow = "";
     if (holder) holder.innerHTML = "";
+    setRefreshText("");
   }
 
   function payloadElementFromEvent(event) {

@@ -1,7 +1,7 @@
 # Unified Check-in + Role-Gated Dashboard
 
-Date: 28 April 2026
-Status: design note for Number 1 review
+Date: 29 April 2026
+Status: prototype note for Number 1 review
 
 ## Direction
 
@@ -48,12 +48,13 @@ Recommended role ladder:
 
 - `recognised`: can view their own relevant receipts or proof surfaces only.
 - `supporter`: can access event receipt/supporter views where appropriate, but cannot manage attendees.
-- `staff`: can verify Staff HELLO, view attendance, assist review cases, and select an attendee during assisted check-in.
-- `manager`: can add and edit expected attendees, resolve review cases, and perform routine event attendance operations.
-- `lead_admin`: can delete expected attendees, clear test/event data, configure event settings, and manage staff membership.
-- `founder`: can manage organisation-level controls, add managers or lead admins, and access founder-level pages.
+- `staff`: can verify Staff HELLO, view attendance, add attendees, and assist review cases. Staff cannot delete attendees, clear data, configure settings, or manage staff roles.
+- `manager`: can add, edit, and delete attendees, resolve routine review cases, and perform routine event attendance operations.
+- `lead_admin`: can do everything in the event dashboard, including attendee management, clear test/event data, configure event settings, and manage staff membership.
 
-The exact role names can be refined, but authorization should remain role-based. If a trust score or reputation score is added later, it should sit beside role rather than replacing it.
+Founder remains an honorary/organisation concept for now, not a separate dashboard view. The exact role names can be refined, but authorization should remain role-based. If a trust score or reputation score is added later, it should sit beside role rather than replacing it.
+
+Staff, Manager, and Lead Admin members should be auto-added to the expected attendee surface when they are known to the organisation, unless a future setting disables staff auto-add or they are explicitly on a deny list.
 
 ## Staff HELLO Confirmation
 
@@ -90,6 +91,27 @@ The likely canonical future route is `org-entry.html?type=checkin`.
 6. Add role-gated visibility and Worker enforcement for dashboard actions.
 7. Add Staff HELLO step-up confirmation before privileged writes.
 8. After behaviour is stable, redesign the screens around the simplified model.
+
+## Prototype Night Shift Notes
+
+Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
+
+- Public Check-in now prioritises the branded event QR and hides the explanatory text when the viewport gets tight.
+- Fullscreen QR should show a deliberately subtle `Last Refreshed: mm:ss` marker and refresh just after each minute to prove the displayed QR is live.
+- Dashboard role switcher should expose only Staff, Manager, and Lead Admin.
+- Staff can add attendees but cannot delete.
+- Manager can add and delete attendees.
+- Lead Admin can do everything.
+- Expected attendees are folded into the Attendance Today table so the separate expected list does not duplicate names.
+- Add/delete is still prototype UI. The next real wiring pass should enforce roles in the Worker and request a fresh Staff HELLO proof for privileged saves.
+
+## Tomorrow Wiring List
+
+- Fix `org-entry.html` re-scan behaviour: scanning the Check-in QR while already checked in should offer Check-out, not only a Welcome Back state.
+- Add a Staff HELLO scan/import step when adding attendee/staff/manager records, storing the derived hash/key placeholder that can later move into the enclave design.
+- Add the staff auto-add rule with a setting to disable it and a deny-list override.
+- Improve webcam QR scanning, especially with Windows Hello/camera devices that struggle to read dense QR codes.
+- Keep stable `org.html` intact until the prototype direction is approved.
 
 ## Demo Guidance
 
