@@ -117,7 +117,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 - Batch B public flow update: after an unrecognised attendee claims/selects themselves from the expected list, `org-entry.html` should now continue directly into check-in instead of asking for a second scan. Public entry URLs can include `score=<0-100>` for allow/deny-path smoke testing.
 - Batch C role persistence update: the Dashboard add-as selector is backed by `org_expected.prototype_role` for the prototype, so Attendee/Staff/Manager/Lead Admin/Developer choices can survive refresh. This remains a prototype member-role field until the real Staff HELLO/member table is designed.
 - Use debug-only role indicators if needed in the attendance table (`A/S/M/L/D`), but avoid public role leakage where attendee queues can shoulder-surf staff/admin status.
-- Make date/time formatting device-locale aware. Prefer browser locale/time zone; use GPS-derived region only as a fallback/hint. VPN can help test IP-derived fallback, but it is not the same as GPS.
+- Batch D locale update: `org.html` and `OrgCheckin.html` now prefer `en-GB` when the device time zone is a UK/Crown Dependency zone, otherwise they use the browser's first language. GPS/IP-derived locale remains future work; a VPN may test IP fallback later, but it does not prove GPS-derived region behaviour.
 - Add a Staff HELLO scan/import step when adding attendee/staff/manager records, storing the derived hash/key placeholder that can later move into the enclave design.
 - Add the staff auto-add rule with a setting to disable it and a deny-list override.
 - Improve webcam QR scanning, especially with Windows Hello/camera devices that struggle to read dense QR codes.
