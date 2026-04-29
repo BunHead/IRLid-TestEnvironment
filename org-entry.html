@@ -450,6 +450,12 @@
   let returnTimer = null;
   let lastTapAt = 0;
   let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
+
+  function entryScore() {
+    const parsed = Number.parseInt(scoreLabel, 10);
+    if (!Number.isFinite(parsed)) return 70;
+    return Math.max(0, Math.min(100, parsed));
+  }
   let helloQrData = "";
 
   const returnTo = (params.get("returnTo") || "").trim();
@@ -880,11 +886,12 @@
       const name = expectedDisplayName(chosen || {});
       if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
       render({
-        status: "allow",
+        status: "review",
         title: "Identity linked",
-        subtitle: "Scan the venue QR again",
+        subtitle: "Checking you in",
         meta: name || "This phone is ready"
       });
+      await continueVenueWalkin();
     } catch (err) {
       identityState.error = err.status === 409 ? "Already claimed by another device - see organiser" : (err.message || "Could not claim this attendee");
       identityState.busyId = null;
@@ -904,7 +911,7 @@
       helloHash,
       attendeeLabel: cachedName,
       name: cachedName,
-      score: 70,
+      score: entryScore(),
       bioVerified: false
     });
     if (payload?.checkin_id) localStorage.setItem(`irlid_org_last_checkin_${orgParam}`, payload.checkin_id);

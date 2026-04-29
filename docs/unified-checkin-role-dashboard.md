@@ -114,6 +114,7 @@ Current `OrgCheckin.html` is a prototype sidecar, not the stable `org.html`.
 
 - Verify the Batch A layout fix on the old tablet and desktop: Dashboard content now scrolls inside the app frame, Attendance Today has a fixed-height scroll window, and role-gated actions sit inside a stable action cell.
 - Re-smoke mobile/tablet Check-in QR containment: the QR is now sized against the usable content frame as well as viewport height so it should not disappear off the right side.
+- Batch B public flow update: after an unrecognised attendee claims/selects themselves from the expected list, `org-entry.html` should now continue directly into check-in instead of asking for a second scan. Public entry URLs can include `score=<0-100>` for allow/deny-path smoke testing.
 - Persist add-as role choices through a real member/role table. The current prototype selector does not survive refresh because `org_expected` only stores attendee identity fields.
 - Use debug-only role indicators if needed in the attendance table (`A/S/M/L/D`), but avoid public role leakage where attendee queues can shoulder-surf staff/admin status.
 - Make date/time formatting device-locale aware. Prefer browser locale/time zone; use GPS-derived region only as a fallback/hint. VPN can help test IP-derived fallback, but it is not the same as GPS.
