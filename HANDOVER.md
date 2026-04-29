@@ -214,6 +214,11 @@ Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.htm
 
 ## Tomorrow / Next Wiring
 
+- Make the Dashboard scrollable on tablet/short-height screens. Current prototype can trap lower dashboard content below the visible area.
+- Stabilise Attendance Today table widths when switching `Viewing as`; role-gated action content should not resize the table.
+- Current expected attendee add flow: `OrgCheckin.html` sends first name, surname, and a prototype `prototype_role`, but the Worker currently persists only first name/surname/status/timestamps in `org_expected`. The add-as role selector is UI-only until a real member/role table and HELLO scan write path are added.
+- If showing role markers in the attendance table, prefer debug-only badges such as `A/S/M/L/D`. Showing staff/manager status publicly can leak privileged identity to shoulder surfers in a queue.
+- Date/time and regional formatting should become device/locale aware. Use browser locale/time zone for display, and consider GPS-derived locale only as a fallback or hint because VPNs can spoof IP location but not necessarily device GPS. This can be tested with browser locale settings, device time zone changes, and VPN for IP-based fallback behaviour.
 - When adding attendee/staff/manager records, require scanning/importing their HELLO QR and save the derived hash/key placeholder for the future enclave path.
 - Add the rule that Staff, Manager, Lead Admin, and Developer are automatically present on the expected/known list unless disabled in settings or blocked by a deny list.
 - Enforce the prototype role gates in the Worker before any real write path: Staff add only, Manager add/delete attendee, Lead Admin full dashboard powers.
