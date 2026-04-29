@@ -238,7 +238,7 @@
       const path = (u.pathname || "").toLowerCase();
       const entryType = (u.searchParams.get("type") || "").toLowerCase();
       if ((path.endsWith("/org-entry.html") || path.endsWith("org-entry.html")) &&
-          (entryType === "venue" || entryType === "doorman" || entryType === "checkout")) {
+          (entryType === "checkin" || entryType === "venue" || entryType === "doorman" || entryType === "checkout")) {
         return { kind:"ENTRY_URL", v: t };
       }
     } catch {}
