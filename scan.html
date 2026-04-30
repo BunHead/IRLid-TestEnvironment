@@ -238,7 +238,7 @@
       const path = (u.pathname || "").toLowerCase();
       const entryType = (u.searchParams.get("type") || "").toLowerCase();
       if ((path.endsWith("/org-entry.html") || path.endsWith("org-entry.html")) &&
-          (entryType === "venue" || entryType === "doorman")) {
+          (entryType === "checkin" || entryType === "venue" || entryType === "doorman" || entryType === "checkout")) {
         return { kind:"ENTRY_URL", v: t };
       }
     } catch {}
@@ -393,8 +393,6 @@
     }
 
     trackingCtx.clearRect(0, 0, cw, ch);
-    const pulse = 0.6 + Math.sin(now * 0.004) * 0.4;
-
     detectionRings = detectionRings.filter(r => {
       const age = (now - r.birth) / 1000;
       if (age > 1.2) return false;
@@ -436,24 +434,6 @@
         }
       }
 
-      const pad = cw * 0.12;
-      const padY = ch * 0.12;
-      const cLen = Math.min(cw, ch) * 0.1;
-      trackingCtx.strokeStyle = `rgba(0, 230, 118, ${0.12 + pulse * 0.08})`;
-      trackingCtx.lineWidth = 2 * dpr;
-      trackingCtx.lineCap = "round";
-      trackingCtx.beginPath();
-      trackingCtx.moveTo(pad + cLen, padY); trackingCtx.lineTo(pad, padY); trackingCtx.lineTo(pad, padY + cLen);
-      trackingCtx.stroke();
-      trackingCtx.beginPath();
-      trackingCtx.moveTo(cw - pad - cLen, padY); trackingCtx.lineTo(cw - pad, padY); trackingCtx.lineTo(cw - pad, padY + cLen);
-      trackingCtx.stroke();
-      trackingCtx.beginPath();
-      trackingCtx.moveTo(pad, ch - padY - cLen); trackingCtx.lineTo(pad, ch - padY); trackingCtx.lineTo(pad + cLen, ch - padY);
-      trackingCtx.stroke();
-      trackingCtx.beginPath();
-      trackingCtx.moveTo(cw - pad, ch - padY - cLen); trackingCtx.lineTo(cw - pad, ch - padY); trackingCtx.lineTo(cw - pad - cLen, ch - padY);
-      trackingCtx.stroke();
     }
 
     trackingRAF = requestAnimationFrame(drawTrackingFrame);

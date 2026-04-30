@@ -54,6 +54,13 @@ function authErr(message, status = 401) {
 
 function randomToken() { return b64urlEncode(crypto.getRandomValues(new Uint8Array(32))); }
 
+const EXPECTED_MEMBER_ROLES = new Set(["attendee", "staff", "manager", "lead_admin", "developer"]);
+
+function expectedMemberRole(value) {
+  const role = String(value || "attendee").trim().toLowerCase();
+  return EXPECTED_MEMBER_ROLES.has(role) ? role : "attendee";
+}
+
 function randomCode6() {
   const bytes = crypto.getRandomValues(new Uint8Array(4));
   const num = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
@@ -817,6 +824,30 @@ async function orgRecognize(request, env) {
   return json({ recognized: true, name: `${row.first_name || ""} ${row.surname || ""}`.trim(), expected_id: row.id });
 }
 
+async function orgActiveCheckin(request, env) {
+  const org = await orgFromRequest(request, env);
+  if (!org) return authErr("organisation required", 401);
+  const url = new URL(request.url);
+  const deviceFp = (url.searchParams.get("device_pub") || "").trim();
+  if (!deviceFp) return err("device_pub required");
+
+  const row = await env.DB.prepare(
+    "SELECT id,name,attendee_label,checkin_at FROM org_checkins WHERE org_id=? AND device_key_fp=? AND checkout_at IS NULL AND status!='invalid' ORDER BY checkin_at DESC LIMIT 1"
+  ).bind(org.id, deviceFp).first();
+  if (!row) return json({ active: false });
+
+  const settings = JSON.parse(org.settings_json || "{}");
+  return json({
+    active: true,
+    checkin_id: row.id,
+    nonce: "rescan_" + randomToken(),
+    name: row.name || row.attendee_label || "",
+    checkin_at: row.checkin_at,
+    event: org.name || "IRLid Event",
+    logo: settings.logoUrl || ""
+  });
+}
+
 async function orgStaffAuth(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -858,11 +889,34 @@ async function orgStaffAuth(request, env) {
   return json({ ok: true, staff_session: token, expires_at: expiresAt, staff_pub_fp: staffPubFp });
 }
 
+async function requireOrgStaffSession(env, org, staffSessionToken) {
+  const token = String(staffSessionToken || "").trim();
+  if (!token) return authErr("Staff authentication required", 401);
+
+  const session = await env.DB.prepare(
+    "SELECT id, expires_at FROM org_staff_sessions WHERE id=? AND org_id=?"
+  ).bind(token, org.id).first();
+  if (!session) return authErr("Invalid staff session", 401);
+
+  const t = now();
+  if (Number(session.expires_at) <= t) {
+    await env.DB.prepare("DELETE FROM org_staff_sessions WHERE id=?").bind(session.id).run();
+    return authErr("Staff session expired", 401);
+  }
+
+  await env.DB.prepare("UPDATE org_staff_sessions SET last_seen_at=? WHERE id=?").bind(t, session.id).run();
+  return null;
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
-  const { mode, helloPayload, helloHash, attendeeLabel, name, score, bioVerified, gps } = body;
+  const { mode, helloPayload, helloHash, attendeeLabel, name, score, bioVerified, gps, staff_session } = body;
   if (!mode || !["attendee_scan","doorman_scan"].includes(mode)) return err("mode must be attendee_scan or doorman_scan");
+  if (mode === "doorman_scan") {
+    const staffError = await requireOrgStaffSession(env, org, staff_session);
+    if (staffError) return staffError;
+  }
   const settings = JSON.parse(org.settings_json || "{}");
   const minScore = settings.minScore || 50;
   if (score !== undefined && score < minScore) return err(`Score ${score} below minimum ${minScore}`, 403);
@@ -945,6 +999,70 @@ async function orgCheckout(request, env) {
   return json({ ok: true, checkin_id: row.id, checkout_at: t, duration_s: duration, checkout_method: "signed" });
 }
 
+async function orgCreateCheckoutToken(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const checkinId = String(body.checkin_id || "").trim();
+  if (!checkinId) return err("checkin_id required");
+
+  const checkin = await env.DB.prepare(
+    "SELECT id, checkout_at FROM org_checkins WHERE id=? AND org_id=?"
+  ).bind(checkinId, org.id).first();
+  if (!checkin) return err("Check-in record not found", 404);
+  if (checkin.checkout_at) return err("Already checked out", 409);
+
+  const t = now();
+  await env.DB.prepare(
+    "UPDATE org_checkout_tokens SET consumed_at=? WHERE org_api_key=? AND checkin_id=? AND consumed_at IS NULL AND expires_at>?"
+  ).bind(t, org.api_key, checkinId, t).run();
+
+  const token = "chk_" + randomToken();
+  const expiresAt = t + 5 * 60;
+  await env.DB.prepare(
+    "INSERT INTO org_checkout_tokens (token,checkin_id,org_api_key,created_at,expires_at,consumed_at) VALUES (?,?,?,?,?,NULL)"
+  ).bind(token, checkinId, org.api_key, t, expiresAt).run();
+
+  return json({ token, expires_at: expiresAt });
+}
+
+async function orgResolveCheckoutToken(request, env, tokenParam) {
+  const token = String(tokenParam || "").trim();
+  if (!token) return err("Checkout token not found", 404);
+
+  const row = await env.DB.prepare(
+    "SELECT token,checkin_id,org_api_key,expires_at,consumed_at FROM org_checkout_tokens WHERE token=?"
+  ).bind(token).first();
+  if (!row || row.consumed_at) return err("Checkout token not found", 404);
+
+  const t = now();
+  if (Number(row.expires_at) <= t) {
+    return err("Checkout token expired", 410);
+  }
+
+  const org = await env.DB.prepare(
+    "SELECT name,settings_json FROM organisations WHERE api_key=?"
+  ).bind(row.org_api_key).first();
+  if (!org) return err("Checkout token not found", 404);
+
+  const checkin = await env.DB.prepare(
+    "SELECT id, checkout_at FROM org_checkins WHERE id=?"
+  ).bind(row.checkin_id).first();
+  if (!checkin || checkin.checkout_at) return err("Checkout token not found", 404);
+
+  await env.DB.prepare(
+    "UPDATE org_checkout_tokens SET consumed_at=? WHERE token=? AND consumed_at IS NULL"
+  ).bind(t, token).run();
+
+  const settings = JSON.parse(org.settings_json || "{}");
+  return json({
+    org_api_key: row.org_api_key,
+    checkin_id: row.checkin_id,
+    nonce: row.token,
+    event: org.name || "IRLid Event",
+    logo: settings.logoUrl || ""
+  });
+}
+
 async function orgAttendance(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const url = new URL(request.url);
@@ -984,7 +1102,7 @@ async function orgDebugClearAttendance(request, env) {
   const conflicts = await env.DB.prepare("DELETE FROM attendee_conflicts WHERE org_code=?").bind(org.id).run();
   let checkoutTokensCleared = 0;
   if (await tableExists(env, "org_checkout_tokens")) {
-    const tokens = await env.DB.prepare("DELETE FROM org_checkout_tokens WHERE org_id=?").bind(org.id).run();
+    const tokens = await env.DB.prepare("DELETE FROM org_checkout_tokens WHERE org_api_key=?").bind(org.api_key).run();
     checkoutTokensCleared = tokens.meta?.changes || 0;
   }
 
@@ -1016,7 +1134,7 @@ async function orgDebugClearAttendance(request, env) {
 async function orgExpectedList(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const rows = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role FROM org_expected WHERE org_code=? ORDER BY LOWER(surname) ASC, LOWER(first_name) ASC, id ASC"
   ).bind(org.id).all();
   return json({ expected: rows.results });
 }
@@ -1026,6 +1144,7 @@ async function orgExpectedCreate(request, env) {
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
   const firstName = (body.first_name || "").trim();
   const surname = (body.surname || "").trim();
+  const prototypeRole = expectedMemberRole(body.prototype_role || body.role);
   if (!firstName || !surname) return err("first_name and surname required");
   const existing = await env.DB.prepare(
     "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
@@ -1033,8 +1152,8 @@ async function orgExpectedCreate(request, env) {
   if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
   const createdAt = now();
   const row = await env.DB.prepare(
-    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at) VALUES (?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
-  ).bind(org.id, firstName, surname, "assist", createdAt).first();
+    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at,prototype_role) VALUES (?,?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+  ).bind(org.id, firstName, surname, "assist", createdAt, prototypeRole).first();
   return json({ expected: row });
 }
 
@@ -1053,14 +1172,20 @@ async function orgExpectedUpdate(request, env, id) {
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
   const firstName = (body.first_name || "").trim();
   const surname = (body.surname || "").trim();
+  const roleProvided = body.prototype_role !== undefined || body.role !== undefined;
+  const prototypeRole = roleProvided ? expectedMemberRole(body.prototype_role || body.role) : null;
   if (!firstName || !surname) return err("first_name and surname required");
   const existing = await env.DB.prepare(
     "SELECT id FROM org_expected WHERE org_code=? AND id<>? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
   ).bind(org.id, id, firstName, surname).first();
   if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
-  const row = await env.DB.prepare(
-    "UPDATE org_expected SET first_name=?, surname=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at"
-  ).bind(firstName, surname, id, org.id).first();
+  const row = roleProvided
+    ? await env.DB.prepare(
+      "UPDATE org_expected SET first_name=?, surname=?, prototype_role=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+    ).bind(firstName, surname, prototypeRole, id, org.id).first()
+    : await env.DB.prepare(
+      "UPDATE org_expected SET first_name=?, surname=? WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+    ).bind(firstName, surname, id, org.id).first();
   if (!row) return err("Expected attendee not found", 404);
   return json({ expected: row });
 }
@@ -1106,7 +1231,7 @@ async function orgExpectedClaim(request, env, id) {
   if (!devicePubFp) return err("device_pub_fp required");
 
   const expected = await env.DB.prepare(
-    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp FROM org_expected WHERE id=? AND org_code=?"
+    "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role FROM org_expected WHERE id=? AND org_code=?"
   ).bind(id, org.id).first();
   if (!expected) return err("Expected attendee not found", 404);
 
@@ -1120,7 +1245,7 @@ async function orgExpectedClaim(request, env, id) {
 
   const t = now();
   const row = await env.DB.prepare(
-    "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp"
+    "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
   ).bind(devicePubFp, t, id, org.id).first();
   return json({ ok: true, expected: row });
 }
@@ -1202,9 +1327,11 @@ export default {
       else if (method === "POST" && path === "/org/settings")        response = await orgUpdateSettings(request, env);
       else if (method === "GET"  && path === "/org/qr")              response = await orgGetQR(request, env);
       else if (method === "GET"  && path === "/org/recognize")       response = await orgRecognize(request, env);
+      else if (method === "GET"  && path === "/org/active-checkin")  response = await orgActiveCheckin(request, env);
       else if (method === "POST" && path === "/org/staff/auth")      response = await orgStaffAuth(request, env);
       else if (method === "POST" && path === "/org/checkin")         response = await orgCheckin(request, env);
       else if (method === "POST" && path === "/org/checkout")        response = await orgCheckout(request, env);
+      else if (method === "POST" && path === "/org/checkout-token")  response = await orgCreateCheckoutToken(request, env);
       else if (method === "GET"  && path === "/org/attendance")      response = await orgAttendance(request, env);
       else if (method === "POST" && path === "/org/debug/clear-attendance") response = await orgDebugClearAttendance(request, env);
       else if (method === "GET"  && path === "/org/expected")        response = await orgExpectedList(request, env);
@@ -1215,11 +1342,13 @@ export default {
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
         const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
+        const mCheckoutToken = path.match(/^\/org\/checkout-token\/([^/]+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
         else if (method === "POST" && mExpectedClaim) response = await orgExpectedClaim(request, env, Number(mExpectedClaim[1]));
         else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
+        else if (method === "GET" && mCheckoutToken) response = await orgResolveCheckoutToken(request, env, decodeURIComponent(mCheckoutToken[1]));
         else {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
           if (method === "GET" && m) response = await getReceipt(request, env, m[1]);

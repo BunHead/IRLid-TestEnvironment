@@ -6,7 +6,10 @@
   let overlay = null;
   let holder = null;
   let active = false;
+  let activeOptions = null;
+  let refreshTimer = null;
   let lastTapAt = 0;
+  let closing = false;
 
   function ensureOverlay() {
     if (overlay) return;
@@ -21,6 +24,10 @@
         <div class="irlid-qr-fullscreen-holder" id="irlidQrFullscreenHolder"></div>
         <div class="irlid-qr-fullscreen-subtitle" data-qr-subtitle></div>
       </div>`;
+    const refresh = document.createElement("div");
+    refresh.className = "irlid-qr-fullscreen-refresh";
+    refresh.setAttribute("data-qr-refresh", "");
+    overlay.appendChild(refresh);
     document.body.appendChild(overlay);
     holder = overlay.querySelector(".irlid-qr-fullscreen-holder");
     overlay.addEventListener("click", (event) => {
@@ -30,6 +37,9 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && active) close();
     });
+    document.addEventListener("fullscreenchange", () => {
+      if (active && !closing && document.fullscreenElement !== overlay) close(false);
+    });
   }
 
   function injectStyles() {
@@ -37,17 +47,18 @@
     const style = document.createElement("style");
     style.id = "irlidQrFullscreenStyles";
     style.textContent = `
-      .irlid-qr-fullscreen{display:none;position:fixed;inset:0;z-index:100000;background:#05070c;color:#fff;align-items:center;justify-content:center;padding:clamp(16px,3vmin,32px);box-sizing:border-box;}
+      .irlid-qr-fullscreen{display:none;position:fixed;inset:0;z-index:100000;background:#05070c;color:#fff;align-items:center;justify-content:center;padding:clamp(10px,2vmin,28px);box-sizing:border-box;overflow:hidden;}
       .irlid-qr-fullscreen.active{display:flex;}
-      .irlid-qr-fullscreen-inner{width:min(100%,900px);display:grid;justify-items:center;gap:clamp(12px,2vmin,20px);text-align:center;}
+      .irlid-qr-fullscreen-inner{width:min(100%,900px);display:grid;justify-items:center;gap:clamp(8px,1.5vmin,18px);text-align:center;}
       .irlid-qr-fullscreen-logo{display:none;width:min(28vmin,170px);max-width:48vw;max-height:min(18vmin,150px);object-fit:contain;filter:drop-shadow(0 12px 28px rgba(0,0,0,0.34));}
       .irlid-qr-fullscreen-fallback{display:none;min-width:min(20vmin,92px);min-height:min(15vmin,70px);align-items:center;justify-content:center;border-radius:14px;background:#f8fbff;color:#08101d;font:800 clamp(20px,5vmin,30px)/1 "Segoe UI",system-ui,sans-serif;letter-spacing:.03em;}
       .irlid-qr-fullscreen-title{min-height:1.2em;font:800 clamp(22px,4vmin,48px)/1.05 "Segoe UI",system-ui,sans-serif;}
       .irlid-qr-fullscreen-subtitle{min-height:1.2em;color:rgba(255,255,255,0.72);font:600 clamp(12px,1.6vmin,16px)/1.35 "Segoe UI",system-ui,sans-serif;}
-      .irlid-qr-fullscreen-holder{width:min(76vmin,720px);aspect-ratio:1;display:grid;place-items:center;padding:clamp(10px,1.8vmin,18px);box-sizing:border-box;background:#fff;border-radius:clamp(12px,2vmin,22px);box-shadow:0 28px 90px rgba(0,0,0,0.54);}
+      .irlid-qr-fullscreen-holder{width:min(78vmin,calc(100dvh - 180px),720px);aspect-ratio:1;display:grid;place-items:center;padding:clamp(10px,1.8vmin,18px);box-sizing:border-box;background:#fff;border-radius:clamp(12px,2vmin,22px);box-shadow:0 28px 90px rgba(0,0,0,0.54);}
       .irlid-qr-fullscreen-holder canvas,.irlid-qr-fullscreen-holder img{display:block;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain;}
       .irlid-qr-fullscreen-close{position:fixed;top:18px;right:18px;width:42px;height:42px;border:0;border-radius:999px;background:rgba(255,255,255,0.12);color:#fff;font-size:24px;line-height:1;cursor:pointer;}
-      @media (max-width:760px){.irlid-qr-fullscreen{align-items:flex-start;overflow:auto;}.irlid-qr-fullscreen-inner{padding-top:24px;}}
+      .irlid-qr-fullscreen-refresh{position:fixed;right:16px;bottom:12px;color:rgba(255,255,255,0.26);font:600 11px/1.2 "Segoe UI",system-ui,sans-serif;letter-spacing:0.01em;pointer-events:none;user-select:none;}
+      @media (max-width:760px),(max-height:760px){.irlid-qr-fullscreen-logo,.irlid-qr-fullscreen-subtitle{display:none!important;}.irlid-qr-fullscreen-holder{width:min(88vmin,calc(100dvh - 70px),680px);}.irlid-qr-fullscreen-inner{gap:8px;}}
     `;
     document.head.appendChild(style);
   }
@@ -97,6 +108,48 @@
     normalize(target);
   }
 
+  function setRefreshText(text) {
+    const node = overlay && overlay.querySelector("[data-qr-refresh]");
+    if (node) node.textContent = text || "";
+  }
+
+  function defaultRefreshText() {
+    return "Last Refreshed: " + new Date().toLocaleTimeString("en-GB", { minute: "2-digit", second: "2-digit" });
+  }
+
+  function clearRefreshTimer() {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+
+  function nextMinuteDelay() {
+    const now = new Date();
+    return Math.max(1200, (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 1200);
+  }
+
+  function scheduleRefresh() {
+    clearRefreshTimer();
+    if (!active || !activeOptions || typeof activeOptions.refreshPayload !== "function") return;
+    refreshTimer = setTimeout(refreshPayload, nextMinuteDelay());
+  }
+
+  async function refreshPayload() {
+    if (!active || !activeOptions || typeof activeOptions.refreshPayload !== "function") return;
+    try {
+      const next = await activeOptions.refreshPayload(activeOptions);
+      const payload = typeof next === "string" ? next : next && next.payload;
+      if (payload) {
+        activeOptions.payload = payload;
+        await render(holder, payload);
+      }
+      setRefreshText((next && next.lastRefreshedText) || defaultRefreshText());
+    } catch {
+      setRefreshText("Last Refreshed: retry pending");
+    } finally {
+      scheduleRefresh();
+    }
+  }
+
   async function openFromElement(el) {
     const payload = el.dataset.qrFullscreenPayload;
     if (!payload) return;
@@ -116,6 +169,7 @@
     injectStyles();
     ensureOverlay();
     active = true;
+    activeOptions = { ...options };
     const title = overlay.querySelector("[data-qr-title]");
     const logo = overlay.querySelector("[data-qr-logo]");
     const fallback = overlay.querySelector("[data-qr-fallback]");
@@ -137,17 +191,30 @@
       title.textContent = options.title || "IRLid QR";
     }
     overlay.querySelector("[data-qr-subtitle]").textContent = options.subtitle || "";
+    setRefreshText(options.lastRefreshedText || (options.refreshPayload ? defaultRefreshText() : ""));
     overlay.classList.add("active");
     document.body.style.overflow = "hidden";
+    if (options.browserFullscreen !== false && overlay.requestFullscreen && document.fullscreenElement !== overlay) {
+      overlay.requestFullscreen().catch(() => {});
+    }
     await render(holder, payload);
+    scheduleRefresh();
   }
 
-  function close() {
+  function close(exitFullscreen = true) {
     if (!overlay) return;
+    closing = true;
     active = false;
+    activeOptions = null;
+    clearRefreshTimer();
     overlay.classList.remove("active");
     document.body.style.overflow = "";
     if (holder) holder.innerHTML = "";
+    setRefreshText("");
+    if (exitFullscreen && document.fullscreenElement === overlay && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+    setTimeout(() => { closing = false; }, 0);
   }
 
   function payloadElementFromEvent(event) {

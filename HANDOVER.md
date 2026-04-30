@@ -5,6 +5,18 @@
 **Working rule:** one narrow task per PR. Do not combine Worker schema, frontend gate, and checkout-token work in one PR.
 **Current main:** Batch 12 carried to `main` by PR #40.
 
+## Current Demo State - 28 April 2026
+
+- Batch 16 checkout-token work is merged and deployed in the test environment.
+- T1 Worker/D1 token API merged via PR #52; remote D1 `org_checkout_tokens` migration was applied and smoke-tested for create, replace, consume, expired, and unknown-token paths.
+- T2 short checkout QR UI merged via PR #54; GitHub Pages deployment was verified for `org.html`, `org-entry.html`, and `js/orgapi.js`.
+- Checkout QR generation is local-first and now encodes `org-entry.html?type=checkout&t=<token>` rather than the long sensitive checkout payload.
+- Unknown/expired checkout tokens show a clear failure state on `org-entry.html`; token creation failures show inline in the QR box.
+- The floating Check-in settings cog was removed after deployment; use the sidebar Settings item or the Check-out Required Edit button to reach settings.
+- Redesign direction captured in `docs/unified-checkin-role-dashboard.md`: collapse Venue/Doorman into one branded Check-in flow, gate Dashboard functions by explicit staff role, and require fresh Staff HELLO confirmation for privileged writes.
+- Experimental `OrgCheckin.html` prototype added alongside stable `org.html` to test the redesigned Organisation / Check-in / Dashboard shape without replacing the current demo portal.
+- `.codex-demo-audit/` is local/untracked audit material and should not be included in PRs unless explicitly requested.
+
 ## Batch 12 Live Hardening Prerequisite
 
 Before starting Batch 13 protocol work, merge and deploy the live-hardening fix that:
@@ -174,3 +186,50 @@ This is not a polish batch. It touches frontend state, Worker endpoints, and D1 
 ## Stop Point
 
 Stop after each task. Report PR link, deployment state, and any D1 migration applied.
+
+---
+
+# Night Shift Handover - Unified Check-in Prototype
+
+Date: 29 April 2026
+
+Scope: `OrgCheckin.html` prototype only unless otherwise stated. Stable `org.html` should stay demo-safe and untouched until the redesign is approved.
+
+## Done In Prototype
+
+- Navigation direction is Organisation, Check-in, Dashboard, with Settings separated at the bottom.
+- Check-in is the public-safe branded event QR screen.
+- Dashboard is the private staff surface for attendance, expected attendees, and role-gated actions.
+- Role switcher is Staff, Manager, Lead Admin, and Developer. Founder is honorary for now, not a dashboard view.
+- Staff can add attendees, but cannot delete attendees or clear data.
+- Manager can add and delete attendees.
+- Lead Admin can do everything shown in the prototype.
+- Developer can do everything Lead Admin can, plus prototype/dev diagnostics.
+- Expected attendee management uses Add plus an add-as selector. Staff can add Attendee only; Manager and Lead Admin can add Attendee/Staff/Manager; Developer can add everything.
+- Expected attendees are folded into the Attendance Today table so names do not appear twice in normal dashboard use.
+- Fullscreen Check-in QR has a subtle `Last Refreshed: mm:ss` marker and should refresh just after each minute.
+- Check-in QR layout gives the QR priority and hides the explanatory text on tighter screens.
+- Check-in QR sizing is constrained by visible viewport height for older tablets; the fullscreen control requests browser fullscreen first and falls back to the in-page overlay if the browser refuses.
+- Public Check-in now checks for an existing active check-in before recognition. If the same device is already in, it offers signed Check-out; otherwise it continues through recognised / assisted identity / allow-or-deny check-in.
+
+## Tomorrow / Next Wiring
+
+- Dashboard scroll/table height and Check-in card QR containment were tightened in Batch A; still re-smoke on the old tablet.
+- Expected attendee add-as roles now persist via `org_expected.prototype_role` in the prototype. This is not the final member/role table; replace it when Staff HELLO member registration is designed.
+- Private Dashboard role markers exist as `A/S/M/L/D` badges for expected-only rows. Keep them out of public queue-facing screens.
+- Date/time formatting now prefers UK format when the device time zone is UK/Crown Dependency based, otherwise it follows the browser language. GPS/IP-derived locale remains future work; VPN tests only IP fallback, not true GPS-derived region.
+- Tablet photo from 29 April shows the Outcome QR fullscreen/in-page overlay still clipping off the bottom edge. Later QR containment batch should audit `scan.html` / shared fullscreen QR sizing so outcome QR shells fit the whole code plus title/close/safe-area padding on old tablets.
+- Prototype Dashboard add/delete now prompts for a fresh Staff HELLO payload at save time before calling the expected-attendee API. This is a live proof step, not yet final Worker-side role enforcement.
+- When adding attendee/staff/manager records, require scanning/importing their HELLO QR and save the derived hash/key placeholder for the future enclave path.
+- Add the rule that Staff, Manager, Lead Admin, and Developer are automatically present on the expected/known list unless disabled in settings or blocked by a deny list.
+- Enforce the prototype role gates in the Worker before any real write path: Staff add only, Manager add/delete attendee, Lead Admin full dashboard powers.
+- Use fresh Staff HELLO step-up for attempted saves/changes, rather than relying only on a timed session.
+- Investigate QR scanning reliability with webcams and Windows Hello cameras; current camera auth works, but webcam QR reading is still fragile.
+- Minor dashboard polish: resize the Attendance Today/action columns and restore the disappearing "Awaiting check-out" passive label.
+- Consider a global identity plus org-local authorization model for "THE Dev" / super-admin style recognition: recognise the same key across orgs, but grant powers only where a deliberate org or federation rule allows it.
+
+## Demo Caveats
+
+- `OrgCheckin.html` is a redesign prototype, not the canonical portal yet.
+- Add/delete UI may still depend on the existing expected-attendee API and DEV org data.
+- The re-scan checkout behaviour is logged for tomorrow and should be tested before showing that exact path.

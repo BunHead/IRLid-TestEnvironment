@@ -222,6 +222,29 @@
   .next-btn.show{ display:inline-flex; }
   .next-btn:focus-visible{ outline:3px solid rgba(255,255,255,0.7); outline-offset:3px; }
 
+  .choice-actions{
+    display:none;
+    gap:10px;
+    justify-content:center;
+    flex-wrap:wrap;
+    margin-top:18px;
+  }
+  .choice-actions.show{ display:flex; }
+  .choice-btn{
+    border:1px solid rgba(255,255,255,0.2);
+    border-radius:999px;
+    padding:10px 16px;
+    background:rgba(255,255,255,0.12);
+    color:#fff;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .choice-btn.primary{
+    background:rgba(63,185,80,0.92);
+    border-color:rgba(63,185,80,0.98);
+    color:#03120a;
+  }
+
   .identity-picker{
     display:none;
     width:min(100%, 560px);
@@ -380,6 +403,7 @@
       <div class="subtitle" id="subtitle">You’re checked in</div>
       <div class="meta" id="meta"></div>
       <button class="next-btn" id="nextBtn" type="button">Next scan</button>
+      <div class="choice-actions" id="choiceActions"></div>
       <div class="hint" id="hint"></div>
       <div class="identity-picker" id="identityPicker">
         <input class="identity-search" id="identitySearch" type="search" placeholder="Search expected attendees" autocomplete="off">
@@ -409,21 +433,29 @@
   const mode = (params.get("mode") || "").trim().toLowerCase();
   const checkinId = (params.get("checkin") || "").trim();
   const checkoutNonce = (params.get("nonce") || "").trim();
+  const checkoutToken = (params.get("t") || "").trim();
   const attendeeName = (params.get("attendee") || params.get("name") || "Alice Smith").trim();
   const scoreLabel = (params.get("score") || "").trim();
   const denyReason = (params.get("reason") || "Not on list").trim();
-  const eventName = (params.get("event") || "IRLid Event").trim();
+  let eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
-  const logoUrl = (params.get("logo") || "").trim();
+  let logoUrl = (params.get("logo") || "").trim();
   const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
   const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());
   const context = (params.get("ctx") || params.get("from") || "").trim().toLowerCase();
   const isDoormanContext = type === "doorman" && context === "doorman";
+  const isCheckinContext = type === "venue" || type === "checkin";
 
   let returnTimer = null;
   let lastTapAt = 0;
   let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
+
+  function entryScore() {
+    const parsed = Number.parseInt(scoreLabel, 10);
+    if (!Number.isFinite(parsed)) return 70;
+    return Math.max(0, Math.min(100, parsed));
+  }
   let helloQrData = "";
 
   const returnTo = (params.get("returnTo") || "").trim();
@@ -504,6 +536,7 @@
     const subtitle = document.getElementById("subtitle");
     const meta = document.getElementById("meta");
     const nextBtn = document.getElementById("nextBtn");
+    const choiceActions = document.getElementById("choiceActions");
     const logo = document.getElementById("logo");
     const brandFallback = document.getElementById("brandFallback");
     const identityPicker = document.getElementById("identityPicker");
@@ -519,6 +552,10 @@
     title.textContent = state.title;
     subtitle.textContent = state.subtitle || "";
     meta.textContent = state.meta || "";
+    if (choiceActions) {
+      choiceActions.classList.remove("show");
+      choiceActions.innerHTML = "";
+    }
 
     if (logoUrl) {
       logo.src = logoUrl;
@@ -579,13 +616,18 @@
   });
 
   async function renderVenue() {
-    if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") {
+    if (!isCheckinContext || !orgParam || typeof getPublicJwk !== "function") {
       continueVenueWalkin();
       return;
     }
     try {
       const pub = compactJwk(await getPublicJwk());
       const fp = await deviceKeyFingerprint(pub);
+      const active = await activeCheckinForDevice(fp);
+      if (active?.active) {
+        renderCheckoutChoice(active);
+        return;
+      }
       const recognized = await recognizeDevice(fp);
       if (recognized?.recognized) {
         if (recognized.name) localStorage.setItem(`irlid_org_name_${orgParam}`, recognized.name);
@@ -599,27 +641,114 @@
     }
   }
 
-  function continueVenueWalkin(options = {}) {
+  async function continueVenueWalkin(options = {}) {
     const meta = returnAllowed ? "Re-entry allowed" : "Re-entry not allowed";
     render({
-      status: "allow",
-      title: `Welcome to ${eventName}`,
-      subtitle: welcomeMessage || "You’re checked in",
-      meta
+      status: "review",
+      title: `Checking in to ${eventName}`,
+      subtitle: "Please wait",
+      meta: "Verifying attendance policy"
     });
-    recordVenueCheckin(options).catch((err) => console.warn("Venue check-in record failed", err));
+    try {
+      const payload = await recordVenueCheckin(options);
+      if (payload?.conflict || payload?.expected_name) return;
+      render({
+        status: "allow",
+        title: `Welcome to ${eventName}`,
+        subtitle: welcomeMessage || "You’re checked in",
+        meta
+      });
+    } catch (err) {
+      render({
+        status: "deny",
+        title: "Check-in rejected",
+        subtitle: err.message || "Could not record check-in",
+        meta: "Please ask staff for help"
+      });
+    }
   }
 
-  async function postOrg(path, body) {
-    if (!orgParam) throw new Error("Missing organisation key");
+  function renderCheckoutChoice(details) {
+    const name = details.name || localStorage.getItem(`irlid_org_name_${orgParam}`) || "this attendee";
+    render({
+      status: "review",
+      title: `Check out ${name}?`,
+      subtitle: "This device is already checked in",
+      meta: "Confirm to sign check-out with this phone"
+    });
+    const choiceActions = document.getElementById("choiceActions");
+    if (!choiceActions) return;
+    choiceActions.innerHTML = `
+      <button class="choice-btn primary" id="confirmCheckoutBtn" type="button">Check out</button>
+      <button class="choice-btn" id="stayCheckedInBtn" type="button">Stay checked in</button>
+    `;
+    choiceActions.classList.add("show");
+    document.getElementById("confirmCheckoutBtn")?.addEventListener("click", () => performCheckout(details));
+    document.getElementById("stayCheckedInBtn")?.addEventListener("click", () => {
+      render({
+        status: "allow",
+        title: `Welcome back, ${name}`,
+        subtitle: "Still checked in",
+        meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed"
+      });
+    });
+  }
+
+  async function performCheckout(checkoutDetails) {
+    try {
+      if (!checkoutDetails.org_api_key) checkoutDetails.org_api_key = orgParam;
+      if (!checkoutDetails.checkin_id || !checkoutDetails.nonce) {
+        render({ status: "deny", title: "Check-out unavailable", subtitle: "Missing check-out details", meta: "Ask staff to retry" });
+        return;
+      }
+      const checkoutPayload = { checkin_id: checkoutDetails.checkin_id, nonce: checkoutDetails.nonce, ts: Math.floor(Date.now() / 1000), v: 1 };
+      const payloadHash = await hashPayloadToB64url(checkoutPayload, 3);
+      const signature = await signHashB64url(payloadHash);
+      const result = await postOrg("/org/checkout", { checkin_id: checkoutDetails.checkin_id, checkout_payload: checkoutPayload, signature }, checkoutDetails.org_api_key);
+      render({
+        status: "allow",
+        title: "Checked out",
+        subtitle: "Check-out signed and recorded",
+        meta: result.checkout_method === "signed" ? "Cryptographic proof accepted" : "Check-out recorded"
+      });
+    } catch (err) {
+      render({
+        status: "deny",
+        title: "Check-out rejected",
+        subtitle: err.message || "Could not sign this check-out",
+        meta: "Use the same phone that checked in"
+      });
+    }
+  }
+
+  async function postOrg(path, body, orgKey = orgParam) {
+    if (!orgKey) throw new Error("Missing organisation key");
     const response = await fetch(API_BASE + path, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Org-Key": orgParam },
+      headers: { "Content-Type": "application/json", "X-Org-Key": orgKey },
       body: JSON.stringify(body)
     });
     let data = null;
     try { data = await response.json(); } catch {}
     if (!response.ok) throw new Error(data?.error || `Request failed ${response.status}`);
+    return data;
+  }
+
+  async function resolveCheckoutToken(token) {
+    let response;
+    try {
+      response = await fetch(API_BASE + `/org/checkout-token/${encodeURIComponent(token)}`);
+    } catch {
+      throw new Error("Could not resolve this check-out QR. Ask the doorman to retry.");
+    }
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) {
+      const message = response.status === 410
+        ? "This check-out QR has expired. Ask the doorman to refresh it."
+        : "This check-out QR is no longer valid. Ask the doorman to retry.";
+      throw new Error(data?.error || message);
+    }
     return data;
   }
 
@@ -663,6 +792,10 @@
 
   async function recognizeDevice(fp) {
     return getOrg(`/org/recognize?org=${encodeURIComponent(orgParam)}&device_pub=${encodeURIComponent(fp)}`);
+  }
+
+  async function activeCheckinForDevice(fp) {
+    return getOrg(`/org/active-checkin?org=${encodeURIComponent(orgParam)}&device_pub=${encodeURIComponent(fp)}`);
   }
 
   function expectedDisplayName(row) {
@@ -753,11 +886,12 @@
       const name = expectedDisplayName(chosen || {});
       if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
       render({
-        status: "allow",
+        status: "review",
         title: "Identity linked",
-        subtitle: "Scan the venue QR again",
+        subtitle: "Checking you in",
         meta: name || "This phone is ready"
       });
+      await continueVenueWalkin();
     } catch (err) {
       identityState.error = err.status === 409 ? "Already claimed by another device - see organiser" : (err.message || "Could not claim this attendee");
       identityState.busyId = null;
@@ -766,7 +900,7 @@
   }
 
   async function recordVenueCheckin(options = {}) {
-    if (type !== "venue" || !orgParam || typeof getPublicJwk !== "function") return;
+    if (!isCheckinContext || !orgParam || typeof getPublicJwk !== "function") return;
     const pub = compactJwk(await getPublicJwk());
     const helloPayload = { mode: "attendee_scan", org: orgParam, pub, ts: Math.floor(Date.now() / 1000), v: 1 };
     const helloHash = await hashPayloadToB64url(helloPayload, 3);
@@ -777,7 +911,7 @@
       helloHash,
       attendeeLabel: cachedName,
       name: cachedName,
-      score: 70,
+      score: entryScore(),
       bioVerified: false
     });
     if (payload?.checkin_id) localStorage.setItem(`irlid_org_last_checkin_${orgParam}`, payload.checkin_id);
@@ -788,6 +922,7 @@
       const welcomeName = payload?.expected_name || cachedName;
       render({ status: "allow", title: `Welcome back, ${welcomeName}`, subtitle: welcomeMessage || "You’re checked in", meta: returnAllowed ? "Re-entry allowed" : "Re-entry not allowed" });
     }
+    return payload;
   }
 
   function configureHelloPanel() {
@@ -863,21 +998,35 @@
   }
 
   async function renderCheckout() {
-    if (!checkinId || !checkoutNonce) {
-      render({ status: "deny", title: "Check-out unavailable", subtitle: "Missing check-out details", meta: "Ask the doorman to retry" });
-      return;
-    }
     try {
-      const checkoutPayload = { checkin_id: checkinId, nonce: checkoutNonce, ts: Math.floor(Date.now() / 1000), v: 1 };
-      const payloadHash = await hashPayloadToB64url(checkoutPayload, 3);
-      const signature = await signHashB64url(payloadHash);
-      const result = await postOrg("/org/checkout", { checkin_id: checkinId, checkout_payload: checkoutPayload, signature });
-      render({
-        status: "allow",
-        title: "Check-out signed",
-        subtitle: "Check-out signed and recorded",
-        meta: result.checkout_method === "signed" ? "Cryptographic proof accepted" : "Check-out recorded"
-      });
+      let checkoutDetails = {
+        org_api_key: orgParam,
+        checkin_id: checkinId,
+        nonce: checkoutNonce,
+        event: eventName,
+        logo: logoUrl
+      };
+      if (checkoutToken) {
+        try {
+          checkoutDetails = await resolveCheckoutToken(checkoutToken);
+        } catch (err) {
+          render({
+            status: "deny",
+            title: "Check-out unavailable",
+            subtitle: err.message || "Could not resolve this check-out QR",
+            meta: "Ask the doorman to retry"
+          });
+          return;
+        }
+        eventName = checkoutDetails.event || eventName;
+        logoUrl = checkoutDetails.logo || logoUrl;
+      }
+      if (!checkoutDetails.org_api_key || !checkoutDetails.checkin_id || !checkoutDetails.nonce) {
+        render({ status: "deny", title: "Check-out unavailable", subtitle: "Missing check-out details", meta: "Ask the doorman to retry" });
+        return;
+      }
+
+      await performCheckout(checkoutDetails);
     } catch (err) {
       render({
         status: "deny",
@@ -960,7 +1109,7 @@
 
 if (type === "checkout") {
     renderCheckout();
-  } else if (type === "venue") {
+  } else if (isCheckinContext) {
     renderVenue();
   } else if (type === "doorman") {
     renderDoormanMock();
