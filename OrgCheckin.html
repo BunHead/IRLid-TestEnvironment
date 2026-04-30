@@ -1534,11 +1534,14 @@ function buildCheckoutAction(row) {
     const conflictId = escapeHtml(String(row.conflict_id));
     return `<div class="conflict-actions"><button class="btn btn-primary btn-sm" type="button" onclick="resolveConflict('${conflictId}','confirmed_new_device')">Confirm new device</button><button class="btn btn-danger btn-sm" type="button" onclick="resolveConflict('${conflictId}','rejected')">Reject</button></div>`;
   }
-  if (row.status === 'invalid') return '<span style="color:#8b949e;font-size:11px;">Rejected</span>';
+  if (row.status === 'invalid') return '<span class="att-action-passive" role="status" aria-label="Attendee was rejected at entry">Rejected</span>';
   const checkinId = row.active_checkin_id || '';
   const safeId = escapeHtml(checkinId);
   const error = checkoutErrors[checkinId] ? `<div class="checkout-error">${escapeHtml(checkoutErrors[checkinId])}</div>` : '';
-  if (!checkinId) return '<span style="color:#8b949e;font-size:11px;">Done</span>';
+  if (!checkinId) return '<span class="att-action-passive" role="status" aria-label="Attendee has checked out">Done</span>';
+  if (prototypeRoleRank() < PROTOTYPE_ROLE_RANK.manager) {
+    return '<span class="att-action-passive" role="status" aria-label="Attendee is checked in, awaiting check-out">Awaiting check-out</span>';
+  }
   if (checkoutConfirmId === checkinId) {
     return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button><div class="checkout-qr-panel"><div class="checkout-qr-box" id="checkoutQr_${safeId}"></div><div class="checkout-qr-help">Attendee scans this on the same IRLid phone to sign check-out.</div></div>${error}</div>`;
   }
@@ -1555,7 +1558,7 @@ function buildExpectedRowAction(row) {
   if (prototypeRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
     return `<button class="btn btn-danger btn-sm expected-row-delete" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
   }
-  return '<span class="att-action-passive">Awaiting check-in</span>';
+  return '<span class="att-action-passive" role="status" aria-label="Expected attendee, awaiting check-in">Awaiting check-in</span>';
 }
 async function deleteExpectedFromAttendance(id) {
   const row = expectedAttendees.find(item => String(item.id) === String(id));
