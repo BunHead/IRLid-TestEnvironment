@@ -620,7 +620,13 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   gap: 10px;
 }
 .theme-anim-panel h5 { font-size: 13px; color: #e6edf3; margin: 0; font-weight: 600; }
-.theme-anim-sub { font-size: 11px; color: var(--muted); line-height: 1.4; margin: 0; }
+.theme-anim-sub {
+  font-size: 11px; color: var(--muted); line-height: 1.4; margin: 0;
+  /* Lock to a 2-line minimum so panels align even if descriptions differ. */
+  min-height: calc(1.4em * 2);
+}
+/* Push the Preview button to the bottom so both panels' buttons sit on the same row. */
+.theme-anim-panel > button { margin-top: auto; }
 .theme-anim-toggle {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 12px; color: #dbe6ff; cursor: pointer;
@@ -693,6 +699,32 @@ body.theme-bg-cycling .qr-pad.active-pad {
 .scan-panel.cycling, .checkin-success-overlay.cycling {
   animation: themeAcceptCycle var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
 }
+
+/* ============== Batch 6.5c — Fullscreen QR overlay animations ==============
+   The fullscreen overlay (qr-fullscreen.js) puts the QR inside .irlid-qr-fullscreen-holder.
+   It has its own deep drop shadow we want to preserve during cycling, so the
+   background animation here uses a dedicated keyframe that keeps the deep shadow
+   AND adds a brighter cycling glow on top (32px spread, larger than panel rule). */
+@keyframes themeBackgroundCycleFullscreen {
+  0%   { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-1, var(--theme-primary)); }
+  14%  { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-2, var(--theme-primary)); }
+  28%  { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-3, var(--theme-primary)); }
+  42%  { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-4, var(--theme-primary)); }
+  57%  { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-5, var(--theme-primary)); }
+  71%  { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-6, var(--theme-primary)); }
+  85%  { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-7, var(--theme-primary)); }
+  100% { box-shadow: 0 28px 90px rgba(0,0,0,0.54), 0 0 32px 8px var(--theme-cycle-1, var(--theme-primary)); }
+}
+body.theme-bg-cycling .irlid-qr-fullscreen-holder {
+  animation: themeBackgroundCycleFullscreen var(--theme-bg-anim-duration, 30s) ease-in-out infinite;
+}
+/* Celebration on the fullscreen holder. The first selector with body.theme-bg-cycling
+   beats the bg-cycling rule on specificity so the burst overrides during the .cycling window. */
+body.theme-bg-cycling .irlid-qr-fullscreen-holder.cycling,
+.irlid-qr-fullscreen-holder.cycling {
+  animation: themeAcceptCycle var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
+}
+/* ============== /Batch 6.5c ============== */
 /* ============== /Batch 6.5b ============== */
 
 .prototype-checkin #panel-checkin #expectedSharedPanel,
@@ -3010,13 +3042,17 @@ function triggerAcceptCycleAnimation() {
   const candidates = [
     document.querySelector('.scan-panel.flash-success'),
     document.querySelector('.checkin-success-overlay'),
-    document.querySelector('.scan-panel')
+    document.querySelector('.scan-panel'),
+    // Batch 6.5c — also burst on the fullscreen QR overlay if it's currently open.
+    document.querySelector('.irlid-qr-fullscreen.active .irlid-qr-fullscreen-holder')
   ].filter(Boolean);
   candidates.forEach(function (el) {
     el.classList.remove('cycling');
     void el.offsetWidth;
     el.classList.add('cycling');
-    setTimeout(function () { el.classList.remove('cycling'); }, 1500);
+    // Match the configured cycle duration plus a small buffer instead of a hardcoded 1500ms.
+    const ms = Math.max(600, ((activeTheme && activeTheme.cycleAnimDuration) || 1.4) * 1000 + 200);
+    setTimeout(function () { el.classList.remove('cycling'); }, ms);
   });
 }
 
