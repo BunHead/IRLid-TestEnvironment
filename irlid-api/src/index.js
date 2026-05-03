@@ -834,6 +834,20 @@ async function orgUpdateSettings(request, env) {
     if (t.acceptCycleEnabled !== undefined && typeof t.acceptCycleEnabled !== "boolean") {
       return "theme.acceptCycleEnabled must be a boolean";
     }
+    // Batch 6.5b — animation speed controls
+    if (t.bgAnimEnabled !== undefined && typeof t.bgAnimEnabled !== "boolean") {
+      return "theme.bgAnimEnabled must be a boolean";
+    }
+    if (t.bgAnimDuration !== undefined) {
+      if (typeof t.bgAnimDuration !== "number" || !Number.isFinite(t.bgAnimDuration) || t.bgAnimDuration < 1 || t.bgAnimDuration > 600) {
+        return "theme.bgAnimDuration must be a number between 1 and 600 (seconds)";
+      }
+    }
+    if (t.cycleAnimDuration !== undefined) {
+      if (typeof t.cycleAnimDuration !== "number" || !Number.isFinite(t.cycleAnimDuration) || t.cycleAnimDuration < 0.1 || t.cycleAnimDuration > 30) {
+        return "theme.cycleAnimDuration must be a number between 0.1 and 30 (seconds)";
+      }
+    }
     return null;
   }
   const current = JSON.parse(org.settings_json || "{}");
