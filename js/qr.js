@@ -125,12 +125,16 @@
     if (ok && window.QRCode && typeof window.QRCode.toCanvas === "function") {
       const { canvas, px, css } = makeCanvasHiDpi(size);
 
-      // Lowest density + generous quiet zone
+      // Lowest density + generous quiet zone.
+      // Batch 6.5d — colour.dark reads window.IRLID_THEME_QR_FG so the org's
+      // theme-picked QR foreground actually shows up. Falls back to black.
+      const themedDark = (typeof window.IRLID_THEME_QR_FG === "string" && /^#[0-9a-fA-F]{6}$/.test(window.IRLID_THEME_QR_FG))
+        ? window.IRLID_THEME_QR_FG : "#000000";
       const opts = {
         errorCorrectionLevel: "L",
         margin: 10,
         width: px,
-        color: { dark: "#000000", light: "#ffffff" }
+        color: { dark: themedDark, light: "#ffffff" }
       };
 
       try {

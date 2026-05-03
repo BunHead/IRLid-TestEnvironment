@@ -672,6 +672,29 @@ button.theme-preview-button:focus-visible {
   outline-offset: 2px;
 }
 
+/* Batch 6.5d — Mode select + conditional row visibility */
+.theme-anim-row {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; color: #dbe6ff; gap: 12px;
+}
+.theme-anim-row > span:first-child { color: var(--muted); }
+.theme-anim-select {
+  flex: 1 1 auto; min-width: 0; max-width: 60%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0b1220;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+/* Mode-aware visibility on the bg panel */
+.theme-anim-panel[data-bg-mode] [data-bg-mode-show] { display: none; }
+.theme-anim-panel[data-bg-mode="page"] [data-bg-mode-show="page"] { display: flex; }
+.theme-anim-panel[data-bg-mode="pattern"] [data-bg-mode-show="pattern"] { display: flex; }
+.theme-anim-panel[data-bg-mode="off"] [data-bg-mode-hide="off"] { display: none; }
+/* End mode-aware visibility */
+
 /* Background animation — continuous subtle glow on QR boxes when enabled */
 @keyframes themeBackgroundCycle {
   0%   { box-shadow: 0 0 0 0 rgba(0,0,0,0), 0 0 14px 2px var(--theme-cycle-1, var(--theme-primary)); }
@@ -725,6 +748,106 @@ body.theme-bg-cycling .irlid-qr-fullscreen-holder.cycling,
   animation: themeAcceptCycle var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
 }
 /* ============== /Batch 6.5c ============== */
+
+/* ============== Batch 6.5d — Page background cycle + Tier-1 patterns ==============
+   Mode 'page'   — body background-color animates through 7 cycle stops.
+   Mode 'pattern'— body gets a tiled background-image. Pattern colour vars are
+                   palette-driven so changing palette restyles the pattern live.
+   Mode 'off'    — no background animation; body falls back to its base #06070C.
+   Tier-3 hook   — when bgImageUrl is set, body[data-pattern="custom"] uses it
+                   as the background-image (UI exposes 'custom' option as disabled
+                   placeholder until v6 ships an upload flow). */
+@keyframes themePageColorCycle {
+  0%   { background-color: var(--theme-page-bg-1, #06070C); }
+  14%  { background-color: var(--theme-page-bg-2, #06070C); }
+  28%  { background-color: var(--theme-page-bg-3, #06070C); }
+  42%  { background-color: var(--theme-page-bg-4, #06070C); }
+  57%  { background-color: var(--theme-page-bg-5, #06070C); }
+  71%  { background-color: var(--theme-page-bg-6, #06070C); }
+  85%  { background-color: var(--theme-page-bg-7, #06070C); }
+  100% { background-color: var(--theme-page-bg-1, #06070C); }
+}
+body.theme-bg-page-cycle {
+  animation: themePageColorCycle var(--theme-bg-anim-duration, 30s) ease-in-out infinite;
+}
+
+/* Pattern colour fallbacks. These are overwritten by JS in applyThemeVars
+   so palette/qrFg changes update the patterns live. */
+body.theme-bg-pattern {
+  --theme-pattern-bg: #06070C;
+  --theme-pattern-fg: rgba(88, 166, 255, 0.18);
+  --theme-pattern-fg-2: rgba(88, 166, 255, 0.10);
+  background-color: var(--theme-pattern-bg);
+}
+
+/* Pattern: dots — radial dots on a 24px grid */
+body.theme-bg-pattern[data-pattern="dots"] {
+  background-image: radial-gradient(circle, var(--theme-pattern-fg) 2px, transparent 2.5px);
+  background-size: 24px 24px;
+}
+/* Pattern: hex grid (offset dot grid, reads like honeycomb) */
+body.theme-bg-pattern[data-pattern="hex"] {
+  background-image:
+    radial-gradient(circle at 50% 50%, var(--theme-pattern-fg) 2px, transparent 2.5px),
+    radial-gradient(circle at 50% 50%, var(--theme-pattern-fg) 2px, transparent 2.5px);
+  background-size: 28px 48px, 28px 48px;
+  background-position: 0 0, 14px 24px;
+}
+/* Pattern: diagonal stripes */
+body.theme-bg-pattern[data-pattern="diag"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--theme-pattern-fg) 0,
+    var(--theme-pattern-fg) 1px,
+    transparent 1px,
+    transparent 14px
+  );
+}
+/* Pattern: checkerboard */
+body.theme-bg-pattern[data-pattern="checker"] {
+  background-image:
+    linear-gradient(45deg, var(--theme-pattern-fg) 25%, transparent 25%, transparent 75%, var(--theme-pattern-fg) 75%),
+    linear-gradient(45deg, var(--theme-pattern-fg) 25%, transparent 25%, transparent 75%, var(--theme-pattern-fg) 75%);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+}
+/* Pattern: grid (faint orthogonal lines) */
+body.theme-bg-pattern[data-pattern="grid"] {
+  background-image:
+    linear-gradient(var(--theme-pattern-fg) 1px, transparent 1px),
+    linear-gradient(90deg, var(--theme-pattern-fg) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+/* Pattern: weave (overlapping stripes) */
+body.theme-bg-pattern[data-pattern="weave"] {
+  background-image:
+    repeating-linear-gradient(0deg, var(--theme-pattern-fg) 0 2px, transparent 2px 16px),
+    repeating-linear-gradient(90deg, var(--theme-pattern-fg-2) 0 2px, transparent 2px 16px);
+}
+/* Pattern: chevrons */
+body.theme-bg-pattern[data-pattern="chevron"] {
+  background-image:
+    linear-gradient(135deg, var(--theme-pattern-fg) 25%, transparent 25%),
+    linear-gradient(225deg, var(--theme-pattern-fg) 25%, transparent 25%),
+    linear-gradient(315deg, var(--theme-pattern-fg) 25%, transparent 25%),
+    linear-gradient(45deg,  var(--theme-pattern-fg) 25%, transparent 25%);
+  background-size: 24px 24px;
+}
+/* Pattern: isometric (triple-axis line grid) */
+body.theme-bg-pattern[data-pattern="iso"] {
+  background-image:
+    repeating-linear-gradient(60deg,  var(--theme-pattern-fg) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(120deg, var(--theme-pattern-fg) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(0deg,   var(--theme-pattern-fg) 0 1px, transparent 1px 22px);
+}
+/* Pattern: custom (Tier 3 — admin-uploaded image). Activated by JS only when
+   bgImageUrl is present; the 'custom' option is disabled in the picker until v6. */
+body.theme-bg-pattern[data-pattern="custom"] {
+  background-image: var(--theme-pattern-image, none);
+  background-size: var(--theme-pattern-size, 240px 240px);
+  background-repeat: var(--theme-pattern-repeat, repeat);
+}
+/* ============== /Batch 6.5d ============== */
 /* ============== /Batch 6.5b ============== */
 
 .prototype-checkin #panel-checkin #expectedSharedPanel,
@@ -1207,14 +1330,40 @@ body.theme-bg-cycling .irlid-qr-fullscreen-holder.cycling,
                 <!-- Animation controls — two side-by-side panels -->
                 <div class="theme-animation-panels">
 
-                  <div class="theme-anim-panel">
+                  <div class="theme-anim-panel" id="themeBgAnimPanel" data-bg-mode="glow">
                     <h5>Background Animation</h5>
-                    <p class="theme-anim-sub">A continuous subtle glow cycle on QR codes while displayed. Always running, never disruptive.</p>
-                    <label class="theme-anim-toggle">
-                      <input type="checkbox" id="themeBgAnimEnabled" checked />
-                      <span>Enabled</span>
+                    <p class="theme-anim-sub">Choose how the page reacts. Page-cycle restyles the whole canvas through your palette; QR-glow only haloes QRs; Pattern overlays a tiled motif.</p>
+                    <label class="theme-anim-row">
+                      <span>Mode</span>
+                      <select id="themeBgMode" class="theme-anim-select">
+                        <option value="off">Off (flat dark)</option>
+                        <option value="page">Page colour cycle</option>
+                        <option value="glow">QR glow halo</option>
+                        <option value="pattern">Pattern</option>
+                      </select>
                     </label>
-                    <div class="theme-anim-speed">
+                    <label class="theme-anim-row" data-bg-mode-show="page">
+                      <span>Page intensity</span>
+                      <select id="themeBgPalette" class="theme-anim-select">
+                        <option value="muted">Muted (deep tinted, easy on the eyes)</option>
+                        <option value="vibrant">Vibrant (palette colours direct)</option>
+                      </select>
+                    </label>
+                    <label class="theme-anim-row" data-bg-mode-show="pattern">
+                      <span>Pattern</span>
+                      <select id="themeBgPattern" class="theme-anim-select">
+                        <option value="dots">Dots</option>
+                        <option value="hex">Hex grid</option>
+                        <option value="diag">Diagonal stripes</option>
+                        <option value="checker">Checkerboard</option>
+                        <option value="grid">Grid</option>
+                        <option value="weave">Weave</option>
+                        <option value="chevron">Chevrons</option>
+                        <option value="iso">Isometric</option>
+                        <option value="custom" disabled>Custom image (coming in v6)</option>
+                      </select>
+                    </label>
+                    <div class="theme-anim-speed" data-bg-mode-hide="off">
                       <label>
                         <span>Cycle duration</span>
                         <span class="theme-anim-speed-value" id="themeBgAnimDurationValue">30s</span>
@@ -1225,7 +1374,7 @@ body.theme-bg-cycling .irlid-qr-fullscreen-holder.cycling,
                         <span>Slow (120s)</span>
                       </div>
                     </div>
-                    <button type="button" class="btn btn-secondary btn-sm" id="themePreviewBgAnim">Preview background</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="themePreviewBgAnim" data-bg-mode-hide="off">Preview background</button>
                   </div>
 
                   <div class="theme-anim-panel">
@@ -2035,7 +2184,7 @@ function showCheckoutQrError(checkinId, message) {
 function paintCheckoutQr(target, url) {
   target.innerHTML = '';
   target.classList.remove('checkout-qr-error');
-  new QRCode(target, { text: url, width: 120, height: 120, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  new QRCode(target, { text: url, width: 120, height: 120, colorDark: (window.IRLID_THEME_QR_FG || '#000000'), colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   normalizeFullscreenQr(target);
   requestAnimationFrame(() => normalizeFullscreenQr(target));
   target.dataset.qrFullscreenPayload = url;
@@ -2124,7 +2273,7 @@ async function resolveConflict(conflictId, resolution) {
 function generateVenueQR() {
   const box = document.getElementById('venueQrBox'); if (!box || !window.QRCode) return;
   venueQrPayload = buildVenuePayload(); box.innerHTML = '';
-  new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  new QRCode(box, { text: venueQrPayload, width: 150, height: 150, colorDark: (window.IRLID_THEME_QR_FG || '#000000'), colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
   const orgName = currentOrg?.name || portalState.orgCode || 'Venue check-in';
   box.dataset.qrFullscreenPayload = venueQrPayload;
   box.dataset.qrFullscreenTitle = orgName;
@@ -2442,7 +2591,7 @@ function fullscreenQR() {
   document.body.appendChild(holder);
   const qrTarget = holder.querySelector('[data-fullscreen-qr]');
   if (window.QRCode) {
-    new QRCode(qrTarget, { text: venueQrPayload, width: 840, height: 840, colorDark: '#000000', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrTarget, { text: venueQrPayload, width: 840, height: 840, colorDark: (window.IRLID_THEME_QR_FG || '#000000'), colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
     normalizeFullscreenQr(qrTarget);
     requestAnimationFrame(() => normalizeFullscreenQr(qrTarget));
   } else {
@@ -2611,7 +2760,7 @@ function buildOutcomeUrl(mode) {
 function renderQr(targetId, text, size, colorLight='#ffffff', correctLevel=null) {
   const target = document.getElementById(targetId); if (!target) return; target.innerHTML = '';
   if (typeof QRCode === 'undefined') { target.textContent = 'QR unavailable'; return; }
-  new QRCode(target, { text, width: size, height: size, colorDark: '#000000', colorLight, correctLevel: correctLevel || QRCode.CorrectLevel.M });
+  new QRCode(target, { text, width: size, height: size, colorDark: (window.IRLID_THEME_QR_FG || '#000000'), colorLight, correctLevel: correctLevel || QRCode.CorrectLevel.M });
   target.dataset.qrFullscreenPayload = text;
   target.dataset.qrFullscreenTitle = targetId === 'scanQr' ? 'Scanner QR' : 'Outcome QR';
   target.dataset.qrFullscreenSubtitle = 'Double-tap any QR to view fullscreen';
@@ -2903,11 +3052,17 @@ const THEME_DEFAULTS = {
   palette: ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
   darkMode: true,
   acceptCycleEnabled: true,
-  // Batch 6.5b — animation speed controls + background cycle
-  bgAnimEnabled: true,
+  // Batch 6.5b → 6.5d
+  bgMode: 'glow',            // 'off' | 'page' | 'glow' | 'pattern' (replaces legacy bgAnimEnabled)
+  bgPalette: 'muted',        // 'muted' | 'vibrant' — applies when bgMode === 'page'
+  bgPattern: 'dots',         // pattern id — applies when bgMode === 'pattern'
+  bgImageUrl: null,          // Tier 3 — admin-uploaded background image (v6+)
   bgAnimDuration: 30,        // seconds for one full background cycle (range 5..120)
   cycleAnimDuration: 1.4     // seconds for one celebration burst (range 0.5..5)
 };
+const PAGE_CYCLE_BASE = '#06070C';     // base canvas colour we blend palette into for muted page mode
+const PAGE_MUTED_RATIO = 0.18;          // 18% palette / 82% base — tinted but stays moody
+const PAGE_VIBRANT_RATIO = 0.78;        // 78% palette / 22% base — saturated but slightly shaded
 let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
@@ -2921,11 +3076,41 @@ function _themeRelLuminance(hex) {
 }
 function _themeContrastVsWhite(hex) { return (1 + 0.05) / (_themeRelLuminance(hex) + 0.05); }
 
+// Batch 6.5d colour helpers — used to compute page-cycle stops without relying on
+// CSS color-mix() (which has ~91% browser support; fine but JS keeps results consistent).
+function _hexToRgb(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+  if (!m) return { r: 0, g: 0, b: 0 };
+  const v = parseInt(m[1], 16);
+  return { r: (v >> 16) & 255, g: (v >> 8) & 255, b: v & 255 };
+}
+function _rgbToHex(r, g, b) {
+  const clamp = (n) => Math.max(0, Math.min(255, Math.round(n)));
+  return '#' + [clamp(r), clamp(g), clamp(b)].map(n => n.toString(16).padStart(2, '0')).join('');
+}
+function _mixHex(hexA, hexB, ratio) {
+  // ratio = weight of hexA in [0..1]; rest is hexB.
+  const a = _hexToRgb(hexA); const b = _hexToRgb(hexB);
+  return _rgbToHex(
+    a.r * ratio + b.r * (1 - ratio),
+    a.g * ratio + b.g * (1 - ratio),
+    a.b * ratio + b.b * (1 - ratio)
+  );
+}
+function _hexToRgba(hex, alpha) {
+  const c = _hexToRgb(hex);
+  return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + alpha + ')';
+}
+
 function applyThemeVars(theme) {
   const root = document.documentElement;
+  const body = document.body;
   root.style.setProperty('--theme-primary', theme.primary);
   root.style.setProperty('--theme-accent',  theme.accent);
   root.style.setProperty('--theme-qr-fg',   theme.qrFg);
+  // Batch 6.5d — expose qrFg globally so qr.js + qr-fullscreen.js can read it
+  // without having to import this scope. Default '#000000' is preserved.
+  window.IRLID_THEME_QR_FG = theme.qrFg || '#000000';
   for (let i = 0; i < 7; i++) {
     const c = theme.palette[i] || theme.primary;
     root.style.setProperty('--theme-cycle-' + (i+1), c);
@@ -2935,11 +3120,60 @@ function applyThemeVars(theme) {
     mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? false : true;
   }
   root.setAttribute('data-theme', mode ? 'dark' : 'light');
-  // Batch 6.5b — animation speed CSS variables + background cycle class on body
+  // Animation speed CSS variables (Batch 6.5b)
   root.style.setProperty('--theme-bg-anim-duration', (typeof theme.bgAnimDuration === 'number' ? theme.bgAnimDuration : 30) + 's');
   root.style.setProperty('--theme-cycle-anim-duration', (typeof theme.cycleAnimDuration === 'number' ? theme.cycleAnimDuration : 1.4) + 's');
-  if (theme.bgAnimEnabled) document.body.classList.add('theme-bg-cycling');
-  else document.body.classList.remove('theme-bg-cycling');
+
+  // ===== Batch 6.5d — Background mode dispatch =====
+  // Strip all bg-mode classes/attrs first; we'll re-add what's appropriate below.
+  body.classList.remove('theme-bg-cycling', 'theme-bg-page-cycle', 'theme-bg-pattern');
+  body.removeAttribute('data-pattern');
+  // For page-cycle mode we also write 7 page-bg CSS variables. Compute them
+  // from the active palette + bgPalette mode (muted vs vibrant) so changing the
+  // palette restyles the cycle live without a reload.
+  for (let i = 0; i < 7; i++) {
+    const c = theme.palette[i] || theme.primary;
+    const ratio = (theme.bgPalette === 'vibrant') ? PAGE_VIBRANT_RATIO : PAGE_MUTED_RATIO;
+    root.style.setProperty('--theme-page-bg-' + (i+1), _mixHex(c, PAGE_CYCLE_BASE, ratio));
+  }
+  // Pattern colour vars — pattern primary uses palette[0] at low alpha; secondary lower.
+  // Means the patterns auto-restyle when the palette changes.
+  const patternBase = theme.palette && theme.palette[0] ? theme.palette[0] : theme.accent || '#58A6FF';
+  root.style.setProperty('--theme-pattern-bg', PAGE_CYCLE_BASE);
+  root.style.setProperty('--theme-pattern-fg',   _hexToRgba(patternBase, 0.18));
+  root.style.setProperty('--theme-pattern-fg-2', _hexToRgba(patternBase, 0.10));
+
+  switch (theme.bgMode) {
+    case 'off':
+      // Nothing — body stays at base #06070C.
+      break;
+    case 'page':
+      body.classList.add('theme-bg-page-cycle');
+      break;
+    case 'pattern':
+      body.classList.add('theme-bg-pattern');
+      // 'custom' is a Tier-3 placeholder; only switch if we actually have an image.
+      if (theme.bgPattern === 'custom') {
+        if (theme.bgImageUrl) {
+          body.setAttribute('data-pattern', 'custom');
+          root.style.setProperty('--theme-pattern-image', 'url("' + theme.bgImageUrl + '")');
+        } else {
+          // Fallback to dots so the body isn't visually empty.
+          body.setAttribute('data-pattern', 'dots');
+        }
+      } else {
+        body.setAttribute('data-pattern', theme.bgPattern || 'dots');
+      }
+      break;
+    case 'glow':
+    default:
+      body.classList.add('theme-bg-cycling');
+      break;
+  }
+
+  // Sync the panel attribute so conditional rows in the Settings UI show/hide.
+  const bgPanel = document.getElementById('themeBgAnimPanel');
+  if (bgPanel) bgPanel.setAttribute('data-bg-mode', theme.bgMode || 'glow');
 }
 
 function updateQrContrastHint(fgHex) {
@@ -3062,6 +3296,11 @@ async function loadThemeFromServer() {
   try {
     const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
     const t = (res && res.settings && res.settings.theme) || {};
+    // Batch 6.5d — translate legacy bgAnimEnabled boolean to bgMode if bgMode missing.
+    // This keeps theme rows saved before 6.5d rendering correctly without forcing a manual reset.
+    let bgMode = t.bgMode;
+    if (!bgMode) bgMode = (t.bgAnimEnabled === false) ? 'off' : THEME_DEFAULTS.bgMode;
+    if (['off','page','glow','pattern'].indexOf(bgMode) === -1) bgMode = THEME_DEFAULTS.bgMode;
     activeTheme = {
       primary: t.primary || THEME_DEFAULTS.primary,
       accent:  t.accent  || THEME_DEFAULTS.accent,
@@ -3069,8 +3308,11 @@ async function loadThemeFromServer() {
       palette: Array.isArray(t.palette) && t.palette.length ? t.palette.slice(0, 7) : THEME_DEFAULTS.palette.slice(),
       darkMode: t.darkMode === undefined ? THEME_DEFAULTS.darkMode : t.darkMode,
       acceptCycleEnabled: t.acceptCycleEnabled === undefined ? THEME_DEFAULTS.acceptCycleEnabled : t.acceptCycleEnabled,
-      // Batch 6.5b
-      bgAnimEnabled:     t.bgAnimEnabled     === undefined ? THEME_DEFAULTS.bgAnimEnabled     : !!t.bgAnimEnabled,
+      // Batch 6.5d — bgMode supersedes legacy bgAnimEnabled
+      bgMode: bgMode,
+      bgPalette: (t.bgPalette === 'vibrant' || t.bgPalette === 'muted') ? t.bgPalette : THEME_DEFAULTS.bgPalette,
+      bgPattern: typeof t.bgPattern === 'string' && t.bgPattern ? t.bgPattern : THEME_DEFAULTS.bgPattern,
+      bgImageUrl: typeof t.bgImageUrl === 'string' && t.bgImageUrl ? t.bgImageUrl : null,
       bgAnimDuration:    typeof t.bgAnimDuration    === 'number' ? t.bgAnimDuration    : THEME_DEFAULTS.bgAnimDuration,
       cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
     };
@@ -3113,9 +3355,13 @@ function writeThemeToUI() {
   const modeRadios = document.querySelectorAll('input[name="themeMode"]');
   const v = activeTheme.darkMode === 'auto' ? 'auto' : (activeTheme.darkMode ? 'dark' : 'light');
   modeRadios.forEach(function (r) { r.checked = (r.value === v); });
-  // Batch 6.5b — animation panel UI sync
-  const bgEnabled = document.getElementById('themeBgAnimEnabled');
-  if (bgEnabled) bgEnabled.checked = !!activeTheme.bgAnimEnabled;
+  // Batch 6.5d — animation panel UI sync (mode select + palette/pattern selects + sliders)
+  const bgModeEl = document.getElementById('themeBgMode');
+  if (bgModeEl) bgModeEl.value = activeTheme.bgMode || 'glow';
+  const bgPaletteEl = document.getElementById('themeBgPalette');
+  if (bgPaletteEl) bgPaletteEl.value = activeTheme.bgPalette || 'muted';
+  const bgPatternEl = document.getElementById('themeBgPattern');
+  if (bgPatternEl) bgPatternEl.value = activeTheme.bgPattern || 'dots';
   const bgDur = document.getElementById('themeBgAnimDuration');
   if (bgDur) bgDur.value = activeTheme.bgAnimDuration;
   const bgDurVal = document.getElementById('themeBgAnimDurationValue');
@@ -3145,6 +3391,8 @@ function wireThemePanel() {
     applyThemeVars(activeTheme);
     updateQrContrastHint(hex);
     renderThemePreviewQr(hex);
+    // Batch 6.5d — also re-render the visible venue QR so the picker change is live, not lazy.
+    try { if (typeof generateVenueQR === 'function') generateVenueQR(); } catch(_) {}
   });
 
   ['Primary','Accent','QrFg'].forEach(function (key) {
@@ -3158,7 +3406,12 @@ function wireThemePanel() {
       const picker = _iroPickers[lcKey];
       if (picker) picker.color.hexString = activeTheme[lcKey];
       applyThemeVars(activeTheme);
-      if (lcKey === 'qrFg') { updateQrContrastHint(activeTheme.qrFg); renderThemePreviewQr(activeTheme.qrFg); }
+      if (lcKey === 'qrFg') {
+        updateQrContrastHint(activeTheme.qrFg);
+        renderThemePreviewQr(activeTheme.qrFg);
+        // Batch 6.5d — re-render visible venue QR live.
+        try { if (typeof generateVenueQR === 'function') generateVenueQR(); } catch(_) {}
+      }
     });
   });
 
@@ -3202,10 +3455,26 @@ function wireThemePanel() {
     } catch(_) { /* older browsers */ }
   }
 
-  // ===== Batch 6.5b — animation speed controls + sample button wireup =====
-  const bgEnabledEl = document.getElementById('themeBgAnimEnabled');
-  if (bgEnabledEl) bgEnabledEl.addEventListener('change', function (e) {
-    activeTheme.bgAnimEnabled = !!e.target.checked;
+  // ===== Batch 6.5b/c/d — animation panel + sample button wireup =====
+  // Mode select (Batch 6.5d). Picks Off / Page colour / QR glow / Pattern.
+  const bgModeEl = document.getElementById('themeBgMode');
+  if (bgModeEl) bgModeEl.addEventListener('change', function (e) {
+    const v = e.target.value;
+    activeTheme.bgMode = ['off','page','glow','pattern'].indexOf(v) !== -1 ? v : 'glow';
+    applyThemeVars(activeTheme);
+  });
+  // Page-cycle palette mode (Batch 6.5d). Vibrant vs muted.
+  const bgPaletteEl = document.getElementById('themeBgPalette');
+  if (bgPaletteEl) bgPaletteEl.addEventListener('change', function (e) {
+    activeTheme.bgPalette = e.target.value === 'vibrant' ? 'vibrant' : 'muted';
+    applyThemeVars(activeTheme);
+  });
+  // Pattern picker (Batch 6.5d). 8 built-in CSS patterns + 'custom' Tier-3 placeholder.
+  const bgPatternEl = document.getElementById('themeBgPattern');
+  if (bgPatternEl) bgPatternEl.addEventListener('change', function (e) {
+    const v = e.target.value;
+    if (v === 'custom') return; // Tier-3 placeholder — no-op until v6 ships upload.
+    activeTheme.bgPattern = v;
     applyThemeVars(activeTheme);
   });
   const bgDurEl = document.getElementById('themeBgAnimDuration');
@@ -3228,17 +3497,21 @@ function wireThemePanel() {
       applyThemeVars(activeTheme);
     }
   });
+  // Preview-background — Batch 6.5d behaviour: temporarily nudge the active mode
+  // visible for one cycle. For 'page' mode we briefly set animation-play-state to
+  // running so the user sees movement immediately (the cycle is slow). For 'glow'
+  // and 'pattern' modes the existing class application already shows it.
   const previewBgBtn = document.getElementById('themePreviewBgAnim');
   if (previewBgBtn) previewBgBtn.addEventListener('click', function () {
-    // Force a visible cycle even if disabled — let it run for one full duration, then revert.
-    const wasDisabled = !activeTheme.bgAnimEnabled;
-    document.body.classList.add('theme-bg-cycling');
-    if (wasDisabled) {
-      const ms = (Number(activeTheme.bgAnimDuration) || 30) * 1000 + 200;
-      setTimeout(function () {
-        if (!activeTheme.bgAnimEnabled) document.body.classList.remove('theme-bg-cycling');
-      }, ms);
-    }
+    if (activeTheme.bgMode === 'off') return;
+    // Force a class refresh so the user sees the animation re-trigger from 0%.
+    const body = document.body;
+    const cls = activeTheme.bgMode === 'page' ? 'theme-bg-page-cycle'
+              : activeTheme.bgMode === 'glow' ? 'theme-bg-cycling'
+              : 'theme-bg-pattern';
+    body.classList.remove(cls);
+    void body.offsetWidth; // reflow → re-trigger animation
+    body.classList.add(cls);
   });
   const sampleBtn = document.getElementById('themeSampleButton');
   if (sampleBtn) sampleBtn.addEventListener('click', function () {
@@ -3254,14 +3527,17 @@ function wireThemePanel() {
       subtitle: 'Sample fullscreen QR with current theme. Tap outside or press Esc to close.',
       logoUrl: logoUrl,
       logoAlt: orgName + ' logo',
-      browserFullscreen: false
+      browserFullscreen: false,
+      // Batch 6.5d — plumb the QR foreground colour from the active theme through
+      // to the fullscreen overlay so the third picker actually changes the QR.
+      colorDark: activeTheme.qrFg || '#000000'
     });
     // Trigger a celebration burst after a beat for the demo flourish
     if (activeTheme.acceptCycleEnabled) {
       setTimeout(function () { triggerAcceptCycleAnimation(); }, 600);
     }
   });
-  // ===== /Batch 6.5b =====
+  // ===== /Batch 6.5b/c/d =====
 
   rebuildPaletteUI();
   updateQrContrastHint(activeTheme.qrFg);

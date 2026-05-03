@@ -75,13 +75,24 @@
     });
   }
 
-  function renderWithQrcodeJs(target, payload, size) {
+  // Batch 6.5d — resolve the QR's dark colour at render time. Priority:
+  //   1) explicit colorDark passed via IRLidQrFullscreen.open({colorDark})
+  //   2) global window.IRLID_THEME_QR_FG (set by OrgCheckin theme apply)
+  //   3) fallback "#000000"
+  function resolveDark(opt) {
+    const candidate = (opt && typeof opt === "string") ? opt
+      : (typeof window.IRLID_THEME_QR_FG === "string" ? window.IRLID_THEME_QR_FG : null);
+    if (candidate && /^#[0-9a-fA-F]{6}$/.test(candidate)) return candidate;
+    return "#000000";
+  }
+
+  function renderWithQrcodeJs(target, payload, size, colorDark) {
     target.innerHTML = "";
     new QRCode(target, {
       text: payload,
       width: size,
       height: size,
-      colorDark: "#000000",
+      colorDark: resolveDark(colorDark),
       colorLight: "#ffffff",
       correctLevel: QRCode.CorrectLevel ? QRCode.CorrectLevel.M : undefined
     });
@@ -89,16 +100,24 @@
     requestAnimationFrame(() => normalize(target));
   }
 
-  async function render(target, payload) {
+  async function render(target, payload, colorDark) {
     target.innerHTML = "";
     const size = Math.floor(Math.min(window.innerWidth || 720, window.innerHeight || 720) * 0.82);
     if (typeof window.makeQR === "function") {
-      await window.makeQR(target.id, payload, size);
+      // makeQR reads window.IRLID_THEME_QR_FG itself (Batch 6.5d). If the caller passed
+      // an explicit override, temporarily set the global so makeQR picks it up.
+      const prev = window.IRLID_THEME_QR_FG;
+      if (colorDark) window.IRLID_THEME_QR_FG = colorDark;
+      try {
+        await window.makeQR(target.id, payload, size);
+      } finally {
+        window.IRLID_THEME_QR_FG = prev;
+      }
       normalize(target);
       return;
     }
     if (typeof window.QRCode === "function") {
-      renderWithQrcodeJs(target, payload, Math.max(360, size));
+      renderWithQrcodeJs(target, payload, Math.max(360, size), colorDark);
       return;
     }
     const img = document.createElement("img");
@@ -140,7 +159,7 @@
       const payload = typeof next === "string" ? next : next && next.payload;
       if (payload) {
         activeOptions.payload = payload;
-        await render(holder, payload);
+        await render(holder, payload, activeOptions && activeOptions.colorDark);
       }
       setRefreshText((next && next.lastRefreshedText) || defaultRefreshText());
     } catch {
@@ -197,7 +216,7 @@
     if (options.browserFullscreen !== false && overlay.requestFullscreen && document.fullscreenElement !== overlay) {
       overlay.requestFullscreen().catch(() => {});
     }
-    await render(holder, payload);
+    await render(holder, payload, options.colorDark);
     scheduleRefresh();
   }
 

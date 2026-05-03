@@ -797,8 +797,8 @@ async function orgUpdateSettings(request, env) {
     "allowProofRecording","enableIdPhotoCapture",
     // --- Branding ---
     "logoUrl","welcomeMessage","redirectUrl",
-    // --- Theme (Batch 6.5) ---
-    "theme"  // { primary, accent, qrFg, palette[], darkMode, acceptCycleEnabled } — validated below
+    // --- Theme (Batch 6.5 → 6.5d) ---
+    "theme"  // { primary, accent, qrFg, palette[], darkMode, acceptCycleEnabled, bgMode, bgPalette, bgPattern, bgImageUrl, bgAnimDuration, cycleAnimDuration } — validated below
   ];
   // Theme validators — defensive, applied before merge.
   function isHex6(v) { return typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v); }
@@ -847,6 +847,29 @@ async function orgUpdateSettings(request, env) {
       if (typeof t.cycleAnimDuration !== "number" || !Number.isFinite(t.cycleAnimDuration) || t.cycleAnimDuration < 0.1 || t.cycleAnimDuration > 30) {
         return "theme.cycleAnimDuration must be a number between 0.1 and 30 (seconds)";
       }
+    }
+    // Batch 6.5d — background mode + palette mode + pattern + Tier-3 image hook
+    if (t.bgMode !== undefined) {
+      if (typeof t.bgMode !== "string" || ["off","page","glow","pattern"].indexOf(t.bgMode) === -1) {
+        return "theme.bgMode must be one of: off, page, glow, pattern";
+      }
+    }
+    if (t.bgPalette !== undefined) {
+      if (typeof t.bgPalette !== "string" || ["muted","vibrant"].indexOf(t.bgPalette) === -1) {
+        return "theme.bgPalette must be either 'muted' or 'vibrant'";
+      }
+    }
+    if (t.bgPattern !== undefined) {
+      if (typeof t.bgPattern !== "string") return "theme.bgPattern must be a string";
+      const PATTERNS = ["dots","hex","diag","checker","grid","weave","chevron","iso","custom"];
+      if (PATTERNS.indexOf(t.bgPattern) === -1) return "theme.bgPattern not recognised";
+    }
+    if (t.bgImageUrl !== undefined && t.bgImageUrl !== null) {
+      // Tier-3 hook — accept https:// URLs or data: URIs only, length-capped to keep
+      // settings_json sane. The UI cannot set this in v6.5; reserved for v6+.
+      if (typeof t.bgImageUrl !== "string") return "theme.bgImageUrl must be a string or null";
+      if (t.bgImageUrl.length > 8192) return "theme.bgImageUrl too long (max 8192 chars)";
+      if (!/^(https:\/\/|data:image\/)/i.test(t.bgImageUrl)) return "theme.bgImageUrl must be an https:// URL or data:image/ URI";
     }
     return null;
   }
