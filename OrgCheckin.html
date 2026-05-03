@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IRLid - Organisation Check-in Prototype</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
 <script src="js/orgapi.js"></script>
 <script src="js/qr-fullscreen.js"></script>
 <style>
@@ -398,6 +399,207 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .prototype-checkin #panel-checkin .two-col { grid-template-columns: minmax(0, 1fr); width: 100%; min-height: calc(100dvh - 182px); }
 .prototype-checkin #panel-checkin .mode-selector,
 .prototype-checkin #panel-checkin #doormanWrap,
+.dummy-anchor-batch65 { display: none; }
+
+/* ===================== THEMING — Batch 6.5, 3 May 2026 ===================== */
+/* Light/dark mode (whole interface). Dark is the default; light overrides via [data-theme="light"]. */
+:root[data-theme="light"] {
+  --bg: #f6f8fa;
+  --panel: #ffffff;
+  --panel-2: #eef1f4;
+  --line: #d0d7de;
+  --line-soft: #e6eaef;
+  --text: #1f2328;
+  --muted: #57606a;
+  --blue: #0969da;
+  --green: #1a7f37;
+  --orange: #bf8700;
+  --red: #cf222e;
+  --allow-pad: #d9f2e6;
+  --review-pad: #fff8c5;
+  --deny-pad: #ffd6d6;
+  --scan-pad: #e6eef9;
+}
+
+/* Theme variables — set dynamically by JS, used by theme-aware elements. */
+:root {
+  --theme-primary: #3FB950;
+  --theme-accent: #58A6FF;
+  --theme-qr-fg: #000000;
+  --theme-cycle-1: #F44336;
+  --theme-cycle-2: #FF9800;
+  --theme-cycle-3: #FFEB3B;
+  --theme-cycle-4: #4CAF50;
+  --theme-cycle-5: #2196F3;
+  --theme-cycle-6: #673AB7;
+  --theme-cycle-7: #E91E63;
+}
+
+/* Light/dark mode toggle row */
+.theme-mode-row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 0; margin-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.theme-mode-label { font-size: 13px; font-weight: 500; color: #dbe6ff; }
+.theme-mode-options { display: flex; gap: 14px; flex-wrap: wrap; }
+.theme-mode-options label {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--muted); cursor: pointer;
+}
+.theme-mode-options input[type="radio"] { accent-color: var(--blue); cursor: pointer; }
+
+/* iro.js mount points */
+.theme-pickers { gap: 14px; align-items: start; }
+.iro-mount {
+  width: 100%;
+  display: flex; justify-content: center;
+  margin: 4px 0 8px;
+  min-height: 130px;
+}
+.theme-hex-input {
+  width: 100%;
+  background: rgba(5,10,20,0.45);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: var(--text);
+  font: 600 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: center;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.theme-hex-input:focus {
+  outline: none;
+  border-color: rgba(105,168,255,0.6);
+  box-shadow: 0 0 0 3px rgba(105,168,255,0.12);
+}
+
+/* Hint colours */
+.theme-hint { font-size: 11px; color: var(--muted); line-height: 1.35; margin-top: 4px; }
+.theme-hint.warn { color: var(--orange); }
+.theme-hint.error { color: var(--red); font-weight: 600; }
+
+/* Palette block */
+.theme-palette-block {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+}
+.theme-palette-head { margin-bottom: 10px; }
+.theme-palette-head strong { display: block; font-size: 13px; color: #e6edf3; margin-bottom: 3px; }
+.theme-palette-sub { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.theme-palette-row {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin-bottom: 10px;
+  min-height: 56px;
+  align-items: flex-start;
+}
+.theme-palette-swatch {
+  position: relative;
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 2px solid rgba(255,255,255,0.18);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.theme-palette-swatch:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.45);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.theme-palette-swatch .swatch-remove {
+  position: absolute; top: -6px; right: -6px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px; font-weight: 700;
+  display: grid; place-items: center;
+  cursor: pointer;
+  border: 1px solid #fff;
+  line-height: 1;
+}
+.theme-palette-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.theme-palette-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Accept-cycle toggle row */
+.theme-toggle-row {
+  display: flex; gap: 12px;
+  align-items: stretch;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.theme-cycle-toggle { flex: 1; min-width: 240px; }
+
+/* Live preview card */
+.theme-preview-card {
+  display: flex; gap: 16px; align-items: center;
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  flex-wrap: wrap;
+}
+.theme-preview-block { display: flex; gap: 12px; align-items: center; flex: 1; flex-wrap: wrap; }
+.theme-preview-button {
+  padding: 9px 18px; border-radius: 8px;
+  background: var(--theme-primary);
+  color: #fff; font-size: 12px; font-weight: 600;
+  transition: background 0.3s;
+}
+.theme-preview-badge {
+  padding: 5px 12px; border-radius: 999px;
+  background: var(--theme-accent);
+  color: #fff; font-size: 11px; font-weight: 600;
+  transition: background 0.3s;
+}
+.theme-preview-qr-block { position: relative; width: 88px; height: 88px; }
+.theme-preview-qr {
+  width: 88px; height: 88px;
+  background: #fff; border-radius: 6px;
+  display: grid; place-items: center;
+  padding: 4px;
+  position: relative; z-index: 2;
+}
+.theme-preview-qr canvas, .theme-preview-qr img {
+  max-width: 80px; max-height: 80px;
+  image-rendering: pixelated;
+}
+.theme-preview-qr-cycle {
+  position: absolute; inset: -4px;
+  border-radius: 10px;
+  z-index: 1; pointer-events: none;
+  opacity: 0;
+}
+.theme-preview-qr-cycle.cycling {
+  opacity: 1;
+  animation: themeAcceptCycle 1.4s ease-out 1;
+}
+.scan-panel.cycling, .checkin-success-overlay.cycling {
+  animation: themeAcceptCycle 1.4s ease-out 1;
+}
+@keyframes themeAcceptCycle {
+  0%   { box-shadow: 0 0 0 4px var(--theme-cycle-1), 0 0 24px var(--theme-cycle-1); }
+  14%  { box-shadow: 0 0 0 4px var(--theme-cycle-2), 0 0 24px var(--theme-cycle-2); }
+  28%  { box-shadow: 0 0 0 4px var(--theme-cycle-3), 0 0 24px var(--theme-cycle-3); }
+  42%  { box-shadow: 0 0 0 4px var(--theme-cycle-4), 0 0 24px var(--theme-cycle-4); }
+  57%  { box-shadow: 0 0 0 4px var(--theme-cycle-5), 0 0 24px var(--theme-cycle-5); }
+  71%  { box-shadow: 0 0 0 4px var(--theme-cycle-6), 0 0 24px var(--theme-cycle-6); }
+  85%  { box-shadow: 0 0 0 4px var(--theme-cycle-7), 0 0 24px var(--theme-cycle-7); }
+  100% { box-shadow: 0 0 0 0   transparent,           0 0 0    transparent; }
+}
+
+/* Save status */
+.theme-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.theme-save-status { font-size: 11px; color: var(--muted); }
+.theme-save-status.ok { color: var(--green); font-weight: 600; }
+.theme-save-status.err { color: var(--red); font-weight: 600; }
+/* ================= /THEMING — Batch 6.5 ================= */
+
 .prototype-checkin #panel-checkin #expectedSharedPanel,
 .prototype-checkin #panel-checkin #checkoutSettingsCard,
 .prototype-checkin #panel-checkin .two-col > div:nth-child(2) { display: none !important; }
@@ -825,6 +1027,89 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
                   <label class="settings-field"><span>Custom welcome message</span><textarea id="welcomeMessage" placeholder="Welcome to the venue."></textarea></label>
                 </div>
               </div>
+
+              <!-- =================== THEMING PANEL — Batch 6.5, 3 May 2026 =================== -->
+              <div class="settings-group" id="settingsThemeGroup">
+                <h4>Theme</h4>
+
+                <!-- Light/dark mode toggle -->
+                <div class="theme-mode-row">
+                  <span class="theme-mode-label">Interface mode</span>
+                  <div class="theme-mode-options">
+                    <label><input type="radio" name="themeMode" value="dark" checked /> Dark</label>
+                    <label><input type="radio" name="themeMode" value="light" /> Light</label>
+                    <label><input type="radio" name="themeMode" value="auto" /> Match device</label>
+                  </div>
+                </div>
+
+                <!-- Three core colours -->
+                <div class="settings-grid-3 theme-pickers">
+                  <div class="settings-field">
+                    <span>Primary colour</span>
+                    <div class="iro-mount" id="themePrimaryWheel"></div>
+                    <input type="text" id="themePrimaryHex" class="theme-hex-input" pattern="#[0-9A-Fa-f]{6}" />
+                    <span class="theme-hint">Buttons, active states, key CTAs.</span>
+                  </div>
+                  <div class="settings-field">
+                    <span>Accent colour</span>
+                    <div class="iro-mount" id="themeAccentWheel"></div>
+                    <input type="text" id="themeAccentHex" class="theme-hex-input" pattern="#[0-9A-Fa-f]{6}" />
+                    <span class="theme-hint">Hover states, badges, secondary highlights.</span>
+                  </div>
+                  <div class="settings-field">
+                    <span>QR foreground</span>
+                    <div class="iro-mount" id="themeQrFgWheel"></div>
+                    <input type="text" id="themeQrFgHex" class="theme-hex-input" pattern="#[0-9A-Fa-f]{6}" />
+                    <span class="theme-hint" id="themeQrContrastHint">Contrast: ✓ readable.</span>
+                  </div>
+                </div>
+
+                <!-- Customisable celebration palette of up to 7 colours -->
+                <div class="theme-palette-block">
+                  <div class="theme-palette-head">
+                    <strong>Celebration palette</strong>
+                    <span class="theme-palette-sub">Up to 7 colours — used by the accept-cycle animation when a check-in succeeds.</span>
+                  </div>
+                  <div class="theme-palette-row" id="themePaletteRow"></div>
+                  <div class="theme-palette-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="themePaletteAdd">+ Add colour</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="themePaletteReset">Reset to defaults</button>
+                  </div>
+                </div>
+
+                <!-- Accept-cycle toggle + preview -->
+                <div class="theme-toggle-row">
+                  <label class="switch-tile theme-cycle-toggle">
+                    <div class="switch-top">
+                      <strong>Accept-cycle celebration animation</strong>
+                      <label class="switch-wrap">
+                        <input id="themeAcceptCycleEnabled" type="checkbox" checked />
+                        <span class="switch-slider"></span>
+                      </label>
+                    </div>
+                    <div class="switch-hint">Cycle through the palette colours as a celebration glow when a check-in succeeds. Some venues prefer minimal animation — disable to keep the simple flash.</div>
+                  </label>
+                  <button type="button" class="btn btn-secondary btn-sm" id="themePreviewAcceptCycle">Preview animation</button>
+                </div>
+
+                <!-- Live preview card -->
+                <div class="theme-preview-card" id="themePreviewCard">
+                  <div class="theme-preview-block">
+                    <div class="theme-preview-button">Sample button</div>
+                    <div class="theme-preview-badge">Sample badge</div>
+                  </div>
+                  <div class="theme-preview-qr-block">
+                    <div class="theme-preview-qr" id="themePreviewQrBox"></div>
+                    <div class="theme-preview-qr-cycle" id="themePreviewQrCycle"></div>
+                  </div>
+                </div>
+
+                <div class="theme-actions">
+                  <button type="button" class="btn btn-primary btn-sm" id="themeSaveBtn">Save theme</button>
+                  <span class="theme-save-status" id="themeSaveStatus"></span>
+                </div>
+              </div>
+              <!-- =================== /THEMING PANEL =================== -->
             </div>
           </div>
         </div>
@@ -2445,6 +2730,315 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('setupForm').style.display = 'none'; document.getElementById('setupResult').style.display = 'block'; showSetupMessage('Existing local debug organisation found. Load it to continue.', false);
   }
 });
+
+// ============================================================================
+//  THEMING — Batch 6.5, 3 May 2026
+//  Server-persisted theme: 3 colours (primary / accent / qrFg) + palette of
+//  up to 7 + light-dark mode + accept-cycle animation toggle.
+//  Settings flow: GET /org/settings on load, POST /org/settings on save.
+// ============================================================================
+const THEME_DEFAULTS = {
+  primary: '#3FB950',
+  accent:  '#58A6FF',
+  qrFg:    '#000000',
+  palette: ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
+  darkMode: true,
+  acceptCycleEnabled: true
+};
+let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette] };
+let _iroPickers = { primary: null, accent: null, qrFg: null };
+
+function _themeRelLuminance(hex) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || ''); if (!m) return 0;
+  const v = parseInt(m[1], 16);
+  const ch = [(v>>16)&255, (v>>8)&255, v&255].map(c => {
+    const s = c/255; return s <= 0.03928 ? s/12.92 : Math.pow((s+0.055)/1.055, 2.4);
+  });
+  return 0.2126*ch[0] + 0.7152*ch[1] + 0.0722*ch[2];
+}
+function _themeContrastVsWhite(hex) { return (1 + 0.05) / (_themeRelLuminance(hex) + 0.05); }
+
+function applyThemeVars(theme) {
+  const root = document.documentElement;
+  root.style.setProperty('--theme-primary', theme.primary);
+  root.style.setProperty('--theme-accent',  theme.accent);
+  root.style.setProperty('--theme-qr-fg',   theme.qrFg);
+  for (let i = 0; i < 7; i++) {
+    const c = theme.palette[i] || theme.primary;
+    root.style.setProperty('--theme-cycle-' + (i+1), c);
+  }
+  let mode = theme.darkMode;
+  if (mode === 'auto') {
+    mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? false : true;
+  }
+  root.setAttribute('data-theme', mode ? 'dark' : 'light');
+}
+
+function updateQrContrastHint(fgHex) {
+  const ratio = _themeContrastVsWhite(fgHex);
+  const hint = document.getElementById('themeQrContrastHint');
+  if (!hint) return;
+  if (ratio >= 7) {
+    hint.textContent = 'Contrast ' + ratio.toFixed(1) + ':1 — excellent.';
+    hint.className = 'theme-hint';
+  } else if (ratio >= 4.5) {
+    hint.textContent = 'Contrast ' + ratio.toFixed(1) + ':1 — readable, darker would scan more reliably.';
+    hint.className = 'theme-hint warn';
+  } else {
+    hint.textContent = 'Contrast ' + ratio.toFixed(1) + ':1 — too low, may not scan. Pick darker.';
+    hint.className = 'theme-hint error';
+  }
+}
+
+function renderThemePreviewQr(fgHex) {
+  const box = document.getElementById('themePreviewQrBox');
+  if (!box || typeof QRCode === 'undefined') return;
+  box.innerHTML = '';
+  new QRCode(box, {
+    text: 'IRLid theme preview',
+    width: 80, height: 80,
+    colorDark: fgHex,
+    colorLight: '#FFFFFF',
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+function _mountIroPicker(elementId, initialColor, onChange) {
+  const el = document.getElementById(elementId);
+  if (!el || typeof iro === 'undefined') return null;
+  el.innerHTML = '';
+  const picker = new iro.ColorPicker(el, {
+    width: 130,
+    color: initialColor,
+    layout: [
+      { component: iro.ui.Wheel },
+      { component: iro.ui.Slider, options: { sliderType: 'value' } }
+    ]
+  });
+  picker.on('color:change', function (c) { onChange(c.hexString); });
+  return picker;
+}
+
+function _buildPaletteSwatch(index, color) {
+  const wrap = document.createElement('div');
+  wrap.className = 'theme-palette-swatch';
+  wrap.style.backgroundColor = color;
+  wrap.dataset.index = String(index);
+  wrap.title = 'Palette colour ' + (index + 1) + ' — click to edit';
+  const remove = document.createElement('div');
+  remove.className = 'swatch-remove';
+  remove.textContent = '×';
+  remove.title = 'Remove this colour';
+  remove.addEventListener('click', function (e) {
+    e.stopPropagation();
+    activeTheme.palette.splice(index, 1);
+    rebuildPaletteUI();
+    applyThemeVars(activeTheme);
+  });
+  wrap.appendChild(remove);
+  wrap.addEventListener('click', function () { _openPaletteSwatchEditor(index); });
+  return wrap;
+}
+
+function rebuildPaletteUI() {
+  const row = document.getElementById('themePaletteRow');
+  if (!row) return;
+  row.innerHTML = '';
+  activeTheme.palette.forEach(function (c, i) { row.appendChild(_buildPaletteSwatch(i, c)); });
+  const addBtn = document.getElementById('themePaletteAdd');
+  if (addBtn) addBtn.disabled = activeTheme.palette.length >= 7;
+}
+
+function _openPaletteSwatchEditor(index) {
+  const current = activeTheme.palette[index];
+  const next = window.prompt('Enter hex colour for swatch ' + (index + 1) + ' (e.g. #FF6B35):', current);
+  if (next === null) return;
+  if (!/^#[0-9A-Fa-f]{6}$/.test(next)) { alert('Invalid hex — must be #RRGGBB'); return; }
+  activeTheme.palette[index] = next.toUpperCase();
+  rebuildPaletteUI();
+  applyThemeVars(activeTheme);
+}
+
+function previewAcceptCycle() {
+  const el = document.getElementById('themePreviewQrCycle');
+  if (!el) return;
+  el.classList.remove('cycling');
+  void el.offsetWidth;
+  el.classList.add('cycling');
+  setTimeout(function () { el.classList.remove('cycling'); }, 1500);
+}
+
+function triggerAcceptCycleAnimation() {
+  // Public hook — call this from check-in success paths to fire the celebration.
+  if (!activeTheme.acceptCycleEnabled) return;
+  const candidates = [
+    document.querySelector('.scan-panel.flash-success'),
+    document.querySelector('.checkin-success-overlay'),
+    document.querySelector('.scan-panel')
+  ].filter(Boolean);
+  candidates.forEach(function (el) {
+    el.classList.remove('cycling');
+    void el.offsetWidth;
+    el.classList.add('cycling');
+    setTimeout(function () { el.classList.remove('cycling'); }, 1500);
+  });
+}
+
+async function loadThemeFromServer() {
+  if (typeof currentOrg === 'undefined' || !currentOrg || !currentOrg.api_key) return;
+  if (!window.IRLidOrgApi || typeof window.IRLidOrgApi.getOrgSettings !== 'function') return;
+  try {
+    const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
+    const t = (res && res.settings && res.settings.theme) || {};
+    activeTheme = {
+      primary: t.primary || THEME_DEFAULTS.primary,
+      accent:  t.accent  || THEME_DEFAULTS.accent,
+      qrFg:    t.qrFg    || THEME_DEFAULTS.qrFg,
+      palette: Array.isArray(t.palette) && t.palette.length ? t.palette.slice(0, 7) : THEME_DEFAULTS.palette.slice(),
+      darkMode: t.darkMode === undefined ? THEME_DEFAULTS.darkMode : t.darkMode,
+      acceptCycleEnabled: t.acceptCycleEnabled === undefined ? THEME_DEFAULTS.acceptCycleEnabled : t.acceptCycleEnabled
+    };
+    writeThemeToUI();
+    applyThemeVars(activeTheme);
+  } catch (err) {
+    console.warn('Theme load failed, using defaults', err);
+  }
+}
+
+async function saveThemeToServer() {
+  const status = document.getElementById('themeSaveStatus');
+  if (typeof currentOrg === 'undefined' || !currentOrg || !currentOrg.api_key) {
+    if (status) { status.textContent = 'Not signed in to org — theme stays local only.'; status.className = 'theme-save-status err'; }
+    return;
+  }
+  if (status) { status.textContent = 'Saving…'; status.className = 'theme-save-status'; }
+  try {
+    await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, { theme: activeTheme });
+    if (status) { status.textContent = 'Saved.'; status.className = 'theme-save-status ok'; }
+    setTimeout(function () { if (status) status.textContent = ''; }, 3000);
+  } catch (err) {
+    if (status) { status.textContent = 'Save failed: ' + (err.message || 'unknown'); status.className = 'theme-save-status err'; }
+  }
+}
+
+function writeThemeToUI() {
+  const setVal = function (id, v) { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('themePrimaryHex', activeTheme.primary);
+  setVal('themeAccentHex',  activeTheme.accent);
+  setVal('themeQrFgHex',    activeTheme.qrFg);
+  if (_iroPickers.primary) _iroPickers.primary.color.hexString = activeTheme.primary;
+  if (_iroPickers.accent)  _iroPickers.accent.color.hexString  = activeTheme.accent;
+  if (_iroPickers.qrFg)    _iroPickers.qrFg.color.hexString    = activeTheme.qrFg;
+  rebuildPaletteUI();
+  updateQrContrastHint(activeTheme.qrFg);
+  renderThemePreviewQr(activeTheme.qrFg);
+  const cycleEl = document.getElementById('themeAcceptCycleEnabled');
+  if (cycleEl) cycleEl.checked = !!activeTheme.acceptCycleEnabled;
+  const modeRadios = document.querySelectorAll('input[name="themeMode"]');
+  const v = activeTheme.darkMode === 'auto' ? 'auto' : (activeTheme.darkMode ? 'dark' : 'light');
+  modeRadios.forEach(function (r) { r.checked = (r.value === v); });
+}
+
+function wireThemePanel() {
+  if (!document.getElementById('settingsThemeGroup')) return;
+
+  _iroPickers.primary = _mountIroPicker('themePrimaryWheel', activeTheme.primary, function (hex) {
+    activeTheme.primary = hex;
+    const el = document.getElementById('themePrimaryHex'); if (el) el.value = hex;
+    applyThemeVars(activeTheme);
+  });
+  _iroPickers.accent = _mountIroPicker('themeAccentWheel', activeTheme.accent, function (hex) {
+    activeTheme.accent = hex;
+    const el = document.getElementById('themeAccentHex'); if (el) el.value = hex;
+    applyThemeVars(activeTheme);
+  });
+  _iroPickers.qrFg = _mountIroPicker('themeQrFgWheel', activeTheme.qrFg, function (hex) {
+    activeTheme.qrFg = hex;
+    const el = document.getElementById('themeQrFgHex'); if (el) el.value = hex;
+    applyThemeVars(activeTheme);
+    updateQrContrastHint(hex);
+    renderThemePreviewQr(hex);
+  });
+
+  ['Primary','Accent','QrFg'].forEach(function (key) {
+    const input = document.getElementById('theme' + key + 'Hex');
+    if (!input) return;
+    const lcKey = key.charAt(0).toLowerCase() + key.slice(1);
+    input.addEventListener('change', function () {
+      const v = (input.value || '').trim();
+      if (!/^#[0-9A-Fa-f]{6}$/.test(v)) { input.value = activeTheme[lcKey]; return; }
+      activeTheme[lcKey] = v.toUpperCase();
+      const picker = _iroPickers[lcKey];
+      if (picker) picker.color.hexString = activeTheme[lcKey];
+      applyThemeVars(activeTheme);
+      if (lcKey === 'qrFg') { updateQrContrastHint(activeTheme.qrFg); renderThemePreviewQr(activeTheme.qrFg); }
+    });
+  });
+
+  document.querySelectorAll('input[name="themeMode"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      const v = r.value;
+      activeTheme.darkMode = (v === 'auto' ? 'auto' : (v === 'dark'));
+      applyThemeVars(activeTheme);
+    });
+  });
+
+  const cycleEl = document.getElementById('themeAcceptCycleEnabled');
+  if (cycleEl) cycleEl.addEventListener('change', function (e) { activeTheme.acceptCycleEnabled = !!e.target.checked; });
+
+  const addBtn = document.getElementById('themePaletteAdd');
+  if (addBtn) addBtn.addEventListener('click', function () {
+    if (activeTheme.palette.length >= 7) return;
+    const fresh = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
+    activeTheme.palette.push(fresh);
+    rebuildPaletteUI();
+    applyThemeVars(activeTheme);
+  });
+  const resetBtn = document.getElementById('themePaletteReset');
+  if (resetBtn) resetBtn.addEventListener('click', function () {
+    activeTheme.palette = THEME_DEFAULTS.palette.slice();
+    rebuildPaletteUI();
+    applyThemeVars(activeTheme);
+  });
+
+  const previewBtn = document.getElementById('themePreviewAcceptCycle');
+  if (previewBtn) previewBtn.addEventListener('click', previewAcceptCycle);
+
+  const saveBtn = document.getElementById('themeSaveBtn');
+  if (saveBtn) saveBtn.addEventListener('click', saveThemeToServer);
+
+  if (window.matchMedia) {
+    try {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
+        if (activeTheme.darkMode === 'auto') applyThemeVars(activeTheme);
+      });
+    } catch(_) { /* older browsers */ }
+  }
+
+  rebuildPaletteUI();
+  updateQrContrastHint(activeTheme.qrFg);
+  renderThemePreviewQr(activeTheme.qrFg);
+  applyThemeVars(activeTheme);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  // Defer slightly so iro.js, QRCode, and currentOrg have time to initialise.
+  setTimeout(function () {
+    wireThemePanel();
+    let attempts = 0;
+    const tryLoad = function () {
+      if (typeof currentOrg !== 'undefined' && currentOrg && currentOrg.api_key) {
+        loadThemeFromServer();
+      } else if (attempts < 20) {
+        attempts++;
+        setTimeout(tryLoad, 200);
+      }
+    };
+    tryLoad();
+  }, 50);
+});
+// =================== /THEMING — Batch 6.5 ===================
+
 </script>
 </body>
 </html>

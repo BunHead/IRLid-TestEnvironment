@@ -440,6 +440,58 @@
   let eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
+  // ============================================================
+  //  THEME APPLICATION — Batch 6.5, 3 May 2026
+  //  Reads theme overrides from URL params (set by OrgCheckin.html when
+  //  generating Check-in QRs) and applies them to CSS custom properties.
+  //  Also applies light/dark mode if explicitly specified.
+  // ============================================================
+  (function applyOrgEntryTheme() {
+    try {
+      var root = document.documentElement;
+      var primary = params.get('themePrimary');
+      var accent  = params.get('themeAccent');
+      var qrFg    = params.get('themeQrFg');
+      var hex6 = /^#[0-9A-Fa-f]{6}$/;
+      if (primary && hex6.test(primary)) root.style.setProperty('--theme-primary', primary);
+      if (accent  && hex6.test(accent))  root.style.setProperty('--theme-accent',  accent);
+      if (qrFg    && hex6.test(qrFg))    root.style.setProperty('--theme-qr-fg',   qrFg);
+      var mode = params.get('themeMode');
+      if (mode === 'light') root.setAttribute('data-theme', 'light');
+      else if (mode === 'dark') root.setAttribute('data-theme', 'dark');
+      // Palette params for accept-cycle animation: themePalette1..themePalette7
+      for (var i = 1; i <= 7; i++) {
+        var c = params.get('themePalette' + i);
+        if (c && hex6.test(c)) root.style.setProperty('--theme-cycle-' + i, c);
+      }
+    } catch (err) {
+      console.warn('Theme application failed', err);
+    }
+  })();
+
+  // ============================================================
+  //  FIRST-SCAN PLACEHOLDER HOOKS — Batch 6.5, 3 May 2026
+  //  Read the four behaviour-shaping toggles from URL params (set by
+  //  OrgCheckin.html). Stored on a global object so renderIdentityPicker
+  //  and downstream paths can branch on them. Behaviours behind some are
+  //  still scaffolds (server storage for proofRecording / camera flow for
+  //  idPhotoCapture) — but the gating logic is now real.
+  // ============================================================
+  window.IRLID_FIRST_SCAN_FLAGS = (function () {
+    var f = {
+      allowSelfSelection:           params.get('allowSelfSelection')           !== 'false',
+      requireDoormanConfirmation:   params.get('requireDoormanConfirmation')   === 'true',
+      requireAdditionalProof:       params.get('requireAdditionalProof')       === 'true',
+      allowProofRecording:          params.get('allowProofRecording')          === 'true',
+      enableIdPhotoCapture:         params.get('enableIdPhotoCapture')         === 'true'
+    };
+    if (window.console && f.requireDoormanConfirmation) console.info('First-scan flag: doorman confirmation required');
+    if (window.console && f.requireAdditionalProof)     console.info('First-scan flag: additional proof required if unmatched');
+    if (window.console && f.allowProofRecording)        console.info('First-scan flag: proof recording enabled (UI hook only — server storage future work)');
+    if (window.console && f.enableIdPhotoCapture)       console.info('First-scan flag: ID photo capture enabled (camera flow scaffold — getUserMedia not yet wired)');
+    return f;
+  })();
+
   let logoUrl = (params.get("logo") || "").trim();
   const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
   const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());

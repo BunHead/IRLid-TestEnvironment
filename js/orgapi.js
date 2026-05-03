@@ -152,6 +152,28 @@
         orgKey,
         body: { resolution }
       });
+    },
+
+    // --- Settings persistence (Batch 6.5, 3 May 2026) ---
+    // Read the org-level settings_json from the Worker. Used by the OrgCheckin
+    // Settings panel on open to load the saved state (theme, palette, branding,
+    // policy toggles). Returns { id, name, slug, settings }.
+    getOrgSettings(orgKey) {
+      return request("/org/settings", {
+        orgKey
+      });
+    },
+
+    // Persist a partial settings update server-side. Body keys outside the
+    // Worker's allowlist are silently dropped; theme is validated server-side
+    // (hex shape, contrast against white, palette length cap). Returns
+    // { settings } with the merged current state on success.
+    updateOrgSettings(orgKey, partial) {
+      return request("/org/settings", {
+        method: "POST",
+        orgKey,
+        body: partial
+      });
     }
   };
 })();

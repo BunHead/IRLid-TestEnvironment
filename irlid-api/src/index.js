@@ -787,8 +787,65 @@ async function orgGetSettings(request, env) {
 async function orgUpdateSettings(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
-  const allowed = ["minScore","distanceM","windowS","bioRequired","privacyMode","checkoutEnabled","anonymousMode"];
+  // Settings allowlist. Adding new keys is purely additive — existing rows are unaffected.
+  // Branding + theme keys (Batch 6.5, 3 May 2026) extend the original v6 set.
+  const allowed = [
+    // --- Original v6 core gates ---
+    "minScore","distanceM","windowS","bioRequired","privacyMode","checkoutEnabled","anonymousMode",
+    // --- Identity / proof rules (placeholder-but-persist-able for first-scan flow integration) ---
+    "returnAllowed","allowSelfSelection","requireDoormanConfirmation","requireAdditionalProof",
+    "allowProofRecording","enableIdPhotoCapture",
+    // --- Branding ---
+    "logoUrl","welcomeMessage","redirectUrl",
+    // --- Theme (Batch 6.5) ---
+    "theme"  // { primary, accent, qrFg, palette[], darkMode, acceptCycleEnabled } — validated below
+  ];
+  // Theme validators — defensive, applied before merge.
+  function isHex6(v) { return typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v); }
+  function relLuminance(hex) {
+    const m = /^#([0-9a-fA-F]{6})$/.exec(hex || ""); if (!m) return 0;
+    const v = parseInt(m[1], 16);
+    const ch = [(v>>16)&255, (v>>8)&255, v&255].map(c => {
+      const s = c/255; return s <= 0.03928 ? s/12.92 : Math.pow((s+0.055)/1.055, 2.4);
+    });
+    return 0.2126*ch[0] + 0.7152*ch[1] + 0.0722*ch[2];
+  }
+  function contrastVsWhite(hex) {
+    const l = relLuminance(hex); return (1 + 0.05) / (l + 0.05);
+  }
+  function validateTheme(t) {
+    if (t === null || t === undefined) return null; // allow clearing theme
+    if (typeof t !== "object") return "theme must be an object";
+    if (t.primary !== undefined && !isHex6(t.primary)) return "theme.primary must be a #RRGGBB hex string";
+    if (t.accent  !== undefined && !isHex6(t.accent))  return "theme.accent must be a #RRGGBB hex string";
+    if (t.qrFg    !== undefined) {
+      if (!isHex6(t.qrFg)) return "theme.qrFg must be a #RRGGBB hex string";
+      // QR readability — reject foregrounds with insufficient contrast against white.
+      if (contrastVsWhite(t.qrFg) < 4.5) return "theme.qrFg contrast against white below 4.5:1 — QR may not scan reliably";
+    }
+    if (t.palette !== undefined) {
+      if (!Array.isArray(t.palette)) return "theme.palette must be an array";
+      if (t.palette.length > 7) return "theme.palette length must be at most 7";
+      for (const c of t.palette) { if (!isHex6(c)) return "theme.palette entries must be #RRGGBB hex strings"; }
+    }
+    if (t.darkMode !== undefined && typeof t.darkMode !== "boolean" && t.darkMode !== "auto") {
+      return "theme.darkMode must be true, false, or 'auto'";
+    }
+    if (t.acceptCycleEnabled !== undefined && typeof t.acceptCycleEnabled !== "boolean") {
+      return "theme.acceptCycleEnabled must be a boolean";
+    }
+    return null;
+  }
   const current = JSON.parse(org.settings_json || "{}");
+  // Validate theme separately (other keys pass through as primitives/strings).
+  if (body.theme !== undefined) {
+    const themeErr = validateTheme(body.theme);
+    if (themeErr) return err(themeErr);
+  }
+  // String length sanity — protect against an admin pasting a 1MB welcome message.
+  if (body.logoUrl !== undefined && typeof body.logoUrl !== "string") return err("logoUrl must be a string");
+  if (body.welcomeMessage !== undefined && typeof body.welcomeMessage === "string" && body.welcomeMessage.length > 2000) return err("welcomeMessage too long (max 2000 chars)");
+  if (body.redirectUrl !== undefined && typeof body.redirectUrl !== "string") return err("redirectUrl must be a string");
   for (const k of allowed) { if (body[k] !== undefined) current[k] = body[k]; }
   await env.DB.prepare("UPDATE organisations SET settings_json=?, updated_at=? WHERE id=?")
     .bind(JSON.stringify(current), now(), org.id).run();
