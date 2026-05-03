@@ -488,6 +488,17 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   border-radius: 12px;
   background: rgba(255,255,255,0.02);
 }
+/* Batch 6.5e — two side-by-side palette blocks (Background + Celebration) */
+.theme-palette-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.theme-palette-pair > .theme-palette-block { margin-top: 14px; }
+@media (max-width: 760px) {
+  .theme-palette-pair { grid-template-columns: 1fr; }
+  .theme-palette-pair > .theme-palette-block:not(:first-child) { margin-top: 0; }
+}
 .theme-palette-head { margin-bottom: 10px; }
 .theme-palette-head strong { display: block; font-size: 13px; color: #e6edf3; margin-bottom: 3px; }
 .theme-palette-sub { font-size: 11px; color: var(--muted); line-height: 1.35; }
@@ -749,44 +760,59 @@ body.theme-bg-cycling .irlid-qr-fullscreen-holder.cycling,
 }
 /* ============== /Batch 6.5c ============== */
 
-/* ============== Batch 6.5d — Page background cycle + Tier-1 patterns ==============
-   Mode 'page'   — body background-color animates through 7 cycle stops.
-   Mode 'pattern'— body gets a tiled background-image. Pattern colour vars are
-                   palette-driven so changing palette restyles the pattern live.
-   Mode 'off'    — no background animation; body falls back to its base #06070C.
-   Tier-3 hook   — when bgImageUrl is set, body[data-pattern="custom"] uses it
-                   as the background-image (UI exposes 'custom' option as disabled
+/* ============== Batch 6.5d → 6.5e — QR-canvas page-cycle + Tier-1 patterns ==============
+   Mode 'page'   — animate background-color of the QR canvas (.irlid-qr-fullscreen +
+                   #venueQRWrap) through 7 cycle stops. NOT the body — venues don't
+                   want their whole page to throb, they want the QR display area to.
+   Mode 'pattern'— same targets get a tiled background-image. Pattern colour vars
+                   come from the dedicated Background palette, so palette edits
+                   restyle live.
+   Mode 'off'    — no animation; QR canvas falls back to its base #05070C.
+   Tier-3 hook   — when bgImageUrl is set, [data-pattern="custom"] uses it as the
+                   background-image (UI exposes 'custom' option as disabled
                    placeholder until v6 ships an upload flow). */
 @keyframes themePageColorCycle {
-  0%   { background-color: var(--theme-page-bg-1, #06070C); }
-  14%  { background-color: var(--theme-page-bg-2, #06070C); }
-  28%  { background-color: var(--theme-page-bg-3, #06070C); }
-  42%  { background-color: var(--theme-page-bg-4, #06070C); }
-  57%  { background-color: var(--theme-page-bg-5, #06070C); }
-  71%  { background-color: var(--theme-page-bg-6, #06070C); }
-  85%  { background-color: var(--theme-page-bg-7, #06070C); }
-  100% { background-color: var(--theme-page-bg-1, #06070C); }
+  0%   { background-color: var(--theme-page-bg-1, #05070C); }
+  14%  { background-color: var(--theme-page-bg-2, #05070C); }
+  28%  { background-color: var(--theme-page-bg-3, #05070C); }
+  42%  { background-color: var(--theme-page-bg-4, #05070C); }
+  57%  { background-color: var(--theme-page-bg-5, #05070C); }
+  71%  { background-color: var(--theme-page-bg-6, #05070C); }
+  85%  { background-color: var(--theme-page-bg-7, #05070C); }
+  100% { background-color: var(--theme-page-bg-1, #05070C); }
 }
-body.theme-bg-page-cycle {
+/* Apply page-cycle to the QR canvas, NOT the page. Two targets:
+     1. .irlid-qr-fullscreen — the dark backdrop around the fullscreen QR card.
+        This is what the attendee sees walking up to scan.
+     2. #venueQRWrap — the venue QR area on the Check-in tab. This is what staff
+        see during normal operation, and what's mirrored on the customer screen
+        when not in fullscreen. */
+body.theme-bg-page-cycle .irlid-qr-fullscreen,
+body.theme-bg-page-cycle #venueQRWrap {
   animation: themePageColorCycle var(--theme-bg-anim-duration, 30s) ease-in-out infinite;
 }
 
 /* Pattern colour fallbacks. These are overwritten by JS in applyThemeVars
-   so palette/qrFg changes update the patterns live. */
+   so palette edits update the patterns live. */
 body.theme-bg-pattern {
-  --theme-pattern-bg: #06070C;
+  --theme-pattern-bg: #05070C;
   --theme-pattern-fg: rgba(88, 166, 255, 0.18);
   --theme-pattern-fg-2: rgba(88, 166, 255, 0.10);
+}
+body.theme-bg-pattern .irlid-qr-fullscreen,
+body.theme-bg-pattern #venueQRWrap {
   background-color: var(--theme-pattern-bg);
 }
 
 /* Pattern: dots — radial dots on a 24px grid */
-body.theme-bg-pattern[data-pattern="dots"] {
+body.theme-bg-pattern[data-pattern="dots"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="dots"] #venueQRWrap {
   background-image: radial-gradient(circle, var(--theme-pattern-fg) 2px, transparent 2.5px);
   background-size: 24px 24px;
 }
 /* Pattern: hex grid (offset dot grid, reads like honeycomb) */
-body.theme-bg-pattern[data-pattern="hex"] {
+body.theme-bg-pattern[data-pattern="hex"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="hex"] #venueQRWrap {
   background-image:
     radial-gradient(circle at 50% 50%, var(--theme-pattern-fg) 2px, transparent 2.5px),
     radial-gradient(circle at 50% 50%, var(--theme-pattern-fg) 2px, transparent 2.5px);
@@ -794,7 +820,8 @@ body.theme-bg-pattern[data-pattern="hex"] {
   background-position: 0 0, 14px 24px;
 }
 /* Pattern: diagonal stripes */
-body.theme-bg-pattern[data-pattern="diag"] {
+body.theme-bg-pattern[data-pattern="diag"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="diag"] #venueQRWrap {
   background-image: repeating-linear-gradient(
     45deg,
     var(--theme-pattern-fg) 0,
@@ -804,7 +831,8 @@ body.theme-bg-pattern[data-pattern="diag"] {
   );
 }
 /* Pattern: checkerboard */
-body.theme-bg-pattern[data-pattern="checker"] {
+body.theme-bg-pattern[data-pattern="checker"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="checker"] #venueQRWrap {
   background-image:
     linear-gradient(45deg, var(--theme-pattern-fg) 25%, transparent 25%, transparent 75%, var(--theme-pattern-fg) 75%),
     linear-gradient(45deg, var(--theme-pattern-fg) 25%, transparent 25%, transparent 75%, var(--theme-pattern-fg) 75%);
@@ -812,20 +840,23 @@ body.theme-bg-pattern[data-pattern="checker"] {
   background-position: 0 0, 16px 16px;
 }
 /* Pattern: grid (faint orthogonal lines) */
-body.theme-bg-pattern[data-pattern="grid"] {
+body.theme-bg-pattern[data-pattern="grid"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="grid"] #venueQRWrap {
   background-image:
     linear-gradient(var(--theme-pattern-fg) 1px, transparent 1px),
     linear-gradient(90deg, var(--theme-pattern-fg) 1px, transparent 1px);
   background-size: 32px 32px;
 }
 /* Pattern: weave (overlapping stripes) */
-body.theme-bg-pattern[data-pattern="weave"] {
+body.theme-bg-pattern[data-pattern="weave"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="weave"] #venueQRWrap {
   background-image:
     repeating-linear-gradient(0deg, var(--theme-pattern-fg) 0 2px, transparent 2px 16px),
     repeating-linear-gradient(90deg, var(--theme-pattern-fg-2) 0 2px, transparent 2px 16px);
 }
 /* Pattern: chevrons */
-body.theme-bg-pattern[data-pattern="chevron"] {
+body.theme-bg-pattern[data-pattern="chevron"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="chevron"] #venueQRWrap {
   background-image:
     linear-gradient(135deg, var(--theme-pattern-fg) 25%, transparent 25%),
     linear-gradient(225deg, var(--theme-pattern-fg) 25%, transparent 25%),
@@ -834,7 +865,8 @@ body.theme-bg-pattern[data-pattern="chevron"] {
   background-size: 24px 24px;
 }
 /* Pattern: isometric (triple-axis line grid) */
-body.theme-bg-pattern[data-pattern="iso"] {
+body.theme-bg-pattern[data-pattern="iso"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="iso"] #venueQRWrap {
   background-image:
     repeating-linear-gradient(60deg,  var(--theme-pattern-fg) 0 1px, transparent 1px 22px),
     repeating-linear-gradient(120deg, var(--theme-pattern-fg) 0 1px, transparent 1px 22px),
@@ -842,12 +874,13 @@ body.theme-bg-pattern[data-pattern="iso"] {
 }
 /* Pattern: custom (Tier 3 — admin-uploaded image). Activated by JS only when
    bgImageUrl is present; the 'custom' option is disabled in the picker until v6. */
-body.theme-bg-pattern[data-pattern="custom"] {
+body.theme-bg-pattern[data-pattern="custom"] .irlid-qr-fullscreen,
+body.theme-bg-pattern[data-pattern="custom"] #venueQRWrap {
   background-image: var(--theme-pattern-image, none);
   background-size: var(--theme-pattern-size, 240px 240px);
   background-repeat: var(--theme-pattern-repeat, repeat);
 }
-/* ============== /Batch 6.5d ============== */
+/* ============== /Batch 6.5d → 6.5e ============== */
 /* ============== /Batch 6.5b ============== */
 
 .prototype-checkin #panel-checkin #expectedSharedPanel,
@@ -1314,16 +1347,31 @@ body.theme-bg-pattern[data-pattern="custom"] {
                   </div>
                 </div>
 
-                <!-- Customisable celebration palette of up to 7 colours -->
-                <div class="theme-palette-block">
-                  <div class="theme-palette-head">
-                    <strong>Celebration palette</strong>
-                    <span class="theme-palette-sub">Up to 7 colours — used by the accept-cycle animation when a check-in succeeds.</span>
+                <!-- Customisable palettes — Background (drives bg cycle / pattern colours)
+                     and Celebration (drives accept-cycle burst on successful check-in).
+                     Two independent palettes keep the visual languages separate. -->
+                <div class="theme-palette-pair">
+                  <div class="theme-palette-block">
+                    <div class="theme-palette-head">
+                      <strong>Background palette</strong>
+                      <span class="theme-palette-sub">Up to 7 colours — used by the QR-canvas page-cycle animation and pattern overlay.</span>
+                    </div>
+                    <div class="theme-palette-row" id="themeBgPaletteRow"></div>
+                    <div class="theme-palette-actions">
+                      <button type="button" class="btn btn-secondary btn-sm" id="themeBgPaletteAdd">+ Add colour</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="themeBgPaletteReset">Reset to defaults</button>
+                    </div>
                   </div>
-                  <div class="theme-palette-row" id="themePaletteRow"></div>
-                  <div class="theme-palette-actions">
-                    <button type="button" class="btn btn-secondary btn-sm" id="themePaletteAdd">+ Add colour</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="themePaletteReset">Reset to defaults</button>
+                  <div class="theme-palette-block">
+                    <div class="theme-palette-head">
+                      <strong>Celebration palette</strong>
+                      <span class="theme-palette-sub">Up to 7 colours — used by the accept-cycle animation when a check-in succeeds.</span>
+                    </div>
+                    <div class="theme-palette-row" id="themePaletteRow"></div>
+                    <div class="theme-palette-actions">
+                      <button type="button" class="btn btn-secondary btn-sm" id="themePaletteAdd">+ Add colour</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="themePaletteReset">Reset to defaults</button>
+                    </div>
                   </div>
                 </div>
 
@@ -1344,7 +1392,7 @@ body.theme-bg-pattern[data-pattern="custom"] {
                     </label>
                     <label class="theme-anim-row" data-bg-mode-show="page">
                       <span>Page intensity</span>
-                      <select id="themeBgPalette" class="theme-anim-select">
+                      <select id="themeBgIntensity" class="theme-anim-select">
                         <option value="muted">Muted (deep tinted, easy on the eyes)</option>
                         <option value="vibrant">Vibrant (palette colours direct)</option>
                       </select>
@@ -3049,12 +3097,16 @@ const THEME_DEFAULTS = {
   primary: '#3FB950',
   accent:  '#58A6FF',
   qrFg:    '#000000',
-  palette: ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
+  // Two independent palettes (Batch 6.5e). 'palette' drives the celebration burst;
+  // 'bgPalette' drives the page-cycle and pattern colours. Defaults are similar so
+  // out-of-box behaviour matches Batch 6.5b/c — admins can diverge per-org.
+  palette:    ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
+  bgPalette:  ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
   darkMode: true,
   acceptCycleEnabled: true,
-  // Batch 6.5b → 6.5d
+  // Batch 6.5b → 6.5e
   bgMode: 'glow',            // 'off' | 'page' | 'glow' | 'pattern' (replaces legacy bgAnimEnabled)
-  bgPalette: 'muted',        // 'muted' | 'vibrant' — applies when bgMode === 'page'
+  bgIntensity: 'muted',      // 'muted' | 'vibrant' — applies when bgMode === 'page' (renamed from bgPalette in 6.5e)
   bgPattern: 'dots',         // pattern id — applies when bgMode === 'pattern'
   bgImageUrl: null,          // Tier 3 — admin-uploaded background image (v6+)
   bgAnimDuration: 30,        // seconds for one full background cycle (range 5..120)
@@ -3063,7 +3115,7 @@ const THEME_DEFAULTS = {
 const PAGE_CYCLE_BASE = '#06070C';     // base canvas colour we blend palette into for muted page mode
 const PAGE_MUTED_RATIO = 0.18;          // 18% palette / 82% base — tinted but stays moody
 const PAGE_VIBRANT_RATIO = 0.78;        // 78% palette / 22% base — saturated but slightly shaded
-let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette] };
+let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette], bgPalette: [...THEME_DEFAULTS.bgPalette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
 function _themeRelLuminance(hex) {
@@ -3129,16 +3181,19 @@ function applyThemeVars(theme) {
   body.classList.remove('theme-bg-cycling', 'theme-bg-page-cycle', 'theme-bg-pattern');
   body.removeAttribute('data-pattern');
   // For page-cycle mode we also write 7 page-bg CSS variables. Compute them
-  // from the active palette + bgPalette mode (muted vs vibrant) so changing the
-  // palette restyles the cycle live without a reload.
+  // from the BACKGROUND palette + bgIntensity mode (muted vs vibrant). Editing
+  // the Background palette restyles the cycle live without a reload. NOTE
+  // (Batch 6.5e): page-cycle and pattern now read theme.bgPalette (an array of
+  // colours) — distinct from theme.palette which still drives the celebration burst.
+  const bgPal = (theme.bgPalette && theme.bgPalette.length) ? theme.bgPalette : THEME_DEFAULTS.bgPalette;
   for (let i = 0; i < 7; i++) {
-    const c = theme.palette[i] || theme.primary;
-    const ratio = (theme.bgPalette === 'vibrant') ? PAGE_VIBRANT_RATIO : PAGE_MUTED_RATIO;
+    const c = bgPal[i] || bgPal[0] || theme.primary;
+    const ratio = (theme.bgIntensity === 'vibrant') ? PAGE_VIBRANT_RATIO : PAGE_MUTED_RATIO;
     root.style.setProperty('--theme-page-bg-' + (i+1), _mixHex(c, PAGE_CYCLE_BASE, ratio));
   }
-  // Pattern colour vars — pattern primary uses palette[0] at low alpha; secondary lower.
-  // Means the patterns auto-restyle when the palette changes.
-  const patternBase = theme.palette && theme.palette[0] ? theme.palette[0] : theme.accent || '#58A6FF';
+  // Pattern colour vars — pattern primary uses bgPalette[0] at low alpha; secondary lower.
+  // Editing the Background palette auto-restyles the pattern.
+  const patternBase = (bgPal[0]) ? bgPal[0] : theme.accent || '#58A6FF';
   root.style.setProperty('--theme-pattern-bg', PAGE_CYCLE_BASE);
   root.style.setProperty('--theme-pattern-fg',   _hexToRgba(patternBase, 0.18));
   root.style.setProperty('--theme-pattern-fg-2', _hexToRgba(patternBase, 0.10));
@@ -3221,43 +3276,60 @@ function _mountIroPicker(elementId, initialColor, onChange) {
   return picker;
 }
 
-function _buildPaletteSwatch(index, color) {
+// Batch 6.5e — palette swatch helpers parameterised by which palette key they
+// operate on. paletteKey is 'palette' (Celebration) or 'bgPalette' (Background).
+function _buildPaletteSwatch(index, color, paletteKey) {
+  const key = paletteKey || 'palette';
+  const labelPrefix = key === 'bgPalette' ? 'Background palette' : 'Celebration palette';
   const wrap = document.createElement('div');
   wrap.className = 'theme-palette-swatch';
   wrap.style.backgroundColor = color;
   wrap.dataset.index = String(index);
-  wrap.title = 'Palette colour ' + (index + 1) + ' — click to edit';
+  wrap.dataset.paletteKey = key;
+  wrap.title = labelPrefix + ' colour ' + (index + 1) + ' — click to edit';
   const remove = document.createElement('div');
   remove.className = 'swatch-remove';
   remove.textContent = '×';
   remove.title = 'Remove this colour';
   remove.addEventListener('click', function (e) {
     e.stopPropagation();
-    activeTheme.palette.splice(index, 1);
-    rebuildPaletteUI();
+    activeTheme[key].splice(index, 1);
+    rebuildPaletteUI(key);
     applyThemeVars(activeTheme);
   });
   wrap.appendChild(remove);
-  wrap.addEventListener('click', function () { _openPaletteSwatchEditor(index); });
+  wrap.addEventListener('click', function () { _openPaletteSwatchEditor(index, key); });
   return wrap;
 }
 
-function rebuildPaletteUI() {
-  const row = document.getElementById('themePaletteRow');
+// rebuildPaletteUI(paletteKey) repaints one palette row. Call with no argument
+// to repaint both (used after server load and on initial mount).
+function rebuildPaletteUI(paletteKey) {
+  if (!paletteKey) {
+    rebuildPaletteUI('palette');
+    rebuildPaletteUI('bgPalette');
+    return;
+  }
+  const rowId = paletteKey === 'bgPalette' ? 'themeBgPaletteRow' : 'themePaletteRow';
+  const addBtnId = paletteKey === 'bgPalette' ? 'themeBgPaletteAdd' : 'themePaletteAdd';
+  const row = document.getElementById(rowId);
   if (!row) return;
   row.innerHTML = '';
-  activeTheme.palette.forEach(function (c, i) { row.appendChild(_buildPaletteSwatch(i, c)); });
-  const addBtn = document.getElementById('themePaletteAdd');
-  if (addBtn) addBtn.disabled = activeTheme.palette.length >= 7;
+  const arr = activeTheme[paletteKey] || [];
+  arr.forEach(function (c, i) { row.appendChild(_buildPaletteSwatch(i, c, paletteKey)); });
+  const addBtn = document.getElementById(addBtnId);
+  if (addBtn) addBtn.disabled = arr.length >= 7;
 }
 
-function _openPaletteSwatchEditor(index) {
-  const current = activeTheme.palette[index];
-  const next = window.prompt('Enter hex colour for swatch ' + (index + 1) + ' (e.g. #FF6B35):', current);
+function _openPaletteSwatchEditor(index, paletteKey) {
+  const key = paletteKey || 'palette';
+  const labelPrefix = key === 'bgPalette' ? 'Background' : 'Celebration';
+  const current = activeTheme[key][index];
+  const next = window.prompt('Enter hex colour for ' + labelPrefix + ' swatch ' + (index + 1) + ' (e.g. #FF6B35):', current);
   if (next === null) return;
   if (!/^#[0-9A-Fa-f]{6}$/.test(next)) { alert('Invalid hex — must be #RRGGBB'); return; }
-  activeTheme.palette[index] = next.toUpperCase();
-  rebuildPaletteUI();
+  activeTheme[key][index] = next.toUpperCase();
+  rebuildPaletteUI(key);
   applyThemeVars(activeTheme);
 }
 
@@ -3296,21 +3368,29 @@ async function loadThemeFromServer() {
   try {
     const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
     const t = (res && res.settings && res.settings.theme) || {};
-    // Batch 6.5d — translate legacy bgAnimEnabled boolean to bgMode if bgMode missing.
-    // This keeps theme rows saved before 6.5d rendering correctly without forcing a manual reset.
+    // Batch 6.5d → 6.5e — backward compat:
+    //   • Legacy bgAnimEnabled (boolean, pre-6.5d) → bgMode = 'off' or 'glow'.
+    //   • Legacy bgPalette (string 'muted'|'vibrant', 6.5d only) → bgIntensity.
+    //   • Old shape may not have bgPalette as array yet — fall back to defaults.
     let bgMode = t.bgMode;
     if (!bgMode) bgMode = (t.bgAnimEnabled === false) ? 'off' : THEME_DEFAULTS.bgMode;
     if (['off','page','glow','pattern'].indexOf(bgMode) === -1) bgMode = THEME_DEFAULTS.bgMode;
+    let bgIntensity = t.bgIntensity;
+    if (!bgIntensity && (t.bgPalette === 'muted' || t.bgPalette === 'vibrant')) bgIntensity = t.bgPalette;
+    if (bgIntensity !== 'muted' && bgIntensity !== 'vibrant') bgIntensity = THEME_DEFAULTS.bgIntensity;
+    const bgPaletteArr = Array.isArray(t.bgPalette) && t.bgPalette.length
+      ? t.bgPalette.slice(0, 7)
+      : THEME_DEFAULTS.bgPalette.slice();
     activeTheme = {
       primary: t.primary || THEME_DEFAULTS.primary,
       accent:  t.accent  || THEME_DEFAULTS.accent,
       qrFg:    t.qrFg    || THEME_DEFAULTS.qrFg,
       palette: Array.isArray(t.palette) && t.palette.length ? t.palette.slice(0, 7) : THEME_DEFAULTS.palette.slice(),
+      bgPalette: bgPaletteArr,
       darkMode: t.darkMode === undefined ? THEME_DEFAULTS.darkMode : t.darkMode,
       acceptCycleEnabled: t.acceptCycleEnabled === undefined ? THEME_DEFAULTS.acceptCycleEnabled : t.acceptCycleEnabled,
-      // Batch 6.5d — bgMode supersedes legacy bgAnimEnabled
       bgMode: bgMode,
-      bgPalette: (t.bgPalette === 'vibrant' || t.bgPalette === 'muted') ? t.bgPalette : THEME_DEFAULTS.bgPalette,
+      bgIntensity: bgIntensity,
       bgPattern: typeof t.bgPattern === 'string' && t.bgPattern ? t.bgPattern : THEME_DEFAULTS.bgPattern,
       bgImageUrl: typeof t.bgImageUrl === 'string' && t.bgImageUrl ? t.bgImageUrl : null,
       bgAnimDuration:    typeof t.bgAnimDuration    === 'number' ? t.bgAnimDuration    : THEME_DEFAULTS.bgAnimDuration,
@@ -3355,11 +3435,11 @@ function writeThemeToUI() {
   const modeRadios = document.querySelectorAll('input[name="themeMode"]');
   const v = activeTheme.darkMode === 'auto' ? 'auto' : (activeTheme.darkMode ? 'dark' : 'light');
   modeRadios.forEach(function (r) { r.checked = (r.value === v); });
-  // Batch 6.5d — animation panel UI sync (mode select + palette/pattern selects + sliders)
+  // Batch 6.5d → 6.5e — animation panel UI sync (mode + intensity + pattern + sliders)
   const bgModeEl = document.getElementById('themeBgMode');
   if (bgModeEl) bgModeEl.value = activeTheme.bgMode || 'glow';
-  const bgPaletteEl = document.getElementById('themeBgPalette');
-  if (bgPaletteEl) bgPaletteEl.value = activeTheme.bgPalette || 'muted';
+  const bgIntensityEl = document.getElementById('themeBgIntensity');
+  if (bgIntensityEl) bgIntensityEl.value = activeTheme.bgIntensity || 'muted';
   const bgPatternEl = document.getElementById('themeBgPattern');
   if (bgPatternEl) bgPatternEl.value = activeTheme.bgPattern || 'dots';
   const bgDur = document.getElementById('themeBgAnimDuration');
@@ -3426,18 +3506,34 @@ function wireThemePanel() {
   const cycleEl = document.getElementById('themeAcceptCycleEnabled');
   if (cycleEl) cycleEl.addEventListener('change', function (e) { activeTheme.acceptCycleEnabled = !!e.target.checked; });
 
+  // Celebration palette buttons (existing).
   const addBtn = document.getElementById('themePaletteAdd');
   if (addBtn) addBtn.addEventListener('click', function () {
     if (activeTheme.palette.length >= 7) return;
     const fresh = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
     activeTheme.palette.push(fresh);
-    rebuildPaletteUI();
+    rebuildPaletteUI('palette');
     applyThemeVars(activeTheme);
   });
   const resetBtn = document.getElementById('themePaletteReset');
   if (resetBtn) resetBtn.addEventListener('click', function () {
     activeTheme.palette = THEME_DEFAULTS.palette.slice();
-    rebuildPaletteUI();
+    rebuildPaletteUI('palette');
+    applyThemeVars(activeTheme);
+  });
+  // Batch 6.5e — Background palette buttons (parallel structure).
+  const bgAddBtn = document.getElementById('themeBgPaletteAdd');
+  if (bgAddBtn) bgAddBtn.addEventListener('click', function () {
+    if (activeTheme.bgPalette.length >= 7) return;
+    const fresh = '#' + Math.floor(Math.random() * 0xFFFFFF).toString(16).padStart(6, '0').toUpperCase();
+    activeTheme.bgPalette.push(fresh);
+    rebuildPaletteUI('bgPalette');
+    applyThemeVars(activeTheme);
+  });
+  const bgResetBtn = document.getElementById('themeBgPaletteReset');
+  if (bgResetBtn) bgResetBtn.addEventListener('click', function () {
+    activeTheme.bgPalette = THEME_DEFAULTS.bgPalette.slice();
+    rebuildPaletteUI('bgPalette');
     applyThemeVars(activeTheme);
   });
 
@@ -3463,10 +3559,11 @@ function wireThemePanel() {
     activeTheme.bgMode = ['off','page','glow','pattern'].indexOf(v) !== -1 ? v : 'glow';
     applyThemeVars(activeTheme);
   });
-  // Page-cycle palette mode (Batch 6.5d). Vibrant vs muted.
-  const bgPaletteEl = document.getElementById('themeBgPalette');
-  if (bgPaletteEl) bgPaletteEl.addEventListener('change', function (e) {
-    activeTheme.bgPalette = e.target.value === 'vibrant' ? 'vibrant' : 'muted';
+  // Page-cycle intensity (Batch 6.5e — renamed from bgPalette to bgIntensity).
+  // Vibrant uses palette colours direct; Muted blends them with the dark canvas.
+  const bgIntensityEl = document.getElementById('themeBgIntensity');
+  if (bgIntensityEl) bgIntensityEl.addEventListener('change', function (e) {
+    activeTheme.bgIntensity = e.target.value === 'vibrant' ? 'vibrant' : 'muted';
     applyThemeVars(activeTheme);
   });
   // Pattern picker (Batch 6.5d). 8 built-in CSS patterns + 'custom' Tier-3 placeholder.

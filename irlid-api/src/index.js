@@ -797,8 +797,8 @@ async function orgUpdateSettings(request, env) {
     "allowProofRecording","enableIdPhotoCapture",
     // --- Branding ---
     "logoUrl","welcomeMessage","redirectUrl",
-    // --- Theme (Batch 6.5 → 6.5d) ---
-    "theme"  // { primary, accent, qrFg, palette[], darkMode, acceptCycleEnabled, bgMode, bgPalette, bgPattern, bgImageUrl, bgAnimDuration, cycleAnimDuration } — validated below
+    // --- Theme (Batch 6.5 → 6.5e) ---
+    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, acceptCycleEnabled, bgMode, bgIntensity, bgPattern, bgImageUrl, bgAnimDuration, cycleAnimDuration } — validated below
   ];
   // Theme validators — defensive, applied before merge.
   function isHex6(v) { return typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v); }
@@ -848,15 +848,31 @@ async function orgUpdateSettings(request, env) {
         return "theme.cycleAnimDuration must be a number between 0.1 and 30 (seconds)";
       }
     }
-    // Batch 6.5d — background mode + palette mode + pattern + Tier-3 image hook
+    // Batch 6.5d → 6.5e — background mode + intensity + bgPalette array + pattern + Tier-3
     if (t.bgMode !== undefined) {
       if (typeof t.bgMode !== "string" || ["off","page","glow","pattern"].indexOf(t.bgMode) === -1) {
         return "theme.bgMode must be one of: off, page, glow, pattern";
       }
     }
+    // bgIntensity — Batch 6.5e canonical name for muted/vibrant page-cycle.
+    if (t.bgIntensity !== undefined) {
+      if (typeof t.bgIntensity !== "string" || ["muted","vibrant"].indexOf(t.bgIntensity) === -1) {
+        return "theme.bgIntensity must be either 'muted' or 'vibrant'";
+      }
+    }
+    // bgPalette — Batch 6.5e canonical: array of up to 7 hex strings (Background palette).
+    // Backward compat: still accept string 'muted'|'vibrant' (6.5d shape) which the
+    // client translates to bgIntensity on load. Reject anything else.
     if (t.bgPalette !== undefined) {
-      if (typeof t.bgPalette !== "string" || ["muted","vibrant"].indexOf(t.bgPalette) === -1) {
-        return "theme.bgPalette must be either 'muted' or 'vibrant'";
+      if (Array.isArray(t.bgPalette)) {
+        if (t.bgPalette.length > 7) return "theme.bgPalette length must be at most 7";
+        for (const c of t.bgPalette) { if (!isHex6(c)) return "theme.bgPalette entries must be #RRGGBB hex strings"; }
+      } else if (typeof t.bgPalette === "string") {
+        if (["muted","vibrant"].indexOf(t.bgPalette) === -1) {
+          return "theme.bgPalette (legacy string form) must be 'muted' or 'vibrant'";
+        }
+      } else {
+        return "theme.bgPalette must be an array of hex strings (or legacy 'muted'/'vibrant' string)";
       }
     }
     if (t.bgPattern !== undefined) {
