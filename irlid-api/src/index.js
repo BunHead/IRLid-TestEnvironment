@@ -797,8 +797,8 @@ async function orgUpdateSettings(request, env) {
     "allowProofRecording","enableIdPhotoCapture",
     // --- Branding ---
     "logoUrl","welcomeMessage","redirectUrl",
-    // --- Theme (Batch 6.5 → 6.5e) ---
-    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, acceptCycleEnabled, bgMode, bgIntensity, bgPattern, bgImageUrl, bgAnimDuration, cycleAnimDuration } — validated below
+    // --- Theme (Batch 6.5 → 6.5f) ---
+    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, bgMode, bgIntensity, bgPattern, bgImageUrl, cycleMode, bgAnimDuration, cycleAnimDuration } — validated below
   ];
   // Theme validators — defensive, applied before merge.
   function isHex6(v) { return typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v); }
@@ -833,6 +833,12 @@ async function orgUpdateSettings(request, env) {
     }
     if (t.acceptCycleEnabled !== undefined && typeof t.acceptCycleEnabled !== "boolean") {
       return "theme.acceptCycleEnabled must be a boolean";
+    }
+    // Batch 6.5f — Celebration mode (replaces acceptCycleEnabled).
+    if (t.cycleMode !== undefined) {
+      if (typeof t.cycleMode !== "string" || ["off","page","glow","pattern"].indexOf(t.cycleMode) === -1) {
+        return "theme.cycleMode must be one of: off, page, glow, pattern";
+      }
     }
     // Batch 6.5b — animation speed controls
     if (t.bgAnimEnabled !== undefined && typeof t.bgAnimEnabled !== "boolean") {

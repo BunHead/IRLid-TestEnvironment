@@ -611,15 +611,51 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 .theme-save-status.err { color: var(--red); font-weight: 600; }
 /* ================= /THEMING — Batch 6.5 ================= */
 
-/* ============== Batch 6.5b — Animation panels + speed sliders + bg cycle ============== */
+/* ============== Batch 6.5b → 6.5f — Animation panels + duplicators + speed sliders ==============
+   Three-column layout: Background panel | duplicator strip | Celebration panel.
+   The duplicator strip in the middle has two arrow buttons that copy mode + palette
+   from one side to the other (durations and intensity stay independent because
+   they have different semantics on the two sides). */
 .theme-animation-panels {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr auto 1fr;
   gap: 12px;
   margin-top: 14px;
+  align-items: stretch;
 }
 @media (max-width: 760px) {
   .theme-animation-panels { grid-template-columns: 1fr; }
+  .theme-anim-duplicators { flex-direction: row !important; justify-content: center !important; }
+}
+.theme-anim-duplicators {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: stretch;
+}
+.theme-anim-duplicators .dup-btn {
+  width: 36px; height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+  font-size: 16px; line-height: 1;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.15s, transform 0.1s, border-color 0.15s;
+}
+.theme-anim-duplicators .dup-btn:hover {
+  background: rgba(255,255,255,0.10);
+  border-color: rgba(255,255,255,0.35);
+}
+.theme-anim-duplicators .dup-btn:active { transform: scale(0.95); }
+.theme-anim-duplicators .dup-label {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .theme-anim-panel {
   padding: 14px;
@@ -704,6 +740,8 @@ button.theme-preview-button:focus-visible {
 .theme-anim-panel[data-bg-mode="page"] [data-bg-mode-show="page"] { display: flex; }
 .theme-anim-panel[data-bg-mode="pattern"] [data-bg-mode-show="pattern"] { display: flex; }
 .theme-anim-panel[data-bg-mode="off"] [data-bg-mode-hide="off"] { display: none; }
+/* Mode-aware visibility on the celebration panel (Batch 6.5f) */
+.theme-anim-panel[data-cycle-mode="off"] [data-cycle-mode-hide="off"] { display: none; }
 /* End mode-aware visibility */
 
 /* Background animation — continuous subtle glow on QR boxes when enabled */
@@ -880,6 +918,67 @@ body.theme-bg-pattern[data-pattern="custom"] #venueQRWrap {
   background-size: var(--theme-pattern-size, 240px 240px);
   background-repeat: var(--theme-pattern-repeat, repeat);
 }
+/* ============== Batch 6.5f — Animated pattern colour =============================
+   Patterns previously rendered in a single static palette[0] colour. Now we register
+   --theme-pattern-fg as a real CSS color via @property so it can be animated, and
+   the keyframe themePatternColorCycle (injected dynamically by JS so its stops use
+   the live bgPalette) drives it. Result: pattern dots/hexes/stripes drift through
+   the Background palette in sync with the cycle duration slider. The keyframe text
+   is generated in JS because CSS keyframes can't read from CSS variables directly;
+   _renderPatternColorKeyframe() in the theming block writes a <style id="themePatternKeyframe">
+   tag with the active colour stops every time bgPalette or qrFg changes. */
+@property --theme-pattern-fg {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(88, 166, 255, 0.18);
+}
+@property --theme-pattern-fg-2 {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: rgba(88, 166, 255, 0.10);
+}
+/* Apply the colour-cycle animation to pattern targets. Uses the same duration as
+   page-cycle, so a single Cycle duration slider drives everything in sync. */
+body.theme-bg-pattern .irlid-qr-fullscreen,
+body.theme-bg-pattern #venueQRWrap {
+  animation: themePatternColorCycle var(--theme-bg-anim-duration, 30s) ease-in-out infinite;
+}
+/* ============== Batch 6.5f — Celebration burst variants =========================
+   Page-cycle one-shot: rapid single iteration through the bgPalette. Uses the
+   same colour stops as the continuous page-cycle but compressed into the
+   cycleAnimDuration window.
+   Pattern flash: ramps the pattern colour up to full intensity and back down,
+   even if the Background mode isn't currently 'pattern'. We force-apply the
+   pattern via a celebration override that briefly enables a default dot pattern
+   on the canvas. */
+@keyframes themeAcceptPageCycle {
+  0%   { background-color: var(--theme-page-bg-1, #05070C); }
+  14%  { background-color: var(--theme-page-bg-2, #05070C); }
+  28%  { background-color: var(--theme-page-bg-3, #05070C); }
+  42%  { background-color: var(--theme-page-bg-4, #05070C); }
+  57%  { background-color: var(--theme-page-bg-5, #05070C); }
+  71%  { background-color: var(--theme-page-bg-6, #05070C); }
+  85%  { background-color: var(--theme-page-bg-7, #05070C); }
+  100% { background-color: var(--theme-page-bg-1, #05070C); }
+}
+/* Body prefix bumps specificity to (0,2,1) so the burst rule wins over
+   body.theme-bg-page-cycle .irlid-qr-fullscreen when celebration fires while
+   the Background is also in page-cycle mode. Source order then favours burst. */
+body .irlid-qr-fullscreen.cycle-burst-page,
+body #venueQRWrap.cycle-burst-page {
+  animation: themeAcceptPageCycle var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
+}
+@keyframes themeAcceptPatternFlash {
+  0%, 100% { --theme-pattern-fg: rgba(88, 166, 255, 0.0);  --theme-pattern-fg-2: rgba(88, 166, 255, 0.0); }
+  35%, 65% { --theme-pattern-fg: rgba(88, 166, 255, 0.55); --theme-pattern-fg-2: rgba(88, 166, 255, 0.30); }
+}
+body .irlid-qr-fullscreen.cycle-burst-pattern,
+body #venueQRWrap.cycle-burst-pattern {
+  background-image: radial-gradient(circle, var(--theme-pattern-fg) 2px, transparent 2.5px);
+  background-size: 24px 24px;
+  animation: themeAcceptPatternFlash var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
+}
+/* ============== /Batch 6.5f ============== */
 /* ============== /Batch 6.5d → 6.5e ============== */
 /* ============== /Batch 6.5b ============== */
 
@@ -1425,14 +1524,26 @@ body.theme-bg-pattern[data-pattern="custom"] #venueQRWrap {
                     <button type="button" class="btn btn-secondary btn-sm" id="themePreviewBgAnim" data-bg-mode-hide="off">Preview background</button>
                   </div>
 
-                  <div class="theme-anim-panel">
+                  <div class="theme-anim-duplicators" aria-label="Duplicate settings between Background and Celebration">
+                    <span class="dup-label">Bg→Cel</span>
+                    <button type="button" class="dup-btn" id="themeDupBgToCel" title="Copy Background settings (mode + palette) to Celebration" aria-label="Copy Background settings to Celebration">→</button>
+                    <button type="button" class="dup-btn" id="themeDupCelToBg" title="Copy Celebration settings (mode + palette) to Background" aria-label="Copy Celebration settings to Background">←</button>
+                    <span class="dup-label">Cel→Bg</span>
+                  </div>
+
+                  <div class="theme-anim-panel" id="themeCycleAnimPanel" data-cycle-mode="glow">
                     <h5>Celebration Animation</h5>
-                    <p class="theme-anim-sub">A burst that cycles through the palette when a check-in succeeds. Disable for venues that prefer minimal motion.</p>
-                    <label class="theme-anim-toggle">
-                      <input type="checkbox" id="themeAcceptCycleEnabled" checked />
-                      <span>Enabled</span>
+                    <p class="theme-anim-sub">A burst that fires on successful check-in. Mirrors Background's mode options but runs as a one-shot using the Celebration palette and Cycle duration below.</p>
+                    <label class="theme-anim-row">
+                      <span>Mode</span>
+                      <select id="themeCycleMode" class="theme-anim-select">
+                        <option value="off">Off (no celebration)</option>
+                        <option value="page">Page colour cycle (one-shot)</option>
+                        <option value="glow">QR glow halo (default)</option>
+                        <option value="pattern">Pattern flash</option>
+                      </select>
                     </label>
-                    <div class="theme-anim-speed">
+                    <div class="theme-anim-speed" data-cycle-mode-hide="off">
                       <label>
                         <span>Cycle duration</span>
                         <span class="theme-anim-speed-value" id="themeCycleAnimDurationValue">1.4s</span>
@@ -1443,7 +1554,7 @@ body.theme-bg-pattern[data-pattern="custom"] #venueQRWrap {
                         <span>Slow (5s)</span>
                       </div>
                     </div>
-                    <button type="button" class="btn btn-secondary btn-sm" id="themePreviewAcceptCycle">Preview celebration</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="themePreviewAcceptCycle" data-cycle-mode-hide="off">Preview celebration</button>
                   </div>
 
                 </div>
@@ -3103,12 +3214,12 @@ const THEME_DEFAULTS = {
   palette:    ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
   bgPalette:  ['#F44336','#FF9800','#FFEB3B','#4CAF50','#2196F3','#673AB7','#E91E63'],
   darkMode: true,
-  acceptCycleEnabled: true,
-  // Batch 6.5b → 6.5e
-  bgMode: 'glow',            // 'off' | 'page' | 'glow' | 'pattern' (replaces legacy bgAnimEnabled)
+  // Batch 6.5b → 6.5f
+  bgMode: 'glow',            // 'off' | 'page' | 'glow' | 'pattern' (Background; replaces legacy bgAnimEnabled)
   bgIntensity: 'muted',      // 'muted' | 'vibrant' — applies when bgMode === 'page' (renamed from bgPalette in 6.5e)
   bgPattern: 'dots',         // pattern id — applies when bgMode === 'pattern'
   bgImageUrl: null,          // Tier 3 — admin-uploaded background image (v6+)
+  cycleMode: 'glow',         // 'off' | 'page' | 'glow' | 'pattern' (Celebration; replaces legacy acceptCycleEnabled in 6.5f)
   bgAnimDuration: 30,        // seconds for one full background cycle (range 5..120)
   cycleAnimDuration: 1.4     // seconds for one celebration burst (range 0.5..5)
 };
@@ -3229,6 +3340,39 @@ function applyThemeVars(theme) {
   // Sync the panel attribute so conditional rows in the Settings UI show/hide.
   const bgPanel = document.getElementById('themeBgAnimPanel');
   if (bgPanel) bgPanel.setAttribute('data-bg-mode', theme.bgMode || 'glow');
+  const cyclePanel = document.getElementById('themeCycleAnimPanel');
+  if (cyclePanel) cyclePanel.setAttribute('data-cycle-mode', theme.cycleMode || 'glow');
+
+  // Batch 6.5f — write the dynamic pattern colour keyframe so patterns drift
+  // through the bgPalette in sync with the cycle. CSS @property + JS-injected
+  // keyframe is the cleanest way: keyframes can't read CSS variables directly.
+  _renderPatternColorKeyframe(bgPal);
+}
+
+// Generates @keyframes themePatternColorCycle from the active bgPalette.
+// Re-injected on every applyThemeVars call so palette edits update the
+// drifting pattern colour live. Stops are evenly distributed across the
+// active palette length (1..7 colours).
+function _renderPatternColorKeyframe(palette) {
+  const pal = (palette && palette.length) ? palette : THEME_DEFAULTS.bgPalette;
+  const n = Math.max(1, Math.min(7, pal.length));
+  let css = '@keyframes themePatternColorCycle {\n';
+  for (let i = 0; i <= n; i++) {
+    const idx = i % n;
+    const stop = (i / n) * 100;
+    const c = pal[idx] || pal[0];
+    const fg  = _hexToRgba(c, 0.22);
+    const fg2 = _hexToRgba(c, 0.12);
+    css += '  ' + stop.toFixed(2) + '% { --theme-pattern-fg: ' + fg + '; --theme-pattern-fg-2: ' + fg2 + '; }\n';
+  }
+  css += '}\n';
+  let styleEl = document.getElementById('themePatternKeyframe');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'themePatternKeyframe';
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = css;
 }
 
 function updateQrContrastHint(fgHex) {
@@ -3334,31 +3478,70 @@ function _openPaletteSwatchEditor(index, paletteKey) {
 }
 
 function previewAcceptCycle() {
-  const el = document.getElementById('themePreviewQrCycle');
-  if (!el) return;
-  el.classList.remove('cycling');
-  void el.offsetWidth;
-  el.classList.add('cycling');
-  setTimeout(function () { el.classList.remove('cycling'); }, 1500);
+  // Batch 6.5f — Preview celebration now fires the actual triggerAcceptCycleAnimation
+  // dispatch so the user sees what their selected cycleMode looks like. Falls back
+  // to the small in-panel preview for glow mode so users get a visual cue even
+  // when the venue QR isn't on screen.
+  const mode = (activeTheme && activeTheme.cycleMode) || 'glow';
+  if (mode === 'off') return;
+  if (mode === 'glow') {
+    const el = document.getElementById('themePreviewQrCycle');
+    if (el) {
+      el.classList.remove('cycling');
+      void el.offsetWidth;
+      el.classList.add('cycling');
+      const ms = Math.max(600, ((activeTheme && activeTheme.cycleAnimDuration) || 1.4) * 1000 + 200);
+      setTimeout(function () { el.classList.remove('cycling'); }, ms);
+    }
+  }
+  // For all non-off modes, also fire the canonical dispatch so any visible canvas
+  // (venue QR wrap on Check-in tab, fullscreen overlay if open) sees the burst.
+  triggerAcceptCycleAnimation();
 }
 
 function triggerAcceptCycleAnimation() {
   // Public hook — call this from check-in success paths to fire the celebration.
-  if (!activeTheme.acceptCycleEnabled) return;
-  const candidates = [
-    document.querySelector('.scan-panel.flash-success'),
-    document.querySelector('.checkin-success-overlay'),
-    document.querySelector('.scan-panel'),
-    // Batch 6.5c — also burst on the fullscreen QR overlay if it's currently open.
-    document.querySelector('.irlid-qr-fullscreen.active .irlid-qr-fullscreen-holder')
+  // Batch 6.5f — branches on cycleMode rather than acceptCycleEnabled boolean.
+  // Modes:
+  //   off     — no animation at all
+  //   glow    — palette burst around QR boxes (existing behaviour, unchanged)
+  //   page    — one-shot canvas colour cycle (uses bgPalette via page-bg vars)
+  //   pattern — temporarily reveals the pattern overlay on the QR canvas
+  const mode = (activeTheme && activeTheme.cycleMode) || 'glow';
+  if (mode === 'off') return;
+  const ms = Math.max(600, ((activeTheme && activeTheme.cycleAnimDuration) || 1.4) * 1000 + 200);
+
+  if (mode === 'glow') {
+    // Existing behaviour — burst on scan-panel + checkin overlays + fullscreen holder.
+    const candidates = [
+      document.querySelector('.scan-panel.flash-success'),
+      document.querySelector('.checkin-success-overlay'),
+      document.querySelector('.scan-panel'),
+      document.querySelector('.irlid-qr-fullscreen.active .irlid-qr-fullscreen-holder')
+    ].filter(Boolean);
+    candidates.forEach(function (el) {
+      el.classList.remove('cycling');
+      void el.offsetWidth;
+      el.classList.add('cycling');
+      setTimeout(function () { el.classList.remove('cycling'); }, ms);
+    });
+    return;
+  }
+
+  // For 'page' and 'pattern' celebration variants, target the QR canvas
+  // (.irlid-qr-fullscreen + #venueQRWrap) with a temporary class that runs the
+  // appropriate one-shot animation. After the burst, the class is removed and
+  // the canvas reverts to whatever the Background mode is doing.
+  const canvasTargets = [
+    document.querySelector('.irlid-qr-fullscreen.active'),
+    document.getElementById('venueQRWrap')
   ].filter(Boolean);
-  candidates.forEach(function (el) {
-    el.classList.remove('cycling');
+  const burstClass = 'cycle-burst-' + mode; // 'cycle-burst-page' or 'cycle-burst-pattern'
+  canvasTargets.forEach(function (el) {
+    el.classList.remove(burstClass);
     void el.offsetWidth;
-    el.classList.add('cycling');
-    // Match the configured cycle duration plus a small buffer instead of a hardcoded 1500ms.
-    const ms = Math.max(600, ((activeTheme && activeTheme.cycleAnimDuration) || 1.4) * 1000 + 200);
-    setTimeout(function () { el.classList.remove('cycling'); }, ms);
+    el.classList.add(burstClass);
+    setTimeout(function () { el.classList.remove(burstClass); }, ms);
   });
 }
 
@@ -3368,10 +3551,11 @@ async function loadThemeFromServer() {
   try {
     const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
     const t = (res && res.settings && res.settings.theme) || {};
-    // Batch 6.5d → 6.5e — backward compat:
+    // Batch 6.5d → 6.5f — backward compat:
     //   • Legacy bgAnimEnabled (boolean, pre-6.5d) → bgMode = 'off' or 'glow'.
     //   • Legacy bgPalette (string 'muted'|'vibrant', 6.5d only) → bgIntensity.
     //   • Old shape may not have bgPalette as array yet — fall back to defaults.
+    //   • Legacy acceptCycleEnabled (boolean, pre-6.5f) → cycleMode = 'off' or 'glow'.
     let bgMode = t.bgMode;
     if (!bgMode) bgMode = (t.bgAnimEnabled === false) ? 'off' : THEME_DEFAULTS.bgMode;
     if (['off','page','glow','pattern'].indexOf(bgMode) === -1) bgMode = THEME_DEFAULTS.bgMode;
@@ -3381,6 +3565,9 @@ async function loadThemeFromServer() {
     const bgPaletteArr = Array.isArray(t.bgPalette) && t.bgPalette.length
       ? t.bgPalette.slice(0, 7)
       : THEME_DEFAULTS.bgPalette.slice();
+    let cycleMode = t.cycleMode;
+    if (!cycleMode) cycleMode = (t.acceptCycleEnabled === false) ? 'off' : THEME_DEFAULTS.cycleMode;
+    if (['off','page','glow','pattern'].indexOf(cycleMode) === -1) cycleMode = THEME_DEFAULTS.cycleMode;
     activeTheme = {
       primary: t.primary || THEME_DEFAULTS.primary,
       accent:  t.accent  || THEME_DEFAULTS.accent,
@@ -3388,11 +3575,11 @@ async function loadThemeFromServer() {
       palette: Array.isArray(t.palette) && t.palette.length ? t.palette.slice(0, 7) : THEME_DEFAULTS.palette.slice(),
       bgPalette: bgPaletteArr,
       darkMode: t.darkMode === undefined ? THEME_DEFAULTS.darkMode : t.darkMode,
-      acceptCycleEnabled: t.acceptCycleEnabled === undefined ? THEME_DEFAULTS.acceptCycleEnabled : t.acceptCycleEnabled,
       bgMode: bgMode,
       bgIntensity: bgIntensity,
       bgPattern: typeof t.bgPattern === 'string' && t.bgPattern ? t.bgPattern : THEME_DEFAULTS.bgPattern,
       bgImageUrl: typeof t.bgImageUrl === 'string' && t.bgImageUrl ? t.bgImageUrl : null,
+      cycleMode: cycleMode,
       bgAnimDuration:    typeof t.bgAnimDuration    === 'number' ? t.bgAnimDuration    : THEME_DEFAULTS.bgAnimDuration,
       cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
     };
@@ -3430,8 +3617,9 @@ function writeThemeToUI() {
   rebuildPaletteUI();
   updateQrContrastHint(activeTheme.qrFg);
   renderThemePreviewQr(activeTheme.qrFg);
-  const cycleEl = document.getElementById('themeAcceptCycleEnabled');
-  if (cycleEl) cycleEl.checked = !!activeTheme.acceptCycleEnabled;
+  // Batch 6.5f — Celebration Mode select replaces the old Enabled checkbox.
+  const cycleModeEl = document.getElementById('themeCycleMode');
+  if (cycleModeEl) cycleModeEl.value = activeTheme.cycleMode || 'glow';
   const modeRadios = document.querySelectorAll('input[name="themeMode"]');
   const v = activeTheme.darkMode === 'auto' ? 'auto' : (activeTheme.darkMode ? 'dark' : 'light');
   modeRadios.forEach(function (r) { r.checked = (r.value === v); });
@@ -3503,8 +3691,33 @@ function wireThemePanel() {
     });
   });
 
-  const cycleEl = document.getElementById('themeAcceptCycleEnabled');
-  if (cycleEl) cycleEl.addEventListener('change', function (e) { activeTheme.acceptCycleEnabled = !!e.target.checked; });
+  // Batch 6.5f — Celebration Mode select. Replaces the old Enabled checkbox.
+  const cycleModeEl = document.getElementById('themeCycleMode');
+  if (cycleModeEl) cycleModeEl.addEventListener('change', function (e) {
+    const v = e.target.value;
+    activeTheme.cycleMode = ['off','page','glow','pattern'].indexOf(v) !== -1 ? v : 'glow';
+    applyThemeVars(activeTheme); // updates the panel data-cycle-mode attribute for visibility
+  });
+
+  // Batch 6.5f — Duplicate buttons. Bg → Cel copies bgMode + bgPalette into
+  // cycleMode + palette. Cel → Bg copies cycleMode + palette into bgMode + bgPalette.
+  // Durations and intensity stay independent (different ranges/semantics).
+  const dupBgToCel = document.getElementById('themeDupBgToCel');
+  if (dupBgToCel) dupBgToCel.addEventListener('click', function () {
+    activeTheme.cycleMode = activeTheme.bgMode;
+    activeTheme.palette = (activeTheme.bgPalette || []).slice(0, 7);
+    if (activeTheme.palette.length === 0) activeTheme.palette = THEME_DEFAULTS.palette.slice();
+    writeThemeToUI();
+    applyThemeVars(activeTheme);
+  });
+  const dupCelToBg = document.getElementById('themeDupCelToBg');
+  if (dupCelToBg) dupCelToBg.addEventListener('click', function () {
+    activeTheme.bgMode = activeTheme.cycleMode;
+    activeTheme.bgPalette = (activeTheme.palette || []).slice(0, 7);
+    if (activeTheme.bgPalette.length === 0) activeTheme.bgPalette = THEME_DEFAULTS.bgPalette.slice();
+    writeThemeToUI();
+    applyThemeVars(activeTheme);
+  });
 
   // Celebration palette buttons (existing).
   const addBtn = document.getElementById('themePaletteAdd');
@@ -3629,8 +3842,9 @@ function wireThemePanel() {
       // to the fullscreen overlay so the third picker actually changes the QR.
       colorDark: activeTheme.qrFg || '#000000'
     });
-    // Trigger a celebration burst after a beat for the demo flourish
-    if (activeTheme.acceptCycleEnabled) {
+    // Trigger a celebration burst after a beat for the demo flourish.
+    // Batch 6.5f — gate on cycleMode !== 'off' instead of acceptCycleEnabled.
+    if (activeTheme.cycleMode && activeTheme.cycleMode !== 'off') {
       setTimeout(function () { triggerAcceptCycleAnimation(); }, 600);
     }
   });
