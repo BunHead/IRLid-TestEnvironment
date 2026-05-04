@@ -966,12 +966,18 @@ async function orgLoginClaim(request, env) {
   // to the login context so an envelope produced here cannot be replayed in any other
   // v5-signing context (PROTOCOL.md §14.10). The challenge inside webauthn.clientData
   // must equal SHA-256-b64url(canonical({nonce, type:"irlid_login_v5"})). v5-only (§14.13).
+  // TEST-ENV DEBUG: capture the specific verifier error so we can diagnose failures
+  // without deploy cycles. PROTOCOL.md §14.10 anti-enumeration only matters in
+  // production with a real user database; test env has one user (Captain), so
+  // verbose errors trade nothing.
   let envelopeOk = false;
+  let envelopeErr = "";
   try {
     await verifyV5Envelope({ nonce, type: "irlid_login_v5" }, pub_jwk, sig, webauthn);
     envelopeOk = true;
-  } catch (_) {
+  } catch (e) {
     envelopeOk = false;
+    envelopeErr = (e && e.message) ? String(e.message) : String(e);
   }
 
   if (!envelopeOk) {
@@ -981,18 +987,18 @@ async function orgLoginClaim(request, env) {
       await env.DB.prepare(
         "UPDATE login_challenges SET fail_count = ?, locked_until = ? WHERE nonce = ?"
       ).bind(newFails, tNow + LOGIN_CLAIM_COOLDOWN_S, nonce).run();
-      return json({ error: "rate_limited", retry_after: LOGIN_CLAIM_COOLDOWN_S }, 429);
+      return json({ error: "rate_limited", retry_after: LOGIN_CLAIM_COOLDOWN_S, debug_reason: "envelope_failed: " + envelopeErr }, 429);
     } else {
       await env.DB.prepare(
         "UPDATE login_challenges SET fail_count = ? WHERE nonce = ?"
       ).bind(newFails, nonce).run();
-      return genericAuthFailed();
+      return json({ error: "auth_failed", debug_reason: "envelope_verify_failed", debug_detail: envelopeErr }, 401);
     }
   }
 
   // Envelope verified. Compute pub_fp (matches existing device_pub_fp pattern, 16 chars).
   const fp = await deviceKeyFp(pub_jwk);
-  if (!fp) return genericAuthFailed();
+  if (!fp) return json({ error: "auth_failed", debug_reason: "fp_compute_failed" }, 401);
 
   // Look up or bootstrap user.
   let user = await env.DB.prepare(
@@ -1003,9 +1009,9 @@ async function orgLoginClaim(request, env) {
     // Not a known user. Permitted only if this fp matches BOOTSTRAP_DEVELOPER_FP (§14.6).
     const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
     if (!bootstrapFp || fp !== bootstrapFp) {
-      // Generic 401 to prevent enumeration oracle. Increment fail_count too —
-      // an attacker probing random keys shouldn't get unlimited tries even if
-      // the envelope itself was technically valid.
+      // TEST-ENV DEBUG: include diagnostic detail so Captain can see WHICH path
+      // failed (no bootstrap fp set vs fp != bootstrap fp). Production v5.5 will
+      // restore the generic auth_failed per §14.10.
       const newFails = (challenge.fail_count || 0) + 1;
       if (newFails >= LOGIN_CLAIM_FAIL_LIMIT) {
         await env.DB.prepare(
@@ -1016,7 +1022,14 @@ async function orgLoginClaim(request, env) {
         await env.DB.prepare(
           "UPDATE login_challenges SET fail_count = ? WHERE nonce = ?"
         ).bind(newFails, nonce).run();
-        return genericAuthFailed();
+        return json({
+          error: "auth_failed",
+          debug_reason: !bootstrapFp ? "no_bootstrap_fp_configured" : "fp_mismatch",
+          debug_computed_fp: fp,
+          debug_bootstrap_fp_len: bootstrapFp ? bootstrapFp.length : 0,
+          debug_bootstrap_fp_first4: bootstrapFp ? bootstrapFp.slice(0, 4) : "",
+          debug_bootstrap_fp_last4: bootstrapFp ? bootstrapFp.slice(-4) : ""
+        }, 401);
       }
     }
     // Bootstrap path — create the founding developer user row.
