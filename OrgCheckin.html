@@ -421,6 +421,61 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   --scan-pad: #e6eef9;
 }
 
+/* Light-mode panel overrides — Captain's 4 May feedback: hard-coded rgba(255,255,255,…)
+   panel backgrounds in dark mode look stark on a white page in light mode. Override
+   the most-visible cards/panels here so they adopt a light surface that matches the
+   page. Other rgba(255,255,255,…) backgrounds further down the file remain dark-only;
+   if more start looking out of place we can extend this block. */
+:root[data-theme="light"] .settings-card {
+  background: linear-gradient(180deg, #ffffff, #f3f5f8);
+  color: var(--text);
+}
+:root[data-theme="light"] .settings-group,
+:root[data-theme="light"] .theme-palette-block,
+:root[data-theme="light"] .theme-anim-panel {
+  background: rgba(0,0,0,0.025);
+  border-color: rgba(0,0,0,0.08);
+  color: var(--text);
+}
+:root[data-theme="light"] .theme-palette-head strong,
+:root[data-theme="light"] .theme-anim-panel h5 {
+  color: #1f2328;
+}
+:root[data-theme="light"] .theme-anim-toggle,
+:root[data-theme="light"] .theme-anim-row {
+  color: #1f2328;
+}
+:root[data-theme="light"] .theme-anim-select {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .theme-hex-input {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .theme-anim-duplicators .dup-btn {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .theme-anim-duplicators .dup-btn:hover {
+  background: #f0f3f7;
+  border-color: var(--blue);
+}
+:root[data-theme="light"] .org-picker-card {
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--text);
+}
+:root[data-theme="light"] .org-picker-card:hover {
+  background: #f6f8fa;
+  border-color: var(--blue);
+}
+:root[data-theme="light"] .org-picker-card .org-picker-name { color: var(--text); }
+:root[data-theme="light"] .org-picker-card .org-picker-meta { color: var(--muted); }
+
 /* Theme variables — set dynamically by JS, used by theme-aware elements. */
 :root {
   --theme-primary: #3FB950;
@@ -1622,9 +1677,22 @@ body #venueQRWrap.cycle-burst-pattern {
                         <option value="weave">Weave</option>
                         <option value="chevron">Chevrons</option>
                         <option value="iso">Isometric</option>
-                        <option value="custom" disabled>Custom image (coming in v6)</option>
+                        <option value="custom">Custom image (PNG / SVG / JPEG)</option>
                       </select>
                     </label>
+                    <!-- Custom-image upload (revealed when Pattern = Custom image).
+                         Inline data URI; max 200KB binary. Captain's 4 May feedback:
+                         "lets start small and add a note about needing to be the
+                         right size and a legal thing about it being the responsibility
+                         if abused." -->
+                    <div class="theme-anim-row" data-bg-mode-show="pattern" id="themeBgImageUploadRow" style="display:none;">
+                      <span>Upload image</span>
+                      <input type="file" id="themeBgImageUpload" accept="image/png,image/svg+xml,image/jpeg" class="theme-anim-select" />
+                    </div>
+                    <div class="theme-bg-image-note" data-bg-mode-show="pattern" id="themeBgImageNote" style="display:none; font-size:11px; color:var(--muted); margin-top:4px; line-height:1.4;">
+                      PNG, SVG, or JPEG up to <strong>200&nbsp;KB</strong>. Smaller is better — patterns tile, so 64×64 is plenty. Larger files inflate per-org storage.
+                      <br><strong>Responsibility:</strong> upload only images you own or have rights to. IRLid does not pre-screen uploads; abuse is your responsibility under the test-env terms.
+                    </div>
                     <div class="theme-anim-speed" data-bg-mode-hide="off">
                       <label>
                         <span>Cycle duration</span>
@@ -2084,6 +2152,19 @@ async function handleQrLoginSuccess(data) {
   document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
     el.style.display = data.is_developer ? '' : 'none';
   });
+
+  // Batch C tidy 2 — prototype role switcher defaults to the user's actual
+  // active role. Developer users see the Developer view by default (was
+  // hardcoded to lead_admin); lead_admins see Lead Admin; etc. Captain spotted
+  // this on first sign-in: defaulted to Lead Admin even though he's developer.
+  // The prototype switcher remains as-is for testing other-role views.
+  if (data.is_developer) {
+    const roleSelect = document.getElementById('prototypeRoleSelect');
+    if (roleSelect) {
+      roleSelect.value = 'developer';
+      if (typeof setPrototypeRole === 'function') setPrototypeRole('developer');
+    }
+  }
 
   const status = document.getElementById('qrLoginStatus');
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
@@ -4286,13 +4367,51 @@ function wireThemePanel() {
     activeTheme.bgIntensity = e.target.value === 'vibrant' ? 'vibrant' : 'muted';
     applyThemeVars(activeTheme);
   });
-  // Pattern picker (Batch 6.5d). 8 built-in CSS patterns + 'custom' Tier-3 placeholder.
+  // Pattern picker (Batch 6.5d → 4 May tidy 2). 8 built-in CSS patterns + 'custom'
+  // (now live, was Tier-3 placeholder, ships PNG/SVG/JPEG inline data-URI upload).
   const bgPatternEl = document.getElementById('themeBgPattern');
   if (bgPatternEl) bgPatternEl.addEventListener('change', function (e) {
     const v = e.target.value;
-    if (v === 'custom') return; // Tier-3 placeholder — no-op until v6 ships upload.
     activeTheme.bgPattern = v;
+    // Show/hide custom-image upload row + note based on selection.
+    const uploadRow = document.getElementById('themeBgImageUploadRow');
+    const note      = document.getElementById('themeBgImageNote');
+    if (uploadRow) uploadRow.style.display = (v === 'custom') ? 'flex' : 'none';
+    if (note)      note.style.display      = (v === 'custom') ? 'block' : 'none';
     applyThemeVars(activeTheme);
+  });
+
+  // Custom-background image upload (4 May tidy 2). Reads file → validates type/size
+  // → converts to data URI → stores in activeTheme.bgImageUrl → applies. Worker
+  // persistence is via the existing /org/settings POST (settings_json column);
+  // validator bumped to allow ~225KB binary (data URI ~300K chars).
+  const bgImageUpload = document.getElementById('themeBgImageUpload');
+  if (bgImageUpload) bgImageUpload.addEventListener('change', function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!/^image\/(png|svg\+xml|jpeg)$/i.test(file.type)) {
+      showToast('Only PNG, SVG, or JPEG allowed', true);
+      e.target.value = '';
+      return;
+    }
+    const MAX_BYTES = 200 * 1024;
+    if (file.size > MAX_BYTES) {
+      showToast('Image too large (' + Math.round(file.size/1024) + ' KB > 200 KB max). Compress first.', true);
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+      const dataUri = ev.target.result;
+      activeTheme.bgImageUrl = dataUri;
+      activeTheme.bgPattern = 'custom';
+      const patternEl = document.getElementById('themeBgPattern');
+      if (patternEl) patternEl.value = 'custom';
+      applyThemeVars(activeTheme);
+      showToast('Custom background loaded (' + Math.round(file.size/1024) + ' KB). Click Save theme to persist.');
+    };
+    reader.onerror = function () { showToast('Could not read file', true); };
+    reader.readAsDataURL(file);
   });
   const bgDurEl = document.getElementById('themeBgAnimDuration');
   if (bgDurEl) bgDurEl.addEventListener('input', function (e) {

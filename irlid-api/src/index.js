@@ -1049,11 +1049,14 @@ async function orgLoginClaim(request, env) {
       }
     }
     // Bootstrap path — create the founding developer user row.
+    // Display name "Developer (Super-Admin)" per Captain's 4 May feedback —
+    // most observers won't parse "Captain" but will understand "Super-Admin".
     const userId = randomToken().slice(0, 26); // ULID-like length, opaque
+    const bootstrapDisplayName = "Developer (Super-Admin)";
     await env.DB.prepare(
       "INSERT INTO portal_users (id, pub_jwk, pub_fp, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).bind(userId, JSON.stringify(pub_jwk), fp, "Captain (developer)", tNow, tNow).run();
-    user = { id: userId, display_name: "Captain (developer)" };
+    ).bind(userId, JSON.stringify(pub_jwk), fp, bootstrapDisplayName, tNow, tNow).run();
+    user = { id: userId, display_name: bootstrapDisplayName };
   }
 
   // Issue session.
@@ -1394,10 +1397,12 @@ async function orgUpdateSettings(request, env) {
       if (PATTERNS.indexOf(t.bgPattern) === -1) return "theme.bgPattern not recognised";
     }
     if (t.bgImageUrl !== undefined && t.bgImageUrl !== null) {
-      // Tier-3 hook — accept https:// URLs or data: URIs only, length-capped to keep
-      // settings_json sane. The UI cannot set this in v6.5; reserved for v6+.
+      // Accepts https:// URLs (for hosted images) or data:image/ URIs (for inline
+      // upload — went live in 4 May tidy 2). Length cap 300_000 chars allows ~225KB
+      // binary as a base64 data URI. Frontend caps uploads at 200KB binary
+      // (~270K chars) so 300K leaves a small buffer for safety.
       if (typeof t.bgImageUrl !== "string") return "theme.bgImageUrl must be a string or null";
-      if (t.bgImageUrl.length > 8192) return "theme.bgImageUrl too long (max 8192 chars)";
+      if (t.bgImageUrl.length > 300000) return "theme.bgImageUrl too long (max 300000 chars ≈ 225KB binary)";
       if (!/^(https:\/\/|data:image\/)/i.test(t.bgImageUrl)) return "theme.bgImageUrl must be an https:// URL or data:image/ URI";
     }
     return null;
