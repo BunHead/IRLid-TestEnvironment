@@ -1324,40 +1324,10 @@ body #venueQRWrap.cycle-burst-pattern {
           </div>
         </div>
 
-        <div>
-          <div class="card">
-            <div class="card-header"><div class="card-title">⚙ Quick Settings</div></div>
-            <div class="card-body">
-              <div class="section-label">Min Trust Score</div>
-              <div class="slider-label">Threshold <span id="sliderVal">50% — Standard</span></div>
-              <input type="range" min="20" max="100" value="50" id="scoreSlider" oninput="updateSlider(this)">
-
-              <div class="section-label">Options</div>
-              <div class="toggle-row">
-                <div class="toggle-info"><div class="tname">Bio-metric Required</div><div class="tdesc">Face ID / fingerprint mandatory</div></div>
-                <div class="toggle off" id="togBio" onclick="togToggle('bio')"></div>
-              </div>
-              <div class="toggle-row">
-                <div class="toggle-info"><div class="tname">Privacy Mode</div><div class="tdesc">Store GPS as SHA-256 hash only</div></div>
-                <div class="toggle on" id="togPrivacy" onclick="togToggle('privacy')"></div>
-              </div>
-              <div class="toggle-row">
-                <div class="toggle-info"><div class="tname">Check-out Required</div><div class="tdesc">Record departure time</div></div>
-                <div class="toggle on" id="togCheckout" onclick="togToggle('checkout')"></div>
-              </div>
-              <div class="toggle-row">
-                <div class="toggle-info"><div class="tname">Return Allowed</div><div class="tdesc">Permit attendee re-entry after leaving</div></div>
-                <div class="toggle on" id="togReturnAllowed" onclick="togToggle('returnAllowed')"></div>
-              </div>
-              <div class="toggle-row">
-                <div class="toggle-info"><div class="tname">Anonymous Mode</div><div class="tdesc">Count only — no names stored</div></div>
-                <div class="toggle off" id="togAnon" onclick="togToggle('anon')"></div>
-              </div>
-
-              <button class="btn btn-primary" style="width:100%;margin-top:18px;" onclick="saveSettings()">Save Quick Settings</button>
-            </div>
-          </div>
-        </div>
+        <!-- Batch 6.5g — Legacy Quick Settings card removed. The card was already
+             hidden in prototype-checkin mode via display:none, but its tog* ids
+             were referenced by setToggle/collectSettingsFromQuick/togToggle —
+             the canonical Settings panel covers everything it did. -->
       </div>
     </div>
 
@@ -1861,9 +1831,9 @@ function buildVenuePayload() {
   return `${baseUrl}/org-entry.html?${qp.toString()}`;
 }
 function applySettingsToUI() {
-  if (document.getElementById('scoreSlider')) { document.getElementById('scoreSlider').value = settings.minScore || 50; updateSlider(document.getElementById('scoreSlider')); }
+  // Batch 6.5g — legacy Quick Settings refs removed (scoreSlider, togBio, togPrivacy,
+  // togCheckout, togReturnAllowed, togAnon). Canonical Settings panel is the only path.
   if (document.getElementById('minimumTrustScore')) document.getElementById('minimumTrustScore').value = normalizeScore(settings.minScore);
-  setToggle('togBio', !!settings.bioRequired); setToggle('togPrivacy', settings.privacyMode !== false); setToggle('togCheckout', settings.checkoutEnabled !== false); setToggle('togReturnAllowed', settings.returnAllowed !== false); setToggle('togAnon', !!settings.anonymousMode);
   if (document.getElementById('statMin')) document.getElementById('statMin').textContent = (settings.minScore || 50) + '%';
   if (document.getElementById('checkoutLabel')) document.getElementById('checkoutLabel').textContent = (settings.checkoutEnabled !== false) ? '✓ Check-out enabled' : 'Check-out disabled';
   updateChromeLogo();
@@ -1886,26 +1856,20 @@ function collectSettingsFromCanonical() {
     allowIdPhotoCapture: !!document.getElementById('enableIdPhotoCapture')?.checked
   };
 }
-function collectSettingsFromQuick() {
-  return {
-    ...settings,
-    minScore: normalizeScore(document.getElementById('scoreSlider')?.value, 50),
-    bioRequired: document.getElementById('togBio')?.classList.contains('on') ?? false,
-    privacyMode: document.getElementById('togPrivacy')?.classList.contains('on') ?? true,
-    checkoutEnabled: document.getElementById('togCheckout')?.classList.contains('on') ?? true,
-    returnAllowed: document.getElementById('togReturnAllowed')?.classList.contains('on') ?? true,
-    anonymousMode: document.getElementById('togAnon')?.classList.contains('on') ?? false
-  };
-}
+// Batch 6.5g — collectSettingsFromQuick() removed. The canonical Settings panel
+// is the only source; the 'quick' branch was tied to the now-deleted Quick Settings
+// card and has no live entry point. syncAllSettingsFrom() retains a 'source'
+// parameter for callsite-clarity but only honours 'canonical'.
 function syncAllSettingsFrom(source) {
-  settings = source === 'canonical' ? collectSettingsFromCanonical() : collectSettingsFromQuick();
+  // 'source' is retained for documentation; only 'canonical' is meaningful since 6.5g.
+  settings = collectSettingsFromCanonical();
   saveJson(STORAGE_KEY_SETTINGS, settings);
   applySettingsToUI();
   syncPortalFromLegacy();
   renderPortalAll();
   generateVenueQR();
 }
-function saveSettings() { syncAllSettingsFrom(document.getElementById('panel-settings').classList.contains('active') ? 'canonical' : 'quick'); showToast('Settings saved locally'); }
+function saveSettings() { syncAllSettingsFrom('canonical'); showToast('Settings saved locally'); }
 function resetSettingsToDefaults() {
   settings = { minScore: 50, bioRequired: false, privacyMode: true, checkoutEnabled: true, returnAllowed: true, anonymousMode: false, logoUrl: '', welcomeMessage: 'Welcome. Please review and confirm your check-in.', redirectUrl: '', allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true, allowProofRecording: true, allowIdPhotoCapture: false };
   saveJson(STORAGE_KEY_SETTINGS, settings); applySettingsToUI(); syncPortalFromLegacy(); renderPortalAll(); generateVenueQR(); showToast('Settings reset to defaults');
@@ -2665,6 +2629,11 @@ async function manualCheckin() {
       else showManualCheckinResult('Recorded as walk-in (not on expected list)', 'info', true);
     }
     flashDoormanPanel(result.linked ? 'success' : 'walkin');
+    // Batch 6.5g — fire the celebration burst on successful check-in. Linked + walkin
+    // both qualify (walkin is a softer success — recorded, not on expected list — but
+    // still a positive outcome worth celebrating). Errors do NOT trigger; flashDoormanPanel
+    // already handles the red flash for those.
+    try { if (typeof triggerAcceptCycleAnimation === 'function') triggerAcceptCycleAnimation(); } catch(_) {}
     showToast('Check-in recorded');
   } catch (err) {
     flashDoormanPanel('error');
@@ -2852,26 +2821,15 @@ function importExpectedAttendeesFromFile(file) {
   reader.readAsText(file);
 }
 
-function updateSlider(el) {
-  const v = parseInt(el.value, 10); const label = v >= 80 ? 'High' : v >= 60 ? 'Good' : v >= 40 ? 'Standard' : 'Basic';
-  document.getElementById('sliderVal').textContent = `${v}% — ${label}`;
-  el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
-  const scoreInput = document.getElementById('minimumTrustScore');
-  if (scoreInput) scoreInput.value = normalizeScore(v);
-}
+// Batch 6.5g — updateSlider() / togToggle() / togToggleById() / setToggle() removed.
+// All four were exclusively used by the legacy Quick Settings card (deleted in 6.5g).
+// updateSettingsSlider() retained — still used by the canonical Settings panel slider.
 function updateSettingsSlider(el) {
   const v = parseInt(el.value, 10); const label = v >= 80 ? 'High' : v >= 60 ? 'Good' : v >= 40 ? 'Standard' : 'Basic';
   const scoreInput = document.getElementById('minimumTrustScore');
   if (scoreInput) scoreInput.value = normalizeScore(v);
   el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
 }
-function togToggle(key) {
-  const ids = { bio:'togBio', privacy:'togPrivacy', checkout:'togCheckout', returnAllowed:'togReturnAllowed', anon:'togAnon' };
-  const el = document.getElementById(ids[key]); if (!el) return;
-  el.classList.toggle('on'); el.classList.toggle('off');
-}
-function togToggleById(id) { const el = document.getElementById(id); if (!el) return; el.classList.toggle('on'); el.classList.toggle('off'); }
-function setToggle(id, on) { const el = document.getElementById(id); if (!el) return; el.className = 'toggle ' + (on ? 'on' : 'off'); }
 function openSettingsTo(anchorId) {
   showPanel('settings', document.getElementById('navSettings'));
   requestAnimationFrame(() => {

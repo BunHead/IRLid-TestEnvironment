@@ -563,6 +563,12 @@
   function scheduleReturn(target) {
     clearTimeout(returnTimer);
     if (!target) return;
+    // Batch 6.5g — Captain's 30 April directive: the orange "pick from list" screen
+    // stays up until human input. No auto-return-to-scan timeout while the identity
+    // picker is on screen. The picker itself adds .status-identity to <body> in
+    // renderIdentityPicker; this guard turns scheduleReturn into a no-op while it's
+    // visible. Inclusive-platform: cognitive time should not be timed out.
+    if (document.body.classList.contains('status-identity')) return;
     returnTimer = setTimeout(() => {
       window.location.href = target;
     }, timeoutMs);
@@ -869,9 +875,30 @@
     body.className = "";
     body.classList.add("status-review", "status-identity", "flash-review");
     iconShell.innerHTML = iconMarkup("review");
+
+    // Batch 6.5g — branch on IRLID_FIRST_SCAN_FLAGS.allowSelfSelection.
+    // When the org has explicitly disabled self-selection, the unrecognised-device
+    // path should not offer a list of names (privacy/process control). Render a
+    // "see organiser" message instead and stop here. Captain's accessibility note:
+    // no auto-redirect — the screen stays put until the attendee speaks to staff.
+    const flags = window.IRLID_FIRST_SCAN_FLAGS || {};
+    if (flags.allowSelfSelection === false) {
+      title.textContent = "See an organiser";
+      subtitle.textContent = "This phone is not yet linked to your name";
+      meta.textContent = "Please ask staff to add you to the expected list";
+      if (nextBtn) nextBtn.classList.remove("show");
+      document.getElementById("helloPanel")?.classList.remove("show");
+      picker.classList.remove("show");
+      applyBranding();
+      requestAnimationFrame(() => body.classList.add("ready"));
+      return;
+    }
+
     title.textContent = "Choose your name";
     subtitle.textContent = "This phone is not linked yet";
-    meta.textContent = "Select yourself from the expected list";
+    meta.textContent = flags.requireDoormanConfirmation
+      ? "Select yourself from the expected list — staff will confirm"
+      : "Select yourself from the expected list";
     if (nextBtn) nextBtn.classList.remove("show");
     document.getElementById("helloPanel")?.classList.remove("show");
     applyBranding();
