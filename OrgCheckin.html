@@ -3466,7 +3466,7 @@ function buildOutcomeUrl(mode) {
   const url = new URL(OUTCOME_BASES[mode]);
   url.searchParams.set('mode', mode);
   url.searchParams.set('ctx', 'doorman');
-  url.searchParams.set('attendee', 'Alice Smith');
+  url.searchParams.set('attendee', 'Sample Attendee');
   url.searchParams.set('score', String(normalizeScore(portalState.minimumTrustScore)));
   url.searchParams.set('orgCode', (portalState.orgCode || 'test').trim());
   url.searchParams.set('event', (portalState.eventCode || '').trim());
@@ -3768,6 +3768,42 @@ window.addEventListener('DOMContentLoaded', async () => {
     setSignedInUI(true); syncLegacyFromPortal(); await refreshAttendance(); await refreshExpectedAttendees(); showPanel('checkin'); generateVenueQR(); renderPortalAll();
     return;
   }
+  // Batch C polish 4 — restore QR-login session on refresh. handleQrLoginSuccess
+  // saves `irlid_login_session` (Bearer token + display_name + is_developer flag)
+  // alongside `currentOrg` (api_key for X-Org-Key dashboard ops). On a hard refresh
+  // those persist, but `qrLoginSession` is just an in-memory `let` so it goes back
+  // to null and the user gets bounced to the sign-in screen even though they're
+  // still authenticated server-side. Captain flagged this as a minor annoyance.
+  // Optimistic restore: if both are present, repopulate qrLoginSession + UI flags
+  // and load the dashboard. Session-only ops (/user/orgs, /user/create-org) will
+  // 401 if the session has actually expired and prompt re-auth then.
+  const savedSession = (() => {
+    try { return JSON.parse(localStorage.getItem('irlid_login_session') || 'null'); }
+    catch (_) { return null; }
+  })();
+  const savedOrg = loadJson(STORAGE_KEY_ORG, null);
+  if (savedSession && savedSession.session_token && savedOrg && savedOrg.api_key) {
+    qrLoginSession = savedSession;
+    document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
+      el.style.display = savedSession.is_developer ? '' : 'none';
+    });
+    if (savedSession.is_developer) {
+      const roleSelect = document.getElementById('prototypeRoleSelect');
+      if (roleSelect) {
+        roleSelect.value = 'developer';
+        if (typeof setPrototypeRole === 'function') setPrototypeRole('developer');
+      }
+    }
+    try {
+      await loadDashboardForOrg(savedOrg);
+      return; // skip sign-in UI fallthrough below
+    } catch (err) {
+      // Dashboard load failed — clear stale session and fall through to sign-in.
+      try { localStorage.removeItem('irlid_login_session'); } catch (_) {}
+      qrLoginSession = null;
+    }
+  }
+
   setSignedInUI(false); syncLegacyFromPortal(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
   const stored = loadJson(STORAGE_KEY_ORG, null);
   if (stored) {
@@ -4455,7 +4491,12 @@ function wireThemePanel() {
       alert('Fullscreen QR helper not available on this page.');
       return;
     }
-    const logoUrl = (typeof portalState !== 'undefined' && portalState && portalState.logoUrl) ? portalState.logoUrl : '';
+    // Batch C polish 4 — sample button fallback. If the org hasn't configured a
+    // logoUrl in Settings, fall back to the IRLid chrome logo so the demo always
+    // shows *something* branded. Captain spotted the empty-logo case during testing.
+    let logoUrl = (typeof portalState !== 'undefined' && portalState && portalState.logoUrl) ? portalState.logoUrl : '';
+    if (!logoUrl && typeof chromeLogoUrl === 'function') logoUrl = chromeLogoUrl();
+    if (!logoUrl) logoUrl = 'logo.png';
     const orgName = (typeof currentOrg !== 'undefined' && currentOrg && currentOrg.name) ? currentOrg.name : 'IRLid';
     window.IRLidQrFullscreen.open({
       payload: 'https://irlid.co.uk/?demo=theme&org=' + encodeURIComponent(orgName),

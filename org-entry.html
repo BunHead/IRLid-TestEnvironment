@@ -910,7 +910,26 @@
       identityState.query = search.value.trim().toLowerCase();
       renderIdentityRows();
     };
-    document.getElementById("identityWalkinBtn").onclick = () => continueVenueWalkin({ anonymous: true });
+    // Batch C polish 4 — "I'm not on the list" should NOT silently auto-create a
+    // checkin row. Captain saw an entry appear in the dashboard with the
+    // attendee_key_id ("JfpA3uQQisWrkGldzD") as the display name because the empty-
+    // name path fell through to `r.id` in the dashboard table renderer.
+    //
+    // Per the dashboard's "When identity is unclear" note (and Captain's design
+    // intent): if the attendee genuinely isn't on the expected list, the flow is
+    // staff-mediated. The phone shows a hold screen ("See an organiser"); staff use
+    // the assisted-identity flow to record an unrecognised attendee. No phone-side
+    // POST.  This keeps the audit trail clean — the only checkins in the database
+    // are ones a real person validated.
+    document.getElementById("identityWalkinBtn").onclick = () => {
+      title.textContent = "See an organiser";
+      subtitle.textContent = "Your name isn't on the expected list yet";
+      meta.textContent = "Please ask staff to add you to the list before checking in";
+      picker.classList.remove("show");
+      if (nextBtn) nextBtn.classList.remove("show");
+      document.getElementById("helloPanel")?.classList.remove("show");
+      applyBranding();
+    };
 
     try {
       const result = await getOrgAuthed("/org/expected");
