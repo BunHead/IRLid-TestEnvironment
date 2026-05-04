@@ -61,6 +61,18 @@ function expectedMemberRole(value) {
   return EXPECTED_MEMBER_ROLES.has(role) ? role : "attendee";
 }
 
+// Batch C polish 5 — Developer role is bootstrap-only. The /org/expected create
+// + update endpoints accept prototype_role from any authenticated org member.
+// That's fine for attendee/staff/manager/lead_admin (gated by frontend RBAC
+// dropdown options), but Developer must NEVER be grantable through that path —
+// the role exists to bootstrap the network and a Developer-can-add-Developer
+// loop collapses that into recursive trust. New Developers come only via
+// BOOTSTRAP_DEVELOPER_FP env var (today) or signed invite tokens (v5.6+).
+// Defence in depth alongside the frontend dropdown filter.
+function isExpectedRoleAllowedFromDashboard(role) {
+  return role !== "developer";
+}
+
 function randomCode6() {
   const bytes = crypto.getRandomValues(new Uint8Array(4));
   const num = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
@@ -1559,6 +1571,18 @@ async function orgCheckin(request, env) {
   const attendeeDeviceFp = helloPayload?.pub ? await deviceKeyFp(helloPayload.pub) : null;
   const label = settings.anonymousMode ? null : (attendeeLabel || null);
   const displayName = settings.anonymousMode ? null : ((name || attendeeLabel || "").trim() || null);
+  // Batch C polish 5 — defence in depth against ghost-row creation. When the
+  // org has anonymousMode disabled (the default), an attendee_scan with no
+  // resolvable name is what produced the JfpA3uQQisWrkGldzD row Captain spotted:
+  // empty name -> r.name fell through to attendee_key_id in the dashboard
+  // renderer. The frontend was fixed (the "I'm not on the list" button now
+  // shows a "See an organiser" hold screen instead of POSTing). This guard
+  // catches any future broken client (or direct API poke) that tries the same.
+  // doorman_scan is exempt: staff records walk-ins legitimately under their
+  // own staff_session, and that path validates the staff identity instead.
+  if (mode === "attendee_scan" && !settings.anonymousMode && !displayName) {
+    return err("attendee_scan requires a resolvable name when anonymousMode is off - speak to an organiser", 422);
+  }
   let link = { linked: false };
   let expected = null;
   let status = "checked_in";
@@ -1774,6 +1798,9 @@ async function orgExpectedCreate(request, env) {
   const surname = (body.surname || "").trim();
   const prototypeRole = expectedMemberRole(body.prototype_role || body.role);
   if (!firstName || !surname) return err("first_name and surname required");
+  if (!isExpectedRoleAllowedFromDashboard(prototypeRole)) {
+    return err("developer role cannot be granted from the dashboard - bootstrap or invite token only", 403);
+  }
   const existing = await env.DB.prepare(
     "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
   ).bind(org.id, firstName, surname).first();
@@ -1803,6 +1830,9 @@ async function orgExpectedUpdate(request, env, id) {
   const roleProvided = body.prototype_role !== undefined || body.role !== undefined;
   const prototypeRole = roleProvided ? expectedMemberRole(body.prototype_role || body.role) : null;
   if (!firstName || !surname) return err("first_name and surname required");
+  if (roleProvided && !isExpectedRoleAllowedFromDashboard(prototypeRole)) {
+    return err("developer role cannot be granted from the dashboard - bootstrap or invite token only", 403);
+  }
   const existing = await env.DB.prepare(
     "SELECT id FROM org_expected WHERE org_code=? AND id<>? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
   ).bind(org.id, id, firstName, surname).first();

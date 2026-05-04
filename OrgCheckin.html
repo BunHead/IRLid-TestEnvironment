@@ -3666,11 +3666,21 @@ const PROTOTYPE_ROLE_DETAILS = {
   developer: 'Developer can do everything Lead Admin can, plus prototype-only diagnostics while the real Lead Admin role stays clean.'
 };
 const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3, developer: 4 };
+// Batch C polish 5 — Developer role is bootstrap-only.
+// Captain's call (4 May 2026, late evening): "Developer being able to add
+// Developer kinda defeats a few points." Right read. The Developer role exists
+// to bootstrap the network and to mint Lead Admins; allowing it to be granted
+// through the dashboard collapses that into a recursive-trust hole (a Developer
+// can appoint a Developer can appoint a Developer...). New Developers should
+// only come via BOOTSTRAP_DEVELOPER_FP env var (today) or revocable invite
+// tokens signed by an existing Developer (v5.6+). Removed 'developer' from the
+// Developer's Add-dropdown options. Lead Admin promotion via dashboard remains
+// allowed for Developer (one Lead Admin per org enforced server-side).
 const EXPECTED_ROLE_OPTIONS = {
   staff: ['attendee'],
   manager: ['attendee', 'staff', 'manager'],
   lead_admin: ['attendee', 'staff', 'manager'],
-  developer: ['attendee', 'staff', 'manager', 'lead_admin', 'developer']
+  developer: ['attendee', 'staff', 'manager', 'lead_admin']
 };
 function roleLabelFor(role) {
   return {
