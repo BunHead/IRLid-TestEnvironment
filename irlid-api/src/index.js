@@ -1127,10 +1127,46 @@ async function userListOrgs(request, env) {
       slug: m.slug,
       role: m.role,
       api_key: m.api_key,
-      settings
+      settings,
+      implicit_membership: false
     };
   });
-  return json({ user_id: user.id, display_name: user.display_name, orgs });
+
+  // PROTOCOL.md §14.9 — `developer` is a platform-tier role, not just an org-tier
+  // role. The bootstrap developer (whose pub_fp matches BOOTSTRAP_DEVELOPER_FP) is
+  // the founder of the IRLid deployment and gets implicit "see all orgs" rights
+  // so they can recover orgs whose lead_admins have left, perform forensic audits,
+  // or simply observe the platform. Non-bootstrap users only see orgs they
+  // explicitly belong to (per §14.9 row "lead_admin"). This dev-implicit access is
+  // returned alongside explicit memberships with role: 'developer' and a flag
+  // implicit_membership: true so the UI can label the difference (e.g. "(dev access)").
+  // Captain's 4 May expectation that "developer" means "super admin who can fix any
+  // org" — confirmed in spec, now matched in implementation.
+  const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+  const isBootstrapDev = bootstrapFp && user.pub_fp === bootstrapFp;
+  if (isBootstrapDev) {
+    const ownIds = new Set(orgs.map(o => o.id));
+    const allOrgs = await env.DB.prepare(
+      "SELECT id, name, slug, api_key, settings_json FROM organisations ORDER BY created_at DESC"
+    ).all();
+    for (const o of (allOrgs.results || [])) {
+      if (!ownIds.has(o.id)) {
+        let settings = null;
+        try { settings = o.settings_json ? JSON.parse(o.settings_json) : null; } catch (_) {}
+        orgs.push({
+          id: o.id,
+          name: o.name,
+          slug: o.slug,
+          role: 'developer',
+          api_key: o.api_key,
+          settings,
+          implicit_membership: true
+        });
+      }
+    }
+  }
+
+  return json({ user_id: user.id, display_name: user.display_name, orgs, is_developer: isBootstrapDev });
 }
 
 // POST /user/create-org — create a new organisation with the authenticated user as

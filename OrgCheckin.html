@@ -488,7 +488,50 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   border-radius: 12px;
   background: rgba(255,255,255,0.02);
 }
-/* Batch 6.5e — two side-by-side palette blocks (Background + Celebration) */
+/* Batch 6.5e → Batch C tidy 2 (4 May 2026 evening) — four-quadrant theme layout.
+   Bg palette + Cel palette on row 1; Bg animation + Cel animation on row 2; a
+   central duplicator column spans both rows so its ←/→ buttons sit at the dead
+   intersection of all four panels (Captain's direction). On narrow viewports
+   the grid collapses to a single column with the duplicators between the two
+   palette rows and the two animation rows.
+
+   .theme-palette-pair / .theme-animation-panels classes are retained as
+   fallbacks for any vestigial markup elsewhere; current Settings panel uses
+   .theme-fourquad exclusively. */
+.theme-fourquad {
+  display: grid;
+  grid-template-columns: 1fr 64px 1fr;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "bgpal  dups celpal"
+    "bganim dups celanim";
+  gap: 12px;
+  margin-top: 14px;
+  align-items: stretch;
+}
+.theme-fourquad > .grid-bgpal   { grid-area: bgpal;   margin-top: 0; }
+.theme-fourquad > .grid-celpal  { grid-area: celpal;  margin-top: 0; }
+.theme-fourquad > .grid-dups    { grid-area: dups;    align-self: center; justify-self: center; }
+.theme-fourquad > .grid-bganim  { grid-area: bganim;  margin-top: 0; }
+.theme-fourquad > .grid-celanim { grid-area: celanim; margin-top: 0; }
+@media (max-width: 760px) {
+  .theme-fourquad {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto auto;
+    grid-template-areas:
+      "bgpal"
+      "celpal"
+      "dups"
+      "bganim"
+      "celanim";
+  }
+  .theme-fourquad > .grid-dups {
+    /* Horizontal arrow row on mobile, vertical column on desktop */
+    flex-direction: row !important;
+  }
+}
+
+/* Legacy (kept for back-compat in case any other markup still references it) */
 .theme-palette-pair {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1458,8 +1501,14 @@ body #venueQRWrap.cycle-burst-pattern {
                 <!-- Customisable palettes — Background (drives bg cycle / pattern colours)
                      and Celebration (drives accept-cycle burst on successful check-in).
                      Two independent palettes keep the visual languages separate. -->
-                <div class="theme-palette-pair">
-                  <div class="theme-palette-block">
+                <!-- Batch C tidy 2 (4 May 2026 evening) — four-quadrant layout per Captain's
+                     direction: palette blocks on row 1, animation panels on row 2, central
+                     duplicator column spanning both rows so a single ←/→ press copies the
+                     entire left-side (palette + animation mode) to the right side and vice
+                     versa. Mobile (≤760px) stacks linearly. -->
+                <div class="theme-fourquad">
+
+                  <div class="theme-palette-block grid-bgpal">
                     <div class="theme-palette-head">
                       <strong>Background palette</strong>
                       <span class="theme-palette-sub">Up to 7 colours — used by the QR-canvas page-cycle animation and pattern overlay.</span>
@@ -1470,7 +1519,8 @@ body #venueQRWrap.cycle-burst-pattern {
                       <button type="button" class="btn btn-secondary btn-sm" id="themeBgPaletteReset">Reset to defaults</button>
                     </div>
                   </div>
-                  <div class="theme-palette-block">
+
+                  <div class="theme-palette-block grid-celpal">
                     <div class="theme-palette-head">
                       <strong>Celebration palette</strong>
                       <span class="theme-palette-sub">Up to 7 colours — used by the accept-cycle animation when a check-in succeeds.</span>
@@ -1481,12 +1531,15 @@ body #venueQRWrap.cycle-burst-pattern {
                       <button type="button" class="btn btn-secondary btn-sm" id="themePaletteReset">Reset to defaults</button>
                     </div>
                   </div>
-                </div>
 
-                <!-- Animation controls — two side-by-side panels -->
-                <div class="theme-animation-panels">
+                  <div class="theme-anim-duplicators grid-dups" aria-label="Duplicate all settings between Background and Celebration">
+                    <span class="dup-label">Bg→Cel</span>
+                    <button type="button" class="dup-btn" id="themeDupBgToCel" title="Copy Background's mode + palette colours to Celebration" aria-label="Copy Background's mode and palette to Celebration">→</button>
+                    <button type="button" class="dup-btn" id="themeDupCelToBg" title="Copy Celebration's mode + palette colours to Background" aria-label="Copy Celebration's mode and palette to Background">←</button>
+                    <span class="dup-label">Cel→Bg</span>
+                  </div>
 
-                  <div class="theme-anim-panel" id="themeBgAnimPanel" data-bg-mode="glow">
+                  <div class="theme-anim-panel grid-bganim" id="themeBgAnimPanel" data-bg-mode="glow">
                     <h5>Background Animation</h5>
                     <p class="theme-anim-sub">Choose how the page reacts. Page-cycle restyles the whole canvas through your palette; QR-glow only haloes QRs; Pattern overlays a tiled motif.</p>
                     <label class="theme-anim-row">
@@ -1533,14 +1586,7 @@ body #venueQRWrap.cycle-burst-pattern {
                     <button type="button" class="btn btn-secondary btn-sm" id="themePreviewBgAnim" data-bg-mode-hide="off">Preview background</button>
                   </div>
 
-                  <div class="theme-anim-duplicators" aria-label="Duplicate settings between Background and Celebration">
-                    <span class="dup-label">Bg→Cel</span>
-                    <button type="button" class="dup-btn" id="themeDupBgToCel" title="Copy Background settings (mode + palette) to Celebration" aria-label="Copy Background settings to Celebration">→</button>
-                    <button type="button" class="dup-btn" id="themeDupCelToBg" title="Copy Celebration settings (mode + palette) to Background" aria-label="Copy Celebration settings to Background">←</button>
-                    <span class="dup-label">Cel→Bg</span>
-                  </div>
-
-                  <div class="theme-anim-panel" id="themeCycleAnimPanel" data-cycle-mode="glow">
+                  <div class="theme-anim-panel grid-celanim" id="themeCycleAnimPanel" data-cycle-mode="glow">
                     <h5>Celebration Animation</h5>
                     <p class="theme-anim-sub">A burst that fires on successful check-in. Mirrors Background's mode options but runs as a one-shot using the Celebration palette and Cycle duration below.</p>
                     <label class="theme-anim-row">
@@ -2021,10 +2067,16 @@ async function handleQrLoginSuccess(data) {
     await loadDashboardForOrg(myOrgs[0]);
     return;
   }
-  // Multi-org picker — full UI ships in a Batch C.x follow-up. For now we load the
-  // most-recently-granted membership so Captain isn't stuck.
-  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> ' + myOrgs.length + ' orgs available — multi-org picker ships in Batch C.x. Loading the most recent…';
-  await loadDashboardForOrg(myOrgs[myOrgs.length - 1]);
+  // Multi-org auto-load preference (Batch C tidy 2): prefer the user's most
+  // recently granted EXPLICIT membership; fall back to a dev-implicit org only
+  // if no explicit membership exists. This means a developer signing in lands on
+  // their own org (Captians Venue Test, Imbue Ventures, etc.) rather than
+  // some other venue's data they happen to have implicit access to. Multi-org
+  // picker UI ships in Batch C.x as a separate piece.
+  const explicit = myOrgs.filter(o => !o.implicit_membership);
+  const chosen = explicit.length ? explicit[explicit.length - 1] : myOrgs[0];
+  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> ' + myOrgs.length + ' orgs available — picker UI ships in Batch C.x. Loading <em>' + escapeHtml(chosen.name) + '</em>…';
+  await loadDashboardForOrg(chosen);
 }
 
 // Batch C — populate currentOrg from a /user/orgs row (which carries api_key) and
@@ -4024,9 +4076,17 @@ function wireThemePanel() {
     applyThemeVars(activeTheme); // updates the panel data-cycle-mode attribute for visibility
   });
 
-  // Batch 6.5f — Duplicate buttons. Bg → Cel copies bgMode + bgPalette into
-  // cycleMode + palette. Cel → Bg copies cycleMode + palette into bgMode + bgPalette.
-  // Durations and intensity stay independent (different ranges/semantics).
+  // Batch 6.5f → Batch C tidy 2 — Duplicate buttons in the central column of
+  // the four-quadrant theme grid. Bg → Cel copies bgMode + bgPalette colours
+  // into cycleMode + palette. Cel → Bg copies cycleMode + palette into bgMode
+  // + bgPalette. Durations stay independent (Bg cycle is 5–120s continuous;
+  // Cel burst is 0.5–5s one-shot — same number wouldn't translate). bgIntensity
+  // and bgPattern are Bg-only fields (Cel inherits Bg's pattern at render time
+  // when in pattern mode). Captain's mental model: hit the arrow, the active
+  // side flows to the other side; left to right via →, right to left via ←.
+  // Toasts surface what changed since the change is now visible AT the buttons
+  // (4-quad layout puts both palette and animation panels on each side of the
+  // duplicators, so the visual feedback is co-located with the action).
   const dupBgToCel = document.getElementById('themeDupBgToCel');
   if (dupBgToCel) dupBgToCel.addEventListener('click', function () {
     activeTheme.cycleMode = activeTheme.bgMode;
@@ -4034,6 +4094,7 @@ function wireThemePanel() {
     if (activeTheme.palette.length === 0) activeTheme.palette = THEME_DEFAULTS.palette.slice();
     writeThemeToUI();
     applyThemeVars(activeTheme);
+    showToast('Copied Background → Celebration: mode + ' + activeTheme.palette.length + ' palette colours');
   });
   const dupCelToBg = document.getElementById('themeDupCelToBg');
   if (dupCelToBg) dupCelToBg.addEventListener('click', function () {
@@ -4042,6 +4103,7 @@ function wireThemePanel() {
     if (activeTheme.bgPalette.length === 0) activeTheme.bgPalette = THEME_DEFAULTS.bgPalette.slice();
     writeThemeToUI();
     applyThemeVars(activeTheme);
+    showToast('Copied Celebration → Background: mode + ' + activeTheme.bgPalette.length + ' palette colours');
   });
 
   // Celebration palette buttons (existing).
