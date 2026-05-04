@@ -849,7 +849,11 @@ async function lookupByKey(request, env, pubKeyIdParam) {
 // Plus rate limiting (3 failed claims / 60s / nonce → 5min cooldown) and the
 // generic auth_failed error to prevent user-enumeration oracles (§14.10).
 
-const LOGIN_CHALLENGE_TTL_S  = 60;            // §14.5 — 60-second login QR
+const LOGIN_CHALLENGE_TTL_S  = 180;           // §14.5 — 3-minute login QR (was 60s, bumped 4 May after IRL test showed
+                                              // 60s is too tight for a real human flow: scan + URL tap + page load +
+                                              // biometric prompt + sign + POST commonly runs to ~30-60s naturally,
+                                              // leaving zero margin. 180s still bounds the replay window narrowly
+                                              // enough that a leaked QR is low-value.)
 const LOGIN_SESSION_TTL_S    = 86400;         // §14.7 — 24h sliding TTL
 const LOGIN_CLAIM_FAIL_LIMIT = 3;             // §14.10 — 3 attempts per nonce
 const LOGIN_CLAIM_COOLDOWN_S = 300;           // §14.10 — 5min cooldown
