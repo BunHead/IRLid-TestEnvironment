@@ -1062,6 +1062,139 @@ async function orgLoginClaim(request, env) {
 }
 
 // =====================
+//  USER ENDPOINTS — PROTOCOL.md §14, Batch C
+// =====================
+// Session-authenticated user-level endpoints. Auth via Authorization: Bearer <token>
+// where the token came from /org/login/poll on a successful claim. The Worker resolves
+// the token to a portal_users row, slides the session expiry forward, and the calling
+// endpoint operates with that user identity.
+
+async function requireSession(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  const m = /^Bearer\s+([A-Za-z0-9_-]{16,})$/.exec(auth.trim());
+  if (!m) return { error: json({ error: "session_required" }, 401) };
+  const token = m[1];
+  const session = await env.DB.prepare(
+    "SELECT token, user_id, expires_at FROM login_sessions WHERE token = ?"
+  ).bind(token).first();
+  if (!session) return { error: json({ error: "session_invalid" }, 401) };
+  const tNow = now();
+  if (session.expires_at < tNow) {
+    // Expired — clean up and reject.
+    await env.DB.prepare("DELETE FROM login_sessions WHERE token = ?").bind(token).run();
+    return { error: json({ error: "session_expired" }, 401) };
+  }
+  // Sliding TTL — every authed request resets expires_at.
+  await env.DB.prepare(
+    "UPDATE login_sessions SET expires_at = ? WHERE token = ?"
+  ).bind(tNow + LOGIN_SESSION_TTL_S, token).run();
+  // Resolve the user.
+  const user = await env.DB.prepare(
+    "SELECT id, display_name, pub_fp FROM portal_users WHERE id = ?"
+  ).bind(session.user_id).first();
+  if (!user) return { error: json({ error: "session_user_missing" }, 401) };
+  return { user };
+}
+
+// GET /user/orgs — list orgs the authenticated user belongs to, with role and api_key
+// (api_key is returned to authorized members so the existing X-Org-Key dashboard code
+// can keep working during the v5.5 transition; v6+ will move dashboard ops onto Bearer
+// session auth and api_key returns to service-account-only). Per §14.9 role table.
+async function userListOrgs(request, env) {
+  const ctx = await requireSession(request, env);
+  if (ctx.error) return ctx.error;
+  const user = ctx.user;
+  const memberships = await env.DB.prepare(
+    "SELECT m.role, o.id, o.name, o.slug, o.api_key, o.settings_json " +
+    "FROM org_memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = ? " +
+    "ORDER BY m.granted_at ASC"
+  ).bind(user.id).all();
+  const orgs = (memberships.results || []).map(m => {
+    let settings = null;
+    try { settings = m.settings_json ? JSON.parse(m.settings_json) : null; } catch (_) {}
+    return {
+      id: m.id,
+      name: m.name,
+      slug: m.slug,
+      role: m.role,
+      api_key: m.api_key,
+      settings
+    };
+  });
+  return json({ user_id: user.id, display_name: user.display_name, orgs });
+}
+
+// POST /user/create-org — create a new organisation with the authenticated user as
+// lead_admin (or developer if user.pub_fp is the bootstrap fp). Authorization:
+//   • developer (pub_fp matches BOOTSTRAP_DEVELOPER_FP), OR
+//   • user has lead_admin or developer role on at least one existing org
+// Body: { name: string (required, min 2), website_url?: string (optional, https/http) }
+// Staff scan-in flow deferred to Batch C.5 — MVP creates the org with the requester
+// as the sole member; additional members get added via dashboard "Add staff" actions.
+async function userCreateOrg(request, env) {
+  const ctx = await requireSession(request, env);
+  if (ctx.error) return ctx.error;
+  const user = ctx.user;
+
+  let body;
+  try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const name = (body && typeof body.name === "string") ? body.name.trim() : "";
+  const websiteUrl = (body && typeof body.website_url === "string") ? body.website_url.trim() : "";
+  if (!name || name.length < 2) return err("name required (min 2 chars)");
+  if (websiteUrl && !/^https?:\/\/[^\s]{3,}$/i.test(websiteUrl)) return err("website_url must be a valid http(s) URL or omitted");
+
+  // Authorization check: developer OR has lead_admin/developer role somewhere.
+  const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+  const isBootstrapDev = bootstrapFp && user.pub_fp === bootstrapFp;
+  let hasAdminRole = false;
+  if (!isBootstrapDev) {
+    const elevated = await env.DB.prepare(
+      "SELECT 1 FROM org_memberships WHERE user_id = ? AND role IN ('lead_admin','developer') LIMIT 1"
+    ).bind(user.id).first();
+    hasAdminRole = !!elevated;
+  }
+  if (!isBootstrapDev && !hasAdminRole) {
+    return json({ error: "create_org_forbidden", reason: "only developer or existing lead_admin may create orgs" }, 403);
+  }
+
+  // Slug + uniqueness check.
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!slug) return err("name produced empty slug — use letters/numbers");
+  const existing = await env.DB.prepare("SELECT id FROM organisations WHERE slug = ?").bind(slug).first();
+  if (existing) return err("Organisation name already taken (slug collision)");
+
+  // Provision the org row + venue keypair (mirrors orgRegister).
+  const orgId = uuid();
+  const apiKey = "org_" + randomToken();
+  const tNow = now();
+  const venueKey = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+  const pubJwk = await crypto.subtle.exportKey("jwk", venueKey.publicKey);
+  const prvJwk = await crypto.subtle.exportKey("jwk", venueKey.privateKey);
+  const defaultSettings = {
+    minScore: 50, distanceM: 12, windowS: 90,
+    bioRequired: false, privacyMode: true, checkoutEnabled: true, anonymousMode: false,
+    websiteUrl: websiteUrl || ""
+    // theme_scrape_status: "queued" once Batch D ships the website-scrape worker function.
+  };
+  await env.DB.prepare(
+    "INSERT INTO organisations (id, name, slug, api_key, venue_pub_jwk, venue_prv_jwk, settings_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+  ).bind(orgId, name, slug, apiKey, JSON.stringify(pubJwk), JSON.stringify(prvJwk), JSON.stringify(defaultSettings), tNow, tNow).run();
+
+  // Insert the creator's membership. Bootstrap developer keeps developer role; everyone
+  // else becomes lead_admin of their own new org.
+  const role = isBootstrapDev ? "developer" : "lead_admin";
+  await env.DB.prepare(
+    "INSERT INTO org_memberships (user_id, org_id, role, granted_by, granted_at) VALUES (?, ?, ?, ?, ?)"
+  ).bind(user.id, orgId, role, user.id, tNow).run();
+
+  return json({
+    org: { id: orgId, name, slug, api_key: apiKey, settings: defaultSettings },
+    membership: { role, user_id: user.id, granted_at: tNow },
+    theme_scrape_status: websiteUrl ? "deferred_to_batch_d" : "none"
+  }, 201);
+}
+
+// =====================
 //  ORGANISATION PORTAL
 // =====================
 
@@ -1750,6 +1883,9 @@ export default {
       else if (method === "POST" && path === "/org/login/init")      response = await orgLoginInit(request, env);
       else if (method === "GET"  && path === "/org/login/poll")      response = await orgLoginPoll(request, env);
       else if (method === "POST" && path === "/org/login/claim")     response = await orgLoginClaim(request, env);
+      // User-level endpoints (PROTOCOL.md §14, Batch C) — Bearer session token auth.
+      else if (method === "GET"  && path === "/user/orgs")           response = await userListOrgs(request, env);
+      else if (method === "POST" && path === "/user/create-org")     response = await userCreateOrg(request, env);
 
       // Org Portal
       else if (method === "POST" && path === "/org/register")        response = await orgRegister(request, env);

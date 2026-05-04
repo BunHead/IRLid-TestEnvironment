@@ -1128,6 +1128,28 @@ body #venueQRWrap.cycle-burst-pattern {
           <div id="qrLoginStatus" style="margin-top:12px; font-size:13px; min-height:18px;"></div>
         </div>
 
+        <!-- Batch C — create-org form. Revealed by handleQrLoginSuccess when the
+             user has no orgs yet AND is authorised to create one (developer or
+             lead_admin). MVP fields: name + optional website URL. Staff scan-in
+             flow ships in Batch C.5 — for now the creator is the sole member. -->
+        <div id="createOrgPanel" style="display:none;">
+          <div class="alert alert-info" style="font-size:12px; margin-bottom:14px;">
+            <strong>Welcome, <span id="createOrgWelcomeName">Captain</span>.</strong>
+            You're signed in but don't yet belong to any org. Create your first one below.
+          </div>
+          <div class="input-group">
+            <label for="createOrgName">Organisation name</label>
+            <input type="text" id="createOrgName" placeholder="e.g. Acme Conference Ltd" autocomplete="organization" />
+          </div>
+          <div class="input-group">
+            <label for="createOrgWebsite">Website URL <span style="color:#8b949e;">(optional)</span></label>
+            <input type="url" id="createOrgWebsite" placeholder="https://example.com" autocomplete="url" />
+            <span class="theme-hint" style="font-size:11px; color:#8b949e;">In Batch D we'll auto-extract logo + theme colour from this URL.</span>
+          </div>
+          <button type="button" class="btn btn-primary" id="createOrgSubmitBtn" style="width:100%;">Create organisation</button>
+          <div id="createOrgStatus" style="margin-top:12px; font-size:13px; min-height:18px;"></div>
+        </div>
+
         <!-- Service-account fallback (existing api_key flow, demoted to expandable) -->
         <details id="serviceAccountWrap" style="margin-top:24px; padding-top:14px; border-top:1px solid #30363d;">
           <summary style="cursor:pointer; font-size:13px; color:#8b949e; padding:6px 0;">Service-account login (paste an org_… key)</summary>
@@ -1943,7 +1965,7 @@ function cancelQrLogin(reason) {
   }
 }
 
-function handleQrLoginSuccess(data) {
+async function handleQrLoginSuccess(data) {
   clearTimeout(qrLoginPollTimer); qrLoginPollTimer = null;
   clearInterval(qrLoginCountdownTimer); qrLoginCountdownTimer = null;
   qrLoginSession = {
@@ -1958,28 +1980,132 @@ function handleQrLoginSuccess(data) {
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
   const name = data.display_name || 'developer';
 
+  // Hide the QR panel — sign-in is done, we'll either show the create-org form
+  // or hand control to the dashboard.
+  document.getElementById('qrLoginStage').style.display = 'none';
+  document.getElementById('qrLoginActive').style.display = 'none';
+
   if (orgs.length === 0) {
     if (data.can_create_org) {
-      status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> No orgs yet — the create-org flow ships in Batch C.';
+      // Batch C — reveal the create-org form. Pre-fill welcome name from session.
+      status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> Create your first org below.';
       status.style.color = '#7ee787';
-    } else {
-      status.textContent = 'Signed in but no orgs available for this account.';
-      status.style.color = '#f0883e';
+      const welcomeName = document.getElementById('createOrgWelcomeName');
+      if (welcomeName) welcomeName.textContent = name;
+      document.getElementById('createOrgPanel').style.display = 'block';
+      const nameInput = document.getElementById('createOrgName');
+      if (nameInput) nameInput.focus();
+      return;
     }
+    status.textContent = 'Signed in, but no orgs available and you cannot create one. Speak to a developer or existing lead_admin.';
+    status.style.color = '#f0883e';
     return;
   }
-  if (orgs.length === 1) {
-    // Batch B end-state: we know the user + their org, but the dashboard load
-    // path still uses X-Org-Key (api_key) for read/write. api_key is not yet
-    // returned by /org/login/poll — Batch C will add it for lead_admin/dev users.
-    // Until then, surface the success but stop short of dashboard load.
-    status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> Org: ' + escapeHtml(orgs[0].name) + ' (' + escapeHtml(orgs[0].role) + '). Dashboard wiring lands in Batch C.';
-    status.style.color = '#7ee787';
-    return;
-  }
-  // 2+ orgs — picker is Batch C work.
-  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> ' + orgs.length + ' orgs available; picker ships in Batch C.';
+
+  // The /org/login/poll response gives id+name+role+slug but NOT api_key. Fetch
+  // api_key from /user/orgs (Batch C — returns api_key for authorised members)
+  // so the existing X-Org-Key dashboard code keeps working through v5.5.
+  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> Loading your orgs…';
   status.style.color = '#7ee787';
+  let myOrgs = [];
+  try {
+    const r = await window.IRLidOrgApi.listMyOrgs(qrLoginSession.session_token);
+    myOrgs = Array.isArray(r.orgs) ? r.orgs : [];
+  } catch (err) {
+    status.textContent = 'Could not load your org list: ' + (err.message || 'unknown error');
+    status.style.color = '#f85149';
+    return;
+  }
+
+  if (myOrgs.length === 1) {
+    await loadDashboardForOrg(myOrgs[0]);
+    return;
+  }
+  // Multi-org picker — full UI ships in a Batch C.x follow-up. For now we load the
+  // most-recently-granted membership so Captain isn't stuck.
+  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> ' + myOrgs.length + ' orgs available — multi-org picker ships in Batch C.x. Loading the most recent…';
+  await loadDashboardForOrg(myOrgs[myOrgs.length - 1]);
+}
+
+// Batch C — populate currentOrg from a /user/orgs row (which carries api_key) and
+// hand control over to the existing dashboard loader. The X-Org-Key auth path still
+// works during the v5.5 transition; v6+ will move dashboard ops onto Bearer auth.
+async function loadDashboardForOrg(org) {
+  if (!org || !org.api_key) {
+    showToast('Org missing api_key — cannot load dashboard', true);
+    return;
+  }
+  currentOrg = {
+    name: org.name,
+    api_key: org.api_key,
+    id: org.id,
+    slug: org.slug,
+    role: org.role,
+    mode: 'irlid-api-test'
+  };
+  saveJson(STORAGE_KEY_ORG, currentOrg);
+  // Keep the legacy fields populated so existing dashboard code is happy.
+  const orgNameInput = document.getElementById('orgNameInput'); if (orgNameInput) orgNameInput.value = currentOrg.name || '';
+  const existingKeyInput = document.getElementById('existingKeyInput'); if (existingKeyInput) existingKeyInput.value = currentOrg.api_key || '';
+  const apiKeyDisplay = document.getElementById('apiKeyDisplay'); if (apiKeyDisplay) apiKeyDisplay.textContent = currentOrg.api_key || '';
+  setSignedInUI(true);
+  syncLegacyFromPortal();
+  try { await refreshAttendance(); } catch (_) {}
+  try { await refreshExpectedAttendees(); } catch (_) {}
+  showPanel('dashboard');
+  generateVenueQR();
+  renderPortalAll();
+  showToast('Signed in to ' + currentOrg.name + ' as ' + (org.role || 'member'));
+}
+
+async function submitCreateOrg() {
+  const status = document.getElementById('createOrgStatus');
+  const btn = document.getElementById('createOrgSubmitBtn');
+  const name = (document.getElementById('createOrgName').value || '').trim();
+  const websiteUrl = (document.getElementById('createOrgWebsite').value || '').trim();
+  if (!name || name.length < 2) {
+    status.textContent = 'Organisation name required (min 2 chars).';
+    status.style.color = '#f85149';
+    return;
+  }
+  if (websiteUrl && !/^https?:\/\/[^\s]{3,}$/i.test(websiteUrl)) {
+    status.textContent = 'Website URL must start with http:// or https:// (or leave blank).';
+    status.style.color = '#f85149';
+    return;
+  }
+  if (!qrLoginSession || !qrLoginSession.session_token) {
+    status.textContent = 'No active session — sign in first.';
+    status.style.color = '#f85149';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+  status.textContent = 'Creating organisation…';
+  status.style.color = '#8b949e';
+
+  try {
+    const payload = { name };
+    if (websiteUrl) payload.website_url = websiteUrl;
+    const resp = await window.IRLidOrgApi.createOrg(qrLoginSession.session_token, payload);
+    if (!resp || !resp.org || !resp.org.api_key) {
+      throw new Error('Worker response missing org.api_key');
+    }
+    status.innerHTML = '<strong>Org created:</strong> ' + escapeHtml(resp.org.name) + ' (' + escapeHtml(resp.membership.role) + '). Loading dashboard…';
+    status.style.color = '#7ee787';
+    document.getElementById('createOrgPanel').style.display = 'none';
+    await loadDashboardForOrg({
+      id: resp.org.id,
+      name: resp.org.name,
+      slug: resp.org.slug,
+      api_key: resp.org.api_key,
+      role: resp.membership.role
+    });
+  } catch (err) {
+    status.textContent = 'Could not create org: ' + (err.message || 'unknown error');
+    status.style.color = '#f85149';
+    btn.disabled = false;
+    btn.textContent = 'Create organisation';
+  }
 }
 
 function escapeHtml(s) {
@@ -3276,6 +3402,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   // panel-setup screen isn't in the DOM yet (auto-login bypassed it).
   document.getElementById('qrLoginStartBtn')?.addEventListener('click', startQrLogin);
   document.getElementById('qrLoginCancelBtn')?.addEventListener('click', () => cancelQrLogin('Cancelled.'));
+  // Batch C — wire create-org form submit. Same no-op-if-missing pattern.
+  document.getElementById('createOrgSubmitBtn')?.addEventListener('click', submitCreateOrg);
   const prototypeRoleSelect = document.getElementById('prototypeRoleSelect');
   prototypeRoleSelect?.addEventListener('change', () => setPrototypeRole(prototypeRoleSelect.value));
   setPrototypeRole(prototypeRoleSelect?.value || 'lead_admin');

@@ -10,6 +10,10 @@
     const opts = options || {};
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
     if (opts.orgKey) headers["X-Org-Key"] = opts.orgKey;
+    // Batch C — Bearer session token for user-level endpoints (/user/*). The api_key
+    // and the session token coexist during v5.5: api_key for org-scoped service ops,
+    // Bearer for user-identity ops. Send whichever the caller has supplied.
+    if (opts.sessionToken) headers["Authorization"] = "Bearer " + opts.sessionToken;
 
     const response = await fetch(getBaseUrl() + path, {
       method: opts.method || "GET",
@@ -45,6 +49,18 @@
       return request("/org/login/poll?nonce=" + encodeURIComponent(nonce));
     },
     workerBaseUrl() { return publicBaseUrl(); },
+
+    // PROTOCOL.md §14 — Batch C user-level endpoints, Bearer session token auth.
+    listMyOrgs(sessionToken) {
+      return request("/user/orgs", { sessionToken });
+    },
+    createOrg(sessionToken, payload) {
+      return request("/user/create-org", {
+        method: "POST",
+        sessionToken,
+        body: payload
+      });
+    },
 
     registerOrganisation(name) {
       return request("/org/register", {
