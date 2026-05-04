@@ -104,6 +104,87 @@ async function deviceKeyFp(pubJwk) {
   return b64urlEncode(new Uint8Array(h)).slice(0, 16);
 }
 
+// =====================
+//  v5 ENVELOPE VERIFIER (PROTOCOL.md §13.7) — Batch A port from live Worker
+// =====================
+// Used by /org/login/claim (PROTOCOL.md §14) to verify hardware-backed signing
+// envelopes for org-portal sign-in. Mirrors the verifier in the live Worker
+// (irlid-api/src/index.js) byte-for-byte; differences would be implementation bugs.
+
+const IRLID_V5_ORIGIN_ALLOWLIST = [
+  "https://irlid.co.uk",
+  "https://bunhead.github.io",
+  "http://localhost:8000",
+  "http://127.0.0.1:8000",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+];
+
+function irlidV5OriginAllowed(origin) {
+  return IRLID_V5_ORIGIN_ALLOWLIST.includes(String(origin));
+}
+
+// Verify a v5 envelope. Returns true on success; throws Error on first failure.
+async function verifyV5Envelope(payload, pubJwk, sigRawB64u, webauthnEnv, expectedRpOrigin) {
+  if (!webauthnEnv || !webauthnEnv.authData || !webauthnEnv.clientData) {
+    throw new Error("v5: envelope missing");
+  }
+  if (!pubJwk || pubJwk.kty !== "EC" || pubJwk.crv !== "P-256") {
+    throw new Error("v5: pub is not a P-256 JWK");
+  }
+  if (!sigRawB64u) throw new Error("v5: sig missing");
+  const payloadHashB64u = await hashPayloadToB64url(payload);
+  const clientDataBytes = b64urlDecode(webauthnEnv.clientData);
+  let clientData;
+  try {
+    clientData = JSON.parse(new TextDecoder().decode(clientDataBytes));
+  } catch (e) {
+    throw new Error("v5: clientDataJSON not valid JSON");
+  }
+  if (clientData.type !== "webauthn.get") {
+    throw new Error("v5: clientData.type is '" + clientData.type + "', expected 'webauthn.get'");
+  }
+  if (expectedRpOrigin !== undefined && expectedRpOrigin !== null) {
+    if (clientData.origin !== expectedRpOrigin) {
+      throw new Error("v5: origin '" + clientData.origin + "' did not match expected '" + expectedRpOrigin + "'");
+    }
+  } else if (!irlidV5OriginAllowed(clientData.origin)) {
+    throw new Error("v5: origin '" + clientData.origin + "' not in allowlist");
+  }
+  if (clientData.challenge !== payloadHashB64u) {
+    throw new Error("v5: clientData.challenge does not match recomputed payload hash");
+  }
+  const authDataBytes = b64urlDecode(webauthnEnv.authData);
+  if (authDataBytes.length < 37) throw new Error("v5: authData too short");
+  const flags = authDataBytes[32];
+  if ((flags & 0x04) !== 0x04) {
+    throw new Error("v5: UV flag not asserted in authData");
+  }
+  const clientDataHashBuf = await crypto.subtle.digest("SHA-256", clientDataBytes);
+  const clientDataHash = new Uint8Array(clientDataHashBuf);
+  const signedBytes = new Uint8Array(authDataBytes.length + clientDataHash.length);
+  signedBytes.set(authDataBytes, 0);
+  signedBytes.set(clientDataHash, authDataBytes.length);
+  let pubKey;
+  try {
+    pubKey = await crypto.subtle.importKey(
+      "jwk", pubJwk,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false, ["verify"]
+    );
+  } catch (e) {
+    throw new Error("v5: failed to import pub: " + (e.message || e));
+  }
+  const ok = await crypto.subtle.verify(
+    { name: "ECDSA", hash: "SHA-256" },
+    pubKey,
+    b64urlDecode(sigRawB64u),
+    signedBytes
+  );
+  if (!ok) throw new Error("v5: ECDSA signature verification failed");
+  return true;
+}
+
 async function helloHashB64url(helloObj, protocolV) {
   const v = (protocolV != null) ? Number(protocolV) : ((helloObj && helloObj.v) ? Number(helloObj.v) : 3);
   const str = (v >= 3) ? canonical(helloObj) : JSON.stringify(helloObj);
@@ -750,6 +831,209 @@ async function lookupByKey(request, env, pubKeyIdParam) {
   ).bind(device.user_id).first();
   if (!user) return json({ found: false });
   return json({ found: true, display_name: user.display_name || null, google_picture: user.google_picture || null });
+}
+
+// =====================
+//  IDENTITY-BOUND SESSIONS — PROTOCOL.md §14 — Batch A
+// =====================
+// Three endpoints implement the QR-scan login flow:
+//   POST /org/login/init  — desktop asks for a fresh login challenge
+//   GET  /org/login/poll  — desktop polls for session arrival (1.5s cadence)
+//   POST /org/login/claim — phone sends a v5-signed envelope binding the nonce
+// Plus rate limiting (3 failed claims / 60s / nonce → 5min cooldown) and the
+// generic auth_failed error to prevent user-enumeration oracles (§14.10).
+
+const LOGIN_CHALLENGE_TTL_S  = 60;            // §14.5 — 60-second login QR
+const LOGIN_SESSION_TTL_S    = 86400;         // §14.7 — 24h sliding TTL
+const LOGIN_CLAIM_FAIL_LIMIT = 3;             // §14.10 — 3 attempts per nonce
+const LOGIN_CLAIM_COOLDOWN_S = 300;           // §14.10 — 5min cooldown
+
+function randomNonce16() {
+  // 16 random bytes, base64url. ~22 char output. Single-use, 60s TTL.
+  return b64urlEncode(crypto.getRandomValues(new Uint8Array(16)));
+}
+
+async function hashIp(request) {
+  // SHA-256 of the source IP, hex truncated to 16 chars. Audit-only; never used
+  // for authorisation. Cloudflare exposes the client IP on `cf-connecting-ip`.
+  const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-real-ip") || "";
+  if (!ip) return null;
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
+  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  return hex.slice(0, 16);
+}
+
+// Generic auth-failed error per §14.10 oracle defence — does NOT distinguish
+// between "invalid signature" and "valid signature but unknown user".
+function genericAuthFailed() {
+  return json({ error: "auth_failed" }, 401);
+}
+
+async function orgLoginInit(request, env) {
+  // §14.4 step [2]: generate nonce, write login_challenges row, return for QR display.
+  const nonce = randomNonce16();
+  const tNow = now();
+  const expiresAt = tNow + LOGIN_CHALLENGE_TTL_S;
+  await env.DB.prepare(
+    "INSERT INTO login_challenges (nonce, issued_at, expires_at, claimed_by, session_token, consumed, fail_count, locked_until) VALUES (?, ?, ?, NULL, NULL, 0, 0, 0)"
+  ).bind(nonce, tNow, expiresAt).run();
+  return json({ nonce, expires_at: expiresAt });
+}
+
+async function orgLoginPoll(request, env) {
+  // §14.4 steps [4] and [11]: desktop polls for the session.
+  const url = new URL(request.url);
+  const nonce = (url.searchParams.get("nonce") || "").trim();
+  if (!nonce) return err("nonce required");
+  const row = await env.DB.prepare(
+    "SELECT nonce, issued_at, expires_at, claimed_by, session_token, consumed FROM login_challenges WHERE nonce = ?"
+  ).bind(nonce).first();
+  if (!row) return json({ error: "challenge_expired" }, 410);
+  if (row.expires_at < now() && !row.session_token) {
+    // Expired before claim — single-shot 410.
+    await env.DB.prepare("DELETE FROM login_challenges WHERE nonce = ?").bind(nonce).run();
+    return json({ error: "challenge_expired" }, 410);
+  }
+  if (!row.session_token) return json({ status: "pending" });
+
+  // Claimed. Resolve session + user + memberships, then mark consumed (single-use).
+  const session = await env.DB.prepare(
+    "SELECT token, user_id, expires_at FROM login_sessions WHERE token = ?"
+  ).bind(row.session_token).first();
+  if (!session) {
+    // Session vanished (revoked between claim and poll). Treat as expired.
+    await env.DB.prepare("DELETE FROM login_challenges WHERE nonce = ?").bind(nonce).run();
+    return json({ error: "challenge_expired" }, 410);
+  }
+  const user = await env.DB.prepare(
+    "SELECT id, display_name, pub_fp FROM users WHERE id = ?"
+  ).bind(session.user_id).first();
+  const memberships = await env.DB.prepare(
+    "SELECT m.role, o.id, o.name, o.slug FROM org_memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = ?"
+  ).bind(session.user_id).all();
+  const orgs = (memberships.results || []).map(m => ({ id: m.id, name: m.name, slug: m.slug, role: m.role }));
+
+  // Developer can always create new orgs; lead_admin can also create new orgs (§14.9).
+  // Bootstrap dev with no orgs yet still gets can_create_org: true.
+  const can_create_org = orgs.some(o => o.role === "developer" || o.role === "lead_admin")
+    || (orgs.length === 0 && user.pub_fp === (env.BOOTSTRAP_DEVELOPER_FP || ""));
+
+  // Mark challenge consumed (single-shot; subsequent polls 410).
+  await env.DB.prepare("UPDATE login_challenges SET consumed = 1 WHERE nonce = ?").bind(nonce).run();
+
+  return json({
+    status: "claimed",
+    session_token: row.session_token,
+    user_id: user.id,
+    display_name: user.display_name,
+    orgs,
+    can_create_org
+  });
+}
+
+async function orgLoginClaim(request, env) {
+  // §14.4 steps [7]–[9]: phone sends signed envelope binding the nonce.
+  let body;
+  try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const { nonce, pub_jwk, sig, webauthn } = body || {};
+  if (!nonce || !pub_jwk || !sig || !webauthn) return genericAuthFailed();
+
+  // Look up challenge row first — order matters for rate-limit accounting.
+  const challenge = await env.DB.prepare(
+    "SELECT nonce, issued_at, expires_at, claimed_by, session_token, consumed, fail_count, locked_until FROM login_challenges WHERE nonce = ?"
+  ).bind(nonce).first();
+  if (!challenge) return json({ error: "challenge_expired" }, 410);
+  const tNow = now();
+  if (challenge.expires_at < tNow) {
+    return json({ error: "challenge_expired" }, 410);
+  }
+  if (challenge.session_token) {
+    // Already claimed by a previous successful POST. Idempotent rejection.
+    return json({ error: "challenge_expired" }, 410);
+  }
+  if (challenge.locked_until > tNow) {
+    return json({ error: "rate_limited", retry_after: challenge.locked_until - tNow }, 429);
+  }
+
+  // Verify the v5 envelope. Payload to verify is { nonce: <nonce> } — the phone signs
+  // exactly this object. The challenge inside webauthn.clientData must equal
+  // SHA-256-b64url(canonical({nonce})). v5-only login (§14.13).
+  let envelopeOk = false;
+  try {
+    await verifyV5Envelope({ nonce }, pub_jwk, sig, webauthn);
+    envelopeOk = true;
+  } catch (_) {
+    envelopeOk = false;
+  }
+
+  if (!envelopeOk) {
+    // Increment fail_count; if at limit, lock for cooldown.
+    const newFails = (challenge.fail_count || 0) + 1;
+    if (newFails >= LOGIN_CLAIM_FAIL_LIMIT) {
+      await env.DB.prepare(
+        "UPDATE login_challenges SET fail_count = ?, locked_until = ? WHERE nonce = ?"
+      ).bind(newFails, tNow + LOGIN_CLAIM_COOLDOWN_S, nonce).run();
+      return json({ error: "rate_limited", retry_after: LOGIN_CLAIM_COOLDOWN_S }, 429);
+    } else {
+      await env.DB.prepare(
+        "UPDATE login_challenges SET fail_count = ? WHERE nonce = ?"
+      ).bind(newFails, nonce).run();
+      return genericAuthFailed();
+    }
+  }
+
+  // Envelope verified. Compute pub_fp (matches existing device_pub_fp pattern, 16 chars).
+  const fp = await deviceKeyFp(pub_jwk);
+  if (!fp) return genericAuthFailed();
+
+  // Look up or bootstrap user.
+  let user = await env.DB.prepare(
+    "SELECT id, display_name FROM users WHERE pub_fp = ?"
+  ).bind(fp).first();
+
+  if (!user) {
+    // Not a known user. Permitted only if this fp matches BOOTSTRAP_DEVELOPER_FP (§14.6).
+    const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+    if (!bootstrapFp || fp !== bootstrapFp) {
+      // Generic 401 to prevent enumeration oracle. Increment fail_count too —
+      // an attacker probing random keys shouldn't get unlimited tries even if
+      // the envelope itself was technically valid.
+      const newFails = (challenge.fail_count || 0) + 1;
+      if (newFails >= LOGIN_CLAIM_FAIL_LIMIT) {
+        await env.DB.prepare(
+          "UPDATE login_challenges SET fail_count = ?, locked_until = ? WHERE nonce = ?"
+        ).bind(newFails, tNow + LOGIN_CLAIM_COOLDOWN_S, nonce).run();
+        return json({ error: "rate_limited", retry_after: LOGIN_CLAIM_COOLDOWN_S }, 429);
+      } else {
+        await env.DB.prepare(
+          "UPDATE login_challenges SET fail_count = ? WHERE nonce = ?"
+        ).bind(newFails, nonce).run();
+        return genericAuthFailed();
+      }
+    }
+    // Bootstrap path — create the founding developer user row.
+    const userId = randomToken().slice(0, 26); // ULID-like length, opaque
+    await env.DB.prepare(
+      "INSERT INTO users (id, pub_jwk, pub_fp, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(userId, JSON.stringify(pub_jwk), fp, "Captain (developer)", tNow, tNow).run();
+    user = { id: userId, display_name: "Captain (developer)" };
+  }
+
+  // Issue session.
+  const sessionToken = randomToken();
+  const sessionExpires = tNow + LOGIN_SESSION_TTL_S;
+  const ipHash = await hashIp(request);
+  const ua = (request.headers.get("user-agent") || "").slice(0, 256);
+  await env.DB.prepare(
+    "INSERT INTO login_sessions (token, user_id, issued_at, expires_at, ip_hash, user_agent) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(sessionToken, user.id, tNow, sessionExpires, ipHash, ua).run();
+
+  // Bind session to challenge for the desktop poll to pick up.
+  await env.DB.prepare(
+    "UPDATE login_challenges SET claimed_by = ?, session_token = ? WHERE nonce = ?"
+  ).bind(user.id, sessionToken, nonce).run();
+
+  return json({ ok: true });
 }
 
 // =====================
@@ -1436,6 +1720,11 @@ export default {
       else if (method === "POST" && path === "/receipts")            response = await uploadReceipt(request, env);
       else if (method === "GET"  && path === "/receipts")             response = await listReceipts(request, env);
       else if (method === "POST" && path === "/verify")              response = await verify(request, env);
+
+      // Org Portal — Identity-Bound Sessions (PROTOCOL.md §14, Batch A)
+      else if (method === "POST" && path === "/org/login/init")      response = await orgLoginInit(request, env);
+      else if (method === "GET"  && path === "/org/login/poll")      response = await orgLoginPoll(request, env);
+      else if (method === "POST" && path === "/org/login/claim")     response = await orgLoginClaim(request, env);
 
       // Org Portal
       else if (method === "POST" && path === "/org/register")        response = await orgRegister(request, env);
