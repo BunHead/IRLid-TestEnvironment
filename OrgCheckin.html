@@ -2030,6 +2030,15 @@ async function handleQrLoginSuccess(data) {
 // Batch C — populate currentOrg from a /user/orgs row (which carries api_key) and
 // hand control over to the existing dashboard loader. The X-Org-Key auth path still
 // works during the v5.5 transition; v6+ will move dashboard ops onto Bearer auth.
+//
+// IMPORTANT (Batch C+ tidy, 4 May 2026 evening): when switching orgs we MUST reset
+// the local portalState/settings to defaults THEN load the new org's server-side
+// settings_json on top. Otherwise leftover values from a previous DEV-mode session
+// (e.g. Imbue's logoUrl + welcomeMessage in localStorage[STORAGE_KEY_PORTAL]) leak
+// into a freshly-created org's Settings panel, making it look like the new org
+// inherited someone else's branding. Captain hit this immediately after the first
+// Batch C sign-in: created "Captians Venue Test" pointing at irlid.co.uk, but the
+// Settings page rendered Imbue's wixstatic logo + "Welcome to Imbue" copy.
 async function loadDashboardForOrg(org) {
   if (!org || !org.api_key) {
     showToast('Org missing api_key — cannot load dashboard', true);
@@ -2044,12 +2053,68 @@ async function loadDashboardForOrg(org) {
     mode: 'irlid-api-test'
   };
   saveJson(STORAGE_KEY_ORG, currentOrg);
+
+  // Reset local UI state to defaults BEFORE applying anything org-specific.
+  // This wipes leftover localStorage values from DEV-mode sessions.
+  portalState = { ...PORTAL_DEFAULTS };
+  settings = {
+    minScore: 50, bioRequired: false, privacyMode: true,
+    checkoutEnabled: true, returnAllowed: true, anonymousMode: false,
+    logoUrl: '', welcomeMessage: '', redirectUrl: '',
+    allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true,
+    allowProofRecording: true, allowIdPhotoCapture: false
+  };
+
+  // Try to fetch the new org's actual settings_json from the Worker. If the
+  // org has any server-side branding/policy, surface it. If the call fails or
+  // the org is brand new, the defaults above remain.
+  try {
+    if (window.IRLidOrgApi && typeof window.IRLidOrgApi.getOrgSettings === 'function') {
+      const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
+      const s = (res && res.settings) || {};
+      // Map server-side settings into local portalState shape.
+      if (typeof s.minScore === 'number')        portalState.minimumTrustScore     = s.minScore;
+      if (typeof s.bioRequired === 'boolean')    portalState.biometricRequired      = s.bioRequired;
+      if (typeof s.privacyMode === 'boolean')    portalState.privacyMode            = s.privacyMode;
+      if (typeof s.anonymousMode === 'boolean')  portalState.anonymousMode          = s.anonymousMode;
+      if (typeof s.checkoutEnabled === 'boolean')portalState.checkoutRequired       = s.checkoutEnabled;
+      if (typeof s.returnAllowed === 'boolean')  portalState.returnAllowed          = s.returnAllowed;
+      if (typeof s.logoUrl === 'string')         portalState.logoUrl                = s.logoUrl;
+      if (typeof s.welcomeMessage === 'string')  portalState.welcomeMessage         = s.welcomeMessage;
+      if (typeof s.redirectUrl === 'string')     portalState.redirectUrl            = s.redirectUrl;
+      // Mirror into settings legacy object.
+      settings.minScore         = portalState.minimumTrustScore;
+      settings.bioRequired      = portalState.biometricRequired;
+      settings.privacyMode      = portalState.privacyMode;
+      settings.anonymousMode    = portalState.anonymousMode;
+      settings.checkoutEnabled  = portalState.checkoutRequired;
+      settings.returnAllowed    = portalState.returnAllowed;
+      settings.logoUrl          = portalState.logoUrl;
+      settings.welcomeMessage   = portalState.welcomeMessage;
+      settings.redirectUrl      = portalState.redirectUrl;
+    }
+  } catch (e) {
+    console.warn('Could not load org settings from worker — defaults remain', e);
+  }
+
+  // Persist the freshly-cleaned-up state.
+  saveJson(STORAGE_KEY_PORTAL, portalState);
+  saveJson(STORAGE_KEY_SETTINGS, settings);
+
   // Keep the legacy fields populated so existing dashboard code is happy.
   const orgNameInput = document.getElementById('orgNameInput'); if (orgNameInput) orgNameInput.value = currentOrg.name || '';
   const existingKeyInput = document.getElementById('existingKeyInput'); if (existingKeyInput) existingKeyInput.value = currentOrg.api_key || '';
   const apiKeyDisplay = document.getElementById('apiKeyDisplay'); if (apiKeyDisplay) apiKeyDisplay.textContent = currentOrg.api_key || '';
+
   setSignedInUI(true);
+  setPortalFieldValues();
+  applySettingsToUI();
   syncLegacyFromPortal();
+
+  // Theme settings live in a separate code path (loadThemeFromServer) — call it
+  // explicitly so the new org's theme overrides any leftover theme state too.
+  try { if (typeof loadThemeFromServer === 'function') await loadThemeFromServer(); } catch (_) {}
+
   try { await refreshAttendance(); } catch (_) {}
   try { await refreshExpectedAttendees(); } catch (_) {}
   showPanel('dashboard');

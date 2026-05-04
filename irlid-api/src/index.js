@@ -874,8 +874,16 @@ async function hashIp(request) {
 }
 
 // Generic auth-failed error per §14.10 oracle defence — does NOT distinguish
-// between "invalid signature" and "valid signature but unknown user".
-function genericAuthFailed() {
+// between "invalid signature" and "valid signature but unknown user" in
+// production. Test env can opt into verbose diagnostics by setting the
+// LOGIN_DEBUG worker secret to "1" (`wrangler secret put LOGIN_DEBUG` then
+// paste 1). When LOGIN_DEBUG is on, the optional `debug` object is included
+// in the response so client-side diagnostics surface the specific failure.
+// THREAT-MODEL.md §XI.5 documents this verbose-mode caveat explicitly.
+function genericAuthFailed(env, debug) {
+  if (debug && env && env.LOGIN_DEBUG === "1") {
+    return json(Object.assign({ error: "auth_failed" }, debug), 401);
+  }
   return json({ error: "auth_failed" }, 401);
 }
 
@@ -991,18 +999,20 @@ async function orgLoginClaim(request, env) {
       await env.DB.prepare(
         "UPDATE login_challenges SET fail_count = ?, locked_until = ? WHERE nonce = ?"
       ).bind(newFails, tNow + LOGIN_CLAIM_COOLDOWN_S, nonce).run();
-      return json({ error: "rate_limited", retry_after: LOGIN_CLAIM_COOLDOWN_S, debug_reason: "envelope_failed: " + envelopeErr }, 429);
+      const rateBody = { error: "rate_limited", retry_after: LOGIN_CLAIM_COOLDOWN_S };
+      if (env.LOGIN_DEBUG === "1") rateBody.debug_reason = "envelope_failed: " + envelopeErr;
+      return json(rateBody, 429);
     } else {
       await env.DB.prepare(
         "UPDATE login_challenges SET fail_count = ? WHERE nonce = ?"
       ).bind(newFails, nonce).run();
-      return json({ error: "auth_failed", debug_reason: "envelope_verify_failed", debug_detail: envelopeErr }, 401);
+      return genericAuthFailed(env, { debug_reason: "envelope_verify_failed", debug_detail: envelopeErr });
     }
   }
 
   // Envelope verified. Compute pub_fp (matches existing device_pub_fp pattern, 16 chars).
   const fp = await deviceKeyFp(pub_jwk);
-  if (!fp) return json({ error: "auth_failed", debug_reason: "fp_compute_failed" }, 401);
+  if (!fp) return genericAuthFailed(env, { debug_reason: "fp_compute_failed" });
 
   // Look up or bootstrap user.
   let user = await env.DB.prepare(
@@ -1026,14 +1036,13 @@ async function orgLoginClaim(request, env) {
         await env.DB.prepare(
           "UPDATE login_challenges SET fail_count = ? WHERE nonce = ?"
         ).bind(newFails, nonce).run();
-        return json({
-          error: "auth_failed",
+        return genericAuthFailed(env, {
           debug_reason: !bootstrapFp ? "no_bootstrap_fp_configured" : "fp_mismatch",
           debug_computed_fp: fp,
           debug_bootstrap_fp_len: bootstrapFp ? bootstrapFp.length : 0,
           debug_bootstrap_fp_first4: bootstrapFp ? bootstrapFp.slice(0, 4) : "",
           debug_bootstrap_fp_last4: bootstrapFp ? bootstrapFp.slice(-4) : ""
-        }, 401);
+        });
       }
     }
     // Bootstrap path — create the founding developer user row.
