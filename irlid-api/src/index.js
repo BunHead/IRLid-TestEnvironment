@@ -933,8 +933,10 @@ async function orgLoginPoll(request, env) {
 
   // Developer can always create new orgs; lead_admin can also create new orgs (§14.9).
   // Bootstrap dev with no orgs yet still gets can_create_org: true.
-  const can_create_org = orgs.some(o => o.role === "developer" || o.role === "lead_admin")
-    || (orgs.length === 0 && user.pub_fp === (env.BOOTSTRAP_DEVELOPER_FP || ""));
+  const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+  const is_developer = !!bootstrapFp && user.pub_fp === bootstrapFp;
+  const can_create_org = is_developer
+    || orgs.some(o => o.role === "developer" || o.role === "lead_admin");
 
   // Mark challenge consumed (single-shot; subsequent polls 410).
   await env.DB.prepare("UPDATE login_challenges SET consumed = 1 WHERE nonce = ?").bind(nonce).run();
@@ -945,7 +947,8 @@ async function orgLoginPoll(request, env) {
     user_id: user.id,
     display_name: user.display_name,
     orgs,
-    can_create_org
+    can_create_org,
+    is_developer
   });
 }
 
@@ -1226,8 +1229,25 @@ async function userCreateOrg(request, env) {
   ).bind(orgId, name, slug, apiKey, JSON.stringify(pubJwk), JSON.stringify(prvJwk), JSON.stringify(defaultSettings), tNow, tNow).run();
 
   // Insert the creator's membership. Bootstrap developer keeps developer role; everyone
-  // else becomes lead_admin of their own new org.
+  // else becomes lead_admin of their own new org. Per Captain's 4 May direction
+  // ("orgs only have one Lead Admin"), the schema doesn't yet enforce uniqueness
+  // but we check at insert time. For org creation this is automatic — a new org
+  // has no existing memberships — but the same check fires when invite-claim
+  // promotes someone to lead_admin (Batch C.5). Developer override path is a
+  // future v6+ admin tool (rescue scenarios when the sole lead_admin loses their
+  // device). For now, one primary lead_admin per org is the contract.
   const role = isBootstrapDev ? "developer" : "lead_admin";
+  if (role === "lead_admin") {
+    const existingLead = await env.DB.prepare(
+      "SELECT user_id FROM org_memberships WHERE org_id = ? AND role = 'lead_admin' LIMIT 1"
+    ).bind(orgId).first();
+    if (existingLead) {
+      // Should never happen for a fresh org, but defensive: if somehow there
+      // already is a lead_admin, fall back to manager rather than violating the
+      // one-lead_admin-per-org contract.
+      return err("Org already has a lead_admin (unexpected) — contact developer", 409);
+    }
+  }
   await env.DB.prepare(
     "INSERT INTO org_memberships (user_id, org_id, role, granted_by, granted_at) VALUES (?, ?, ?, ?, ?)"
   ).bind(user.id, orgId, role, user.id, tNow).run();

@@ -531,6 +531,45 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   }
 }
 
+/* Batch C tidy 2 — Multi-org picker cards */
+.org-picker-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #151b23;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.org-picker-card:hover {
+  border-color: rgba(88,166,255,0.6);
+  background: #1a2230;
+}
+.org-picker-card:active { transform: scale(0.99); }
+.org-picker-card .org-picker-name {
+  font-size: 14px; font-weight: 600; color: #e6edf3;
+}
+.org-picker-card .org-picker-meta {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
+.org-picker-card .org-picker-role {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 999px;
+  background: rgba(63, 185, 80, 0.18); color: #7ee787;
+  white-space: nowrap;
+}
+.org-picker-card .org-picker-role.role-developer { background: rgba(187, 128, 255, 0.18); color: #d2a8ff; }
+.org-picker-card .org-picker-role.role-manager   { background: rgba(88, 166, 255, 0.18); color: #79c0ff; }
+.org-picker-card .org-picker-role.role-staff     { background: rgba(255, 209, 102, 0.18); color: #ffd166; }
+.org-picker-card .org-picker-role.role-attendee  { background: rgba(139, 148, 158, 0.18); color: #c9d1d9; }
+.org-picker-card .org-picker-role.role-implicit  { background: rgba(255,255,255,0.08); color: #c9d1d9; font-style: italic; }
+
 /* Legacy (kept for back-compat in case any other markup still references it) */
 .theme-palette-pair {
   display: grid;
@@ -1141,7 +1180,7 @@ body #venueQRWrap.cycle-burst-pattern {
   <div class="topbar">
     <div class="topbar-title" id="topbarTitle">Organisation</div>
     <div class="topbar-actions">
-      <span id="liveStatus"><span class="live-dot"></span>Debug</span>
+      <span id="liveStatus" data-developer-only="true" style="display:none;"><span class="live-dot"></span>Debug</span>
       <button class="btn btn-secondary btn-sm" id="refreshBtn" onclick="refreshAttendance()">↻ Refresh</button>
       <button class="btn btn-secondary btn-sm" id="csvBtn" onclick="exportCSV()">↓ CSV</button>
       <button class="btn btn-secondary btn-sm" id="csvUploadBtn" onclick="triggerCsvUpload()">↑ CSV</button>
@@ -1169,6 +1208,20 @@ body #venueQRWrap.cycle-burst-pattern {
           </div>
 
           <div id="qrLoginStatus" style="margin-top:12px; font-size:13px; min-height:18px;"></div>
+        </div>
+
+        <!-- Batch C tidy 2 — Multi-org picker. Revealed by handleQrLoginSuccess
+             when the user has 2+ orgs available (explicit memberships + any
+             dev-implicit access). Each card shows org name + role + a tag for
+             implicit dev access. "+ Create new organisation" appears at the
+             bottom for developers and lead_admins. -->
+        <div id="orgPickerPanel" style="display:none;">
+          <div class="alert alert-info" style="font-size:13px; margin-bottom:14px;">
+            <strong>Welcome, <span id="orgPickerWelcome">Captain</span>.</strong>
+            <span id="orgPickerSubtitle">Pick an organisation to load:</span>
+          </div>
+          <div id="orgPickerList" style="display:flex; flex-direction:column; gap:8px;"></div>
+          <button type="button" class="btn btn-secondary" id="orgPickerCreateBtn" style="width:100%; margin-top:14px; display:none;">+ Create new organisation</button>
         </div>
 
         <!-- Batch C — create-org form. Revealed by handleQrLoginSuccess when the
@@ -2018,18 +2071,31 @@ async function handleQrLoginSuccess(data) {
     session_token: data.session_token,
     user_id: data.user_id,
     display_name: data.display_name,
-    can_create_org: !!data.can_create_org
+    can_create_org: !!data.can_create_org,
+    is_developer: !!data.is_developer
   };
   try { localStorage.setItem('irlid_login_session', JSON.stringify(qrLoginSession)); } catch (_) {}
+
+  // Batch C tidy 2 — reveal developer-only UI elements (currently the "Debug"
+  // pill in the top-right). Lead Admins, managers, staff, and attendees don't
+  // need to see Debug. Single source of truth: data.is_developer from the
+  // /org/login/poll response, which is true iff the user's pub_fp matches the
+  // bootstrap developer fingerprint.
+  document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
+    el.style.display = data.is_developer ? '' : 'none';
+  });
 
   const status = document.getElementById('qrLoginStatus');
   const orgs = Array.isArray(data.orgs) ? data.orgs : [];
   const name = data.display_name || 'developer';
 
-  // Hide the QR panel — sign-in is done, we'll either show the create-org form
-  // or hand control to the dashboard.
+  // Batch C tidy 2 — clean panel state. Hide the QR display, the create-org form,
+  // and the org picker before deciding which to show. Different sign-in outcomes
+  // route to different sub-panels and we don't want stale ones lingering.
   document.getElementById('qrLoginStage').style.display = 'none';
   document.getElementById('qrLoginActive').style.display = 'none';
+  const _cop = document.getElementById('createOrgPanel'); if (_cop) _cop.style.display = 'none';
+  const _opp = document.getElementById('orgPickerPanel'); if (_opp) _opp.style.display = 'none';
 
   if (orgs.length === 0) {
     if (data.can_create_org) {
@@ -2067,16 +2133,70 @@ async function handleQrLoginSuccess(data) {
     await loadDashboardForOrg(myOrgs[0]);
     return;
   }
-  // Multi-org auto-load preference (Batch C tidy 2): prefer the user's most
-  // recently granted EXPLICIT membership; fall back to a dev-implicit org only
-  // if no explicit membership exists. This means a developer signing in lands on
-  // their own org (Captians Venue Test, Imbue Ventures, etc.) rather than
-  // some other venue's data they happen to have implicit access to. Multi-org
-  // picker UI ships in Batch C.x as a separate piece.
-  const explicit = myOrgs.filter(o => !o.implicit_membership);
-  const chosen = explicit.length ? explicit[explicit.length - 1] : myOrgs[0];
-  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> ' + myOrgs.length + ' orgs available — picker UI ships in Batch C.x. Loading <em>' + escapeHtml(chosen.name) + '</em>…';
-  await loadDashboardForOrg(chosen);
+  // Batch C tidy 2 — multi-org picker. Show a card per org with role + dev-access
+  // label; click to load. Developer + lead_admin see "+ Create new organisation".
+  status.innerHTML = '';
+  renderOrgPicker(myOrgs, name, !!data.is_developer);
+}
+
+function renderOrgPicker(myOrgs, displayName, isDeveloper) {
+  const panel = document.getElementById('orgPickerPanel');
+  const list = document.getElementById('orgPickerList');
+  const welcome = document.getElementById('orgPickerWelcome');
+  const subtitle = document.getElementById('orgPickerSubtitle');
+  const createBtn = document.getElementById('orgPickerCreateBtn');
+  if (!panel || !list) return;
+
+  if (welcome) welcome.textContent = displayName || 'developer';
+  if (subtitle) {
+    const explicit = myOrgs.filter(o => !o.implicit_membership);
+    const dev = myOrgs.filter(o => o.implicit_membership);
+    let bits = [];
+    if (explicit.length) bits.push(explicit.length + ' membership' + (explicit.length === 1 ? '' : 's'));
+    if (dev.length)      bits.push(dev.length + ' via dev access');
+    subtitle.textContent = 'Pick an organisation to load (' + bits.join(', ') + '):';
+  }
+
+  list.innerHTML = '';
+  // Sort: explicit memberships first (most recent first), then dev-access (most recent first)
+  const sorted = [].concat(
+    myOrgs.filter(o => !o.implicit_membership).reverse(),
+    myOrgs.filter(o => o.implicit_membership)
+  );
+  sorted.forEach(function (org) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'org-picker-card';
+    const roleClass = org.implicit_membership ? 'role-implicit' : ('role-' + String(org.role || 'attendee'));
+    const roleLabel = org.implicit_membership ? 'dev access' : (org.role || 'member');
+    card.innerHTML =
+      '<div>' +
+        '<div class="org-picker-name">' + escapeHtml(org.name) + '</div>' +
+        '<div class="org-picker-meta">slug: ' + escapeHtml(org.slug || '—') + '</div>' +
+      '</div>' +
+      '<span class="org-picker-role ' + roleClass + '">' + escapeHtml(roleLabel) + '</span>';
+    card.addEventListener('click', function () { loadDashboardForOrg(org); });
+    list.appendChild(card);
+  });
+
+  // Show "+ Create new organisation" for developers and anyone with at least one
+  // lead_admin or developer role on an existing org.
+  if (createBtn) {
+    const canCreate = isDeveloper || myOrgs.some(o => o.role === 'lead_admin' || o.role === 'developer');
+    createBtn.style.display = canCreate ? 'block' : 'none';
+    createBtn.onclick = function () {
+      // Reveal the create-org form by hiding the picker.
+      panel.style.display = 'none';
+      const cop = document.getElementById('createOrgPanel');
+      if (cop) cop.style.display = 'block';
+      const welcomeName = document.getElementById('createOrgWelcomeName');
+      if (welcomeName) welcomeName.textContent = displayName || 'developer';
+      const nameInput = document.getElementById('createOrgName');
+      if (nameInput) { nameInput.value = ''; nameInput.focus(); }
+    };
+  }
+
+  panel.style.display = 'block';
 }
 
 // Batch C — populate currentOrg from a /user/orgs row (which carries api_key) and
