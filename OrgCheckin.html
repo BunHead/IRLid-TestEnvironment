@@ -1109,37 +1109,54 @@ body #venueQRWrap.cycle-burst-pattern {
   <div class="content">
     <div class="panel" id="panel-setup">
       <div class="setup-card">
-        <h2>Organisation Setup <span class="debug-banner">debug</span></h2>
-        <p>Register or load an organisation locally. This version simulates the backend offline so we can work on layout and flow safely without touching the live site or any remote backend.</p>
+        <h2>Sign in to IRLid Org Portal <span class="debug-banner">test env</span></h2>
+        <p>Scan the QR with your phone. Your hardware-backed credential signs the login challenge and you're in. No passwords, no api keys to copy.</p>
 
-        <div class="alert alert-info">
-          In DEV mode, a debug organisation is auto-loaded and the portal opens directly on the dashboard for faster iteration.
-        </div>
-
-        <div id="setupForm">
-          <div class="input-group">
-            <label>Organisation Name</label>
-            <input type="text" id="orgNameInput" placeholder="e.g. Acme Conference Ltd" />
+        <!-- Primary path: QR-scan login (PROTOCOL.md §14, Batch B) -->
+        <div id="qrLoginPanel">
+          <div class="qr-login-stage" id="qrLoginStage" aria-live="polite">
+            <button type="button" class="btn btn-primary" id="qrLoginStartBtn" style="width:100%;">Show login QR</button>
           </div>
-          <button class="btn btn-primary" style="width:100%" onclick="registerOrg()">Register Organisation</button>
-        </div>
 
-        <div id="setupResult" style="display:none;">
-          <div class="alert alert-warn">Save your debug API key now — this one exists only locally in your browser.</div>
-          <div class="api-key-box" id="apiKeyDisplay"></div>
-          <div class="key-notice">Stored locally for safe debug iteration.</div>
-          <button class="btn btn-primary" style="width:100%;margin-top:16px;" onclick="saveKeyAndContinue()">Continue with this organisation →</button>
-        </div>
-
-        <div id="existingKeyForm" style="margin-top:24px;padding-top:24px;border-top:1px solid #30363d;">
-          <p style="margin-bottom:12px;">Already have a local debug key? Enter it below:</p>
-          <div class="input-group">
-            <input type="text" id="existingKeyInput" placeholder="org_..." />
+          <div id="qrLoginActive" style="display:none;">
+            <div id="qrLoginCode" class="qr-box" style="margin:14px auto; max-width:280px; aspect-ratio:1; background:#fff; border-radius:12px; display:grid; place-items:center; padding:14px;"></div>
+            <div id="qrLoginCountdown" style="text-align:center; font-size:12px; color:#8b949e; margin-bottom:8px;">Expires in 60s</div>
+            <div class="alert alert-info" style="font-size:12px;">Scan this QR with your phone. Make sure you've enrolled v5 (Hardware-Backed Signing) on the phone first.</div>
+            <button type="button" class="btn btn-secondary btn-sm" id="qrLoginCancelBtn" style="width:100%; margin-top:10px;">Cancel</button>
           </div>
-          <button class="btn btn-secondary" style="width:100%" onclick="loadExistingKey()">Load Organisation</button>
+
+          <div id="qrLoginStatus" style="margin-top:12px; font-size:13px; min-height:18px;"></div>
         </div>
 
-        <div id="setupMessage" style="margin-top:14px;font-size:12px;"></div>
+        <!-- Service-account fallback (existing api_key flow, demoted to expandable) -->
+        <details id="serviceAccountWrap" style="margin-top:24px; padding-top:14px; border-top:1px solid #30363d;">
+          <summary style="cursor:pointer; font-size:13px; color:#8b949e; padding:6px 0;">Service-account login (paste an org_… key)</summary>
+          <p style="margin:12px 0 8px; font-size:12px; color:#8b949e;">For automation, widget integrations, or local dev. Humans should normally use the QR sign-in above.</p>
+
+          <div id="setupForm" style="margin-top:14px;">
+            <div class="input-group">
+              <label>Register a new organisation (test env, no auth)</label>
+              <input type="text" id="orgNameInput" placeholder="e.g. Acme Conference Ltd" />
+            </div>
+            <button class="btn btn-secondary" style="width:100%" onclick="registerOrg()">Register Organisation</button>
+          </div>
+
+          <div id="setupResult" style="display:none; margin-top:14px;">
+            <div class="alert alert-warn" style="font-size:12px;">Save this api key now — local browser storage only.</div>
+            <div class="api-key-box" id="apiKeyDisplay"></div>
+            <button class="btn btn-secondary" style="width:100%;margin-top:10px;" onclick="saveKeyAndContinue()">Continue with this organisation →</button>
+          </div>
+
+          <div id="existingKeyForm" style="margin-top:18px;">
+            <div class="input-group">
+              <label>Or load an existing org by api key</label>
+              <input type="text" id="existingKeyInput" placeholder="org_..." />
+            </div>
+            <button class="btn btn-secondary" style="width:100%" onclick="loadExistingKey()">Load Organisation</button>
+          </div>
+
+          <div id="setupMessage" style="margin-top:14px;font-size:12px;"></div>
+        </details>
       </div>
     </div>
 
@@ -1620,7 +1637,15 @@ body #venueQRWrap.cycle-burst-pattern {
 <input type="file" id="csvFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" style="display:none">
 
 <script>
-const DEV_AUTO_LOGIN = true;
+// DEV_AUTO_LOGIN is true by default to streamline iteration in the test env,
+// but ?dev=0 in the URL forces the real sign-in screen (Batch B QR-scan flow).
+const DEV_AUTO_LOGIN = (function () {
+  try {
+    const v = new URLSearchParams(location.search || '').get('dev');
+    if (v === '0' || v === 'false' || v === 'off') return false;
+  } catch (_) {}
+  return true;
+})();
 const DEV_ORG_NAME = "DEV";
 const DEV_ORG_KEY = "org_DEV_IRLID_TEST_ENVIRONMENT";
 const STORAGE_KEY_ORG = "irlid_mock_org";
@@ -1816,6 +1841,151 @@ async function loadExistingKey() {
 }
 function signOutOrg() { clearStaffAuthSession(); currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
 function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
+
+// =============================================================================
+//  IRLid QR-scan sign-in (PROTOCOL.md §14, Batch B)
+// =============================================================================
+// Desktop side: ask Worker for a fresh login challenge, render the URL it
+// returns as a QR (encoding the irlid.co.uk org-login.html page + the test
+// Worker's URL as the worker= param), then poll the Worker every ~1.5s for
+// the session to arrive. Phone-side flow is in irlid-repo/org-login.html.
+let qrLoginNonce = null;
+let qrLoginPollTimer = null;
+let qrLoginCountdownTimer = null;
+let qrLoginExpiresAt = 0;
+let qrLoginSession = null;
+const QR_LOGIN_PAGE = 'https://irlid.co.uk/org-login.html';
+
+function buildQrLoginUrl() {
+  // The page itself lives at irlid.co.uk so v5 credentials (RP-ID-bound to
+  // irlid.co.uk per PROTOCOL.md §13.12) can sign. The Worker URL is encoded so
+  // the phone POSTs the claim to whichever Worker (live or test) issued the nonce.
+  const workerBase = (window.IRLidOrgApi && window.IRLidOrgApi.workerBaseUrl)
+    ? window.IRLidOrgApi.workerBaseUrl()
+    : 'https://irlid-api-test.irlid-bunhead.workers.dev';
+  return QR_LOGIN_PAGE
+    + '?nonce=' + encodeURIComponent(qrLoginNonce)
+    + '&worker=' + encodeURIComponent(workerBase);
+}
+
+async function startQrLogin() {
+  const stage = document.getElementById('qrLoginStage');
+  const active = document.getElementById('qrLoginActive');
+  const status = document.getElementById('qrLoginStatus');
+  const codeBox = document.getElementById('qrLoginCode');
+  status.textContent = 'Requesting login challenge…';
+  status.style.color = '#8b949e';
+  try {
+    const resp = await window.IRLidOrgApi.loginInit();
+    qrLoginNonce = resp.nonce;
+    qrLoginExpiresAt = (resp.expires_at || 0) * 1000;
+    const url = buildQrLoginUrl();
+    if (typeof window.makeQR === 'function') {
+      await window.makeQR('qrLoginCode', url, 240);
+    } else if (typeof QRCode !== 'undefined') {
+      codeBox.innerHTML = '';
+      new QRCode(codeBox, { text: url, width: 240, height: 240, colorDark: (window.IRLID_THEME_QR_FG || '#000000'), colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    } else {
+      codeBox.textContent = url;
+    }
+    stage.style.display = 'none';
+    active.style.display = 'block';
+    status.textContent = 'Waiting for phone to scan + sign…';
+    updateQrLoginCountdown();
+    qrLoginCountdownTimer = setInterval(updateQrLoginCountdown, 1000);
+    qrLoginPollTimer = setTimeout(pollQrLogin, 1500);
+  } catch (err) {
+    status.textContent = 'Could not start login: ' + (err.message || 'unknown error');
+    status.style.color = '#f85149';
+  }
+}
+
+function updateQrLoginCountdown() {
+  const remaining = Math.max(0, Math.floor((qrLoginExpiresAt - Date.now()) / 1000));
+  const cd = document.getElementById('qrLoginCountdown');
+  if (cd) cd.textContent = remaining > 0 ? 'Expires in ' + remaining + 's' : 'Expired';
+  if (remaining <= 0) cancelQrLogin('QR expired. Get a fresh one.');
+}
+
+async function pollQrLogin() {
+  if (!qrLoginNonce) return;
+  try {
+    const data = await window.IRLidOrgApi.loginPoll(qrLoginNonce);
+    if (data.status === 'pending') {
+      qrLoginPollTimer = setTimeout(pollQrLogin, 1500);
+      return;
+    }
+    if (data.status === 'claimed') {
+      handleQrLoginSuccess(data);
+      return;
+    }
+    qrLoginPollTimer = setTimeout(pollQrLogin, 1500);
+  } catch (err) {
+    if (err.status === 410) cancelQrLogin('QR expired. Get a fresh one.');
+    else qrLoginPollTimer = setTimeout(pollQrLogin, 3000); // backoff on transient errors
+  }
+}
+
+function cancelQrLogin(reason) {
+  clearTimeout(qrLoginPollTimer); qrLoginPollTimer = null;
+  clearInterval(qrLoginCountdownTimer); qrLoginCountdownTimer = null;
+  qrLoginNonce = null;
+  qrLoginExpiresAt = 0;
+  document.getElementById('qrLoginStage').style.display = 'block';
+  document.getElementById('qrLoginActive').style.display = 'none';
+  const status = document.getElementById('qrLoginStatus');
+  if (reason) {
+    status.textContent = reason;
+    const isError = /expired|failed|error|rate/i.test(reason);
+    status.style.color = isError ? '#f85149' : '#8b949e';
+  } else {
+    status.textContent = '';
+  }
+}
+
+function handleQrLoginSuccess(data) {
+  clearTimeout(qrLoginPollTimer); qrLoginPollTimer = null;
+  clearInterval(qrLoginCountdownTimer); qrLoginCountdownTimer = null;
+  qrLoginSession = {
+    session_token: data.session_token,
+    user_id: data.user_id,
+    display_name: data.display_name,
+    can_create_org: !!data.can_create_org
+  };
+  try { localStorage.setItem('irlid_login_session', JSON.stringify(qrLoginSession)); } catch (_) {}
+
+  const status = document.getElementById('qrLoginStatus');
+  const orgs = Array.isArray(data.orgs) ? data.orgs : [];
+  const name = data.display_name || 'developer';
+
+  if (orgs.length === 0) {
+    if (data.can_create_org) {
+      status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> No orgs yet — the create-org flow ships in Batch C.';
+      status.style.color = '#7ee787';
+    } else {
+      status.textContent = 'Signed in but no orgs available for this account.';
+      status.style.color = '#f0883e';
+    }
+    return;
+  }
+  if (orgs.length === 1) {
+    // Batch B end-state: we know the user + their org, but the dashboard load
+    // path still uses X-Org-Key (api_key) for read/write. api_key is not yet
+    // returned by /org/login/poll — Batch C will add it for lead_admin/dev users.
+    // Until then, surface the success but stop short of dashboard load.
+    status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> Org: ' + escapeHtml(orgs[0].name) + ' (' + escapeHtml(orgs[0].role) + '). Dashboard wiring lands in Batch C.';
+    status.style.color = '#7ee787';
+    return;
+  }
+  // 2+ orgs — picker is Batch C work.
+  status.innerHTML = '<strong>Signed in as ' + escapeHtml(name) + '.</strong> ' + orgs.length + ' orgs available; picker ships in Batch C.';
+  status.style.color = '#7ee787';
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+// =================================================================== /Batch B
 function buildVenuePayload() {
   const baseUrl = 'https://bunhead.github.io/IRLid-TestEnvironment';
   const type = (currentMode === 'doorman_scan') ? 'doorman' : 'checkin';
@@ -3102,6 +3272,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   setPortalFieldValues();
   wirePortalFields();
   applyCheckinPrototypeLayout();
+  // Batch B — wire QR-scan login buttons. The handlers no-op gracefully if the
+  // panel-setup screen isn't in the DOM yet (auto-login bypassed it).
+  document.getElementById('qrLoginStartBtn')?.addEventListener('click', startQrLogin);
+  document.getElementById('qrLoginCancelBtn')?.addEventListener('click', () => cancelQrLogin('Cancelled.'));
   const prototypeRoleSelect = document.getElementById('prototypeRoleSelect');
   prototypeRoleSelect?.addEventListener('change', () => setPrototypeRole(prototypeRoleSelect.value));
   setPrototypeRole(prototypeRoleSelect?.value || 'lead_admin');

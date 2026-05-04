@@ -955,12 +955,14 @@ async function orgLoginClaim(request, env) {
     return json({ error: "rate_limited", retry_after: challenge.locked_until - tNow }, 429);
   }
 
-  // Verify the v5 envelope. Payload to verify is { nonce: <nonce> } — the phone signs
-  // exactly this object. The challenge inside webauthn.clientData must equal
-  // SHA-256-b64url(canonical({nonce})). v5-only login (§14.13).
+  // Verify the v5 envelope. Payload to verify is { nonce, type: "irlid_login_v5" } —
+  // the phone signs exactly this object. The `type` discriminator binds the signature
+  // to the login context so an envelope produced here cannot be replayed in any other
+  // v5-signing context (PROTOCOL.md §14.10). The challenge inside webauthn.clientData
+  // must equal SHA-256-b64url(canonical({nonce, type:"irlid_login_v5"})). v5-only (§14.13).
   let envelopeOk = false;
   try {
-    await verifyV5Envelope({ nonce }, pub_jwk, sig, webauthn);
+    await verifyV5Envelope({ nonce, type: "irlid_login_v5" }, pub_jwk, sig, webauthn);
     envelopeOk = true;
   } catch (_) {
     envelopeOk = false;

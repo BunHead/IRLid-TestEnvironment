@@ -31,7 +31,21 @@
     return data;
   }
 
+  // Public helper — exposes the resolved Worker base URL so callers can encode it
+  // into the login QR (the phone POSTs back to it) and rendering paths can
+  // distinguish prod vs test endpoints without hardcoding.
+  function publicBaseUrl() { return getBaseUrl(); }
+
   window.IRLidOrgApi = {
+    // PROTOCOL.md §14 — Identity-bound sessions (Batch B).
+    loginInit() {
+      return request("/org/login/init", { method: "POST" });
+    },
+    loginPoll(nonce) {
+      return request("/org/login/poll?nonce=" + encodeURIComponent(nonce));
+    },
+    workerBaseUrl() { return publicBaseUrl(); },
+
     registerOrganisation(name) {
       return request("/org/register", {
         method: "POST",
