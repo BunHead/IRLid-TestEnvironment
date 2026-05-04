@@ -906,7 +906,7 @@ async function orgLoginPoll(request, env) {
     return json({ error: "challenge_expired" }, 410);
   }
   const user = await env.DB.prepare(
-    "SELECT id, display_name, pub_fp FROM users WHERE id = ?"
+    "SELECT id, display_name, pub_fp FROM portal_users WHERE id = ?"
   ).bind(session.user_id).first();
   const memberships = await env.DB.prepare(
     "SELECT m.role, o.id, o.name, o.slug FROM org_memberships m JOIN organisations o ON o.id = m.org_id WHERE m.user_id = ?"
@@ -988,7 +988,7 @@ async function orgLoginClaim(request, env) {
 
   // Look up or bootstrap user.
   let user = await env.DB.prepare(
-    "SELECT id, display_name FROM users WHERE pub_fp = ?"
+    "SELECT id, display_name FROM portal_users WHERE pub_fp = ?"
   ).bind(fp).first();
 
   if (!user) {
@@ -1014,7 +1014,7 @@ async function orgLoginClaim(request, env) {
     // Bootstrap path — create the founding developer user row.
     const userId = randomToken().slice(0, 26); // ULID-like length, opaque
     await env.DB.prepare(
-      "INSERT INTO users (id, pub_jwk, pub_fp, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO portal_users (id, pub_jwk, pub_fp, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).bind(userId, JSON.stringify(pub_jwk), fp, "Captain (developer)", tNow, tNow).run();
     user = { id: userId, display_name: "Captain (developer)" };
   }

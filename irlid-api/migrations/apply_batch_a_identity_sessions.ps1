@@ -10,11 +10,14 @@ function Invoke-D1Command {
   wrangler d1 execute irlid-db-test --remote --command $Sql
 }
 
-# One row per human. pub_fp is the canonical identity fingerprint
-# (SHA-256 of canonical(compactJwk(pub_jwk)), base64url, truncated to 16 chars
-# to match the device_pub_fp pattern already used elsewhere in the codebase).
+# One row per human who can act in the Org Portal. pub_fp is the canonical
+# identity fingerprint (SHA-256 of canonical(compactJwk(pub_jwk)), base64url,
+# truncated to 16 chars to match the device_pub_fp pattern used elsewhere).
+# NOTE: named portal_users (not users) because schema.sql already defines a
+# users table for the live-IRLid Google-OAuth account system. These are
+# distinct concepts during v5.5 and may be unified in a future protocol version.
 Invoke-D1Command @"
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS portal_users (
   id           TEXT PRIMARY KEY,
   pub_jwk      TEXT NOT NULL,
   pub_fp       TEXT NOT NULL UNIQUE,
@@ -23,7 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at   INTEGER NOT NULL
 );
 "@
-Invoke-D1Command "CREATE INDEX IF NOT EXISTS idx_users_pub_fp ON users(pub_fp);"
+Invoke-D1Command "CREATE INDEX IF NOT EXISTS idx_portal_users_pub_fp ON portal_users(pub_fp);"
 
 # Many-to-many: which users belong to which orgs, with what role.
 # Roles per PROTOCOL.md §14.9: attendee, staff, manager, lead_admin, developer.
