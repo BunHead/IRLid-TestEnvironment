@@ -1364,7 +1364,21 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="content">
     <div class="panel" id="panel-setup">
-      <div class="setup-card">
+      <!-- Batch C polish 7 — Organisation tab signed-in summary. When the user is
+           already signed in and clicks Organisation, this card replaces the sign-in
+           form so they're not stared down by the QR + service-account UI again.
+           Shown via toggleSetupPanelView() called from showPanel('setup'). -->
+      <div class="setup-card" id="signedInSummary" style="display:none;">
+        <h2>Signed in <span class="debug-banner">test env</span></h2>
+        <p>You're signed in to <strong id="signedInOrgName">—</strong> as <strong id="signedInOrgRole">—</strong>. Use the buttons below to switch organisation, create a new one, or sign out.</p>
+        <div style="display:flex; flex-direction:column; gap:10px; margin-top:18px;">
+          <button type="button" class="btn btn-primary" id="signedInSwitchBtn" style="width:100%;">Switch organisation</button>
+          <button type="button" class="btn btn-secondary" id="signedInCreateBtn" style="width:100%; display:none;">+ Create new organisation</button>
+          <button type="button" class="btn btn-secondary" id="signedInSignOutBtn" style="width:100%;">Sign out</button>
+        </div>
+      </div>
+
+      <div class="setup-card" id="signInCard">
         <h2>Sign in to IRLid Org Portal <span class="debug-banner">test env</span></h2>
         <p>Scan the QR with your phone. Your hardware-backed credential signs the login challenge and you're in. No passwords, no api keys to copy.</p>
 
@@ -2075,6 +2089,78 @@ function showPanel(name, el) {
   }
   const titles = { dashboard: 'Dashboard', checkin: 'Check-in', settings: 'Settings', setup: 'Organisation' };
   document.getElementById('topbarTitle').textContent = titles[name] || name;
+  // Batch C polish 7 — when the user lands on Organisation, route to the
+  // signed-in summary if they're authenticated. Otherwise fall through to the
+  // QR-login + service-account form (the legacy behaviour).
+  if (name === 'setup') applySetupPanelSignedInState();
+}
+
+// Batch C polish 7 — toggles between the signed-in summary card and the
+// sign-in card depending on auth state. Called whenever Organisation is opened.
+function applySetupPanelSignedInState() {
+  const summary = document.getElementById('signedInSummary');
+  const signInCard = document.getElementById('signInCard');
+  if (!summary || !signInCard) return;
+  const isSignedIn = !!(currentOrg && currentOrg.api_key);
+  if (isSignedIn) {
+    // Populate summary fields from current state.
+    const orgNameEl = document.getElementById('signedInOrgName');
+    const orgRoleEl = document.getElementById('signedInOrgRole');
+    if (orgNameEl) orgNameEl.textContent = currentOrg.name || '—';
+    if (orgRoleEl) orgRoleEl.textContent = (currentOrg.role || 'member');
+    // Create-new button only for developers and lead_admins.
+    const isDev = !!(qrLoginSession && qrLoginSession.is_developer);
+    const canCreate = isDev || currentOrg.role === 'lead_admin' || currentOrg.role === 'developer';
+    const createBtn = document.getElementById('signedInCreateBtn');
+    if (createBtn) createBtn.style.display = canCreate ? '' : 'none';
+    summary.style.display = '';
+    signInCard.style.display = 'none';
+  } else {
+    summary.style.display = 'none';
+    signInCard.style.display = '';
+  }
+}
+
+// Batch C polish 7 — signed-in summary buttons.
+async function signedInSwitchOrg() {
+  if (!qrLoginSession || !qrLoginSession.session_token) {
+    showToast('No active session — sign in again', true);
+    return;
+  }
+  // Reveal the org picker by hiding the summary, then re-fetch /user/orgs and
+  // render. Same flow as the post-login picker.
+  document.getElementById('signedInSummary').style.display = 'none';
+  document.getElementById('signInCard').style.display = '';
+  // Hide the sign-in card's QR-login section while the picker shows; re-shown
+  // automatically on signOut.
+  const qrPanel = document.getElementById('qrLoginPanel');
+  if (qrPanel) qrPanel.style.display = 'none';
+  const serviceAccount = document.getElementById('serviceAccountWrap');
+  if (serviceAccount) serviceAccount.style.display = 'none';
+  try {
+    const r = await window.IRLidOrgApi.listMyOrgs(qrLoginSession.session_token);
+    const myOrgs = Array.isArray(r.orgs) ? r.orgs : [];
+    renderOrgPicker(myOrgs, qrLoginSession.display_name || 'developer', !!qrLoginSession.is_developer);
+  } catch (err) {
+    showToast('Could not load orgs: ' + (err.message || 'unknown error'), true);
+    // Restore the sign-in surface so the user isn't stuck.
+    if (qrPanel) qrPanel.style.display = '';
+    if (serviceAccount) serviceAccount.style.display = '';
+  }
+}
+function signedInCreateOrg() {
+  document.getElementById('signedInSummary').style.display = 'none';
+  document.getElementById('signInCard').style.display = '';
+  const qrPanel = document.getElementById('qrLoginPanel');
+  const serviceAccount = document.getElementById('serviceAccountWrap');
+  const createOrg = document.getElementById('createOrgPanel');
+  if (qrPanel) qrPanel.style.display = 'none';
+  if (serviceAccount) serviceAccount.style.display = 'none';
+  if (createOrg) createOrg.style.display = '';
+  const welcomeName = document.getElementById('createOrgWelcomeName');
+  if (welcomeName) welcomeName.textContent = (qrLoginSession && qrLoginSession.display_name) || 'developer';
+  const nameInput = document.getElementById('createOrgName');
+  if (nameInput) { nameInput.value = ''; nameInput.focus(); }
 }
 function chromeLogoUrl() {
   return (settings.logoUrl || portalState.logoUrl || '').trim() || 'logo.png';
@@ -2147,7 +2233,27 @@ async function loadExistingKey() {
   document.getElementById('orgNameInput').value = currentOrg.name || '';
   setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('dashboard'); showToast('Organisation loaded');
 }
-function signOutOrg() { clearStaffAuthSession(); currentOrg = null; setSignedInUI(false); showPanel('setup'); showToast('Signed out'); }
+function signOutOrg() {
+  clearStaffAuthSession();
+  currentOrg = null;
+  // Batch C polish 7 — also clear the QR-login session + saved org so a
+  // refresh after sign-out doesn't bounce straight back into the dashboard
+  // via the optimistic session-restore added in polish 4.
+  qrLoginSession = null;
+  try { localStorage.removeItem('irlid_login_session'); } catch (_) {}
+  try { localStorage.removeItem(STORAGE_KEY_ORG); } catch (_) {}
+  // Restore the sign-in card's child panels (the switch-org / create-org
+  // flows hide them; we want them back for a fresh sign-in).
+  ['qrLoginPanel','serviceAccountWrap'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.style.display = '';
+  });
+  ['orgPickerPanel','createOrgPanel','signedInSummary'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  setSignedInUI(false);
+  showPanel('setup');
+  showToast('Signed out');
+}
 function showSetupMessage(msg, isError) { const el = document.getElementById('setupMessage'); el.textContent = msg; el.style.color = isError ? '#f85149' : '#7ee787'; }
 
 // =============================================================================
@@ -2602,7 +2708,46 @@ function syncAllSettingsFrom(source) {
   renderPortalAll();
   generateVenueQR();
 }
-function saveSettings() { syncAllSettingsFrom('canonical'); showToast('Settings saved locally'); }
+// Batch C polish 7 — saveSettings was localStorage-only. After an org switch,
+// loadDashboardForOrg resets portalState then re-hydrates from the Worker's
+// settings_json, which never received logoUrl/redirectUrl/welcomeMessage —
+// they only existed in the local browser. Captain spotted: enter logo URL,
+// click Save, return to Settings later, field is empty. Fix: also POST to
+// /org/settings so the values persist server-side and survive org switch +
+// refresh + browser change.
+//
+// The Worker's allowlist uses different names for some toggles (allowSelfSelect
+// vs allowSelfSelection, requireProof vs requireAdditionalProof, etc.) — map
+// them explicitly here so the proof-rule toggles also persist correctly.
+async function saveSettings() {
+  syncAllSettingsFrom('canonical');
+  if (!currentOrg || !currentOrg.api_key || !window.IRLidOrgApi || typeof window.IRLidOrgApi.updateOrgSettings !== 'function') {
+    showToast('Settings saved locally');
+    return;
+  }
+  const payload = {
+    minScore: settings.minScore,
+    bioRequired: !!settings.bioRequired,
+    privacyMode: !!settings.privacyMode,
+    checkoutEnabled: !!settings.checkoutEnabled,
+    returnAllowed: !!settings.returnAllowed,
+    anonymousMode: !!settings.anonymousMode,
+    logoUrl: settings.logoUrl || '',
+    welcomeMessage: settings.welcomeMessage || '',
+    redirectUrl: settings.redirectUrl || '',
+    allowSelfSelection: !!settings.allowSelfSelect,
+    requireDoormanConfirmation: !!settings.requireDoormanConfirm,
+    requireAdditionalProof: !!settings.requireProof,
+    allowProofRecording: !!settings.allowProofRecording,
+    enableIdPhotoCapture: !!settings.allowIdPhotoCapture
+  };
+  try {
+    await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, payload);
+    showToast('Settings saved');
+  } catch (err) {
+    showToast('Saved locally — server save failed: ' + (err.message || 'unknown error'), true);
+  }
+}
 function resetSettingsToDefaults() {
   settings = { minScore: 50, bioRequired: false, privacyMode: true, checkoutEnabled: true, returnAllowed: true, anonymousMode: false, logoUrl: '', welcomeMessage: 'Welcome. Please review and confirm your check-in.', redirectUrl: '', allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true, allowProofRecording: true, allowIdPhotoCapture: false };
   saveJson(STORAGE_KEY_SETTINGS, settings); applySettingsToUI(); syncPortalFromLegacy(); renderPortalAll(); generateVenueQR(); showToast('Settings reset to defaults');
@@ -3849,6 +3994,10 @@ window.addEventListener('DOMContentLoaded', async () => {
   // panel-setup screen isn't in the DOM yet (auto-login bypassed it).
   document.getElementById('qrLoginStartBtn')?.addEventListener('click', startQrLogin);
   document.getElementById('qrLoginCancelBtn')?.addEventListener('click', () => cancelQrLogin('Cancelled.'));
+  // Batch C polish 7 — signed-in summary buttons
+  document.getElementById('signedInSwitchBtn')?.addEventListener('click', signedInSwitchOrg);
+  document.getElementById('signedInCreateBtn')?.addEventListener('click', signedInCreateOrg);
+  document.getElementById('signedInSignOutBtn')?.addEventListener('click', signOutOrg);
   // Batch C — wire create-org form submit. Same no-op-if-missing pattern.
   document.getElementById('createOrgSubmitBtn')?.addEventListener('click', submitCreateOrg);
   const prototypeRoleSelect = document.getElementById('prototypeRoleSelect');
