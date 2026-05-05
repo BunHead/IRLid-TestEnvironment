@@ -97,6 +97,19 @@ async function sha256B64url(str) {
   return b64urlEncode(new Uint8Array(buf));
 }
 
+function canonicalDeep(val) {
+  if (val === null || typeof val !== "object") return JSON.stringify(val);
+  if (Array.isArray(val)) return "[" + val.map(canonicalDeep).join(",") + "]";
+  const keys = Object.keys(val).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + canonicalDeep(val[k])).join(",") + "}";
+}
+
+async function hashDeepPayloadToB64url(payloadObj) {
+  const bytes = new TextEncoder().encode(canonicalDeep(payloadObj));
+  const hashBuf = await crypto.subtle.digest("SHA-256", bytes);
+  return b64urlEncode(new Uint8Array(hashBuf));
+}
+
 async function verifySig(midB64url, sigB64url, pubJwk) {
   try {
     const pub = await crypto.subtle.importKey("jwk", pubJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
@@ -1548,6 +1561,226 @@ async function requireOrgStaffSession(env, org, staffSessionToken) {
   return null;
 }
 
+const ASSIST_REQUEST_TTL_S = 5 * 60;
+
+function normaliseAssistNonce(value) {
+  return String(value || "").trim();
+}
+
+function normaliseDeviceFp(value) {
+  return String(value || "").trim();
+}
+
+async function getAssistRequestByNonce(env, org, nonce, devicePubFp) {
+  const n = normaliseAssistNonce(nonce);
+  if (!n) return null;
+  if (devicePubFp) {
+    return env.DB.prepare(
+      "SELECT * FROM org_assist_requests WHERE org_id=? AND nonce=? AND pub_fp=?"
+    ).bind(org.id, n, normaliseDeviceFp(devicePubFp)).first();
+  }
+  return env.DB.prepare(
+    "SELECT * FROM org_assist_requests WHERE org_id=? AND nonce=? ORDER BY created_at DESC LIMIT 1"
+  ).bind(org.id, n).first();
+}
+
+async function requirePendingAssistRequest(env, org, nonce, devicePubFp) {
+  const assist = await getAssistRequestByNonce(env, org, nonce, devicePubFp);
+  if (!assist) return { error: err("assist request not found", 404) };
+  const t = now();
+  if (Number(assist.expires_at) <= t) {
+    await env.DB.prepare(
+      "UPDATE org_assist_requests SET status='expired', updated_at=? WHERE org_id=? AND pub_fp=? AND nonce=? AND status='pending'"
+    ).bind(t, org.id, assist.pub_fp, assist.nonce).run();
+    return { error: err("assist request expired", 410) };
+  }
+  if (assist.status !== "pending") {
+    return { error: err(`assist request already ${assist.status}`, 409) };
+  }
+  return { assist };
+}
+
+async function markAssistClaimed(env, org, assist, expected) {
+  const expectedName = `${expected.first_name || ""} ${expected.surname || ""}`.trim();
+  await env.DB.prepare(
+    "UPDATE org_assist_requests SET status='claimed', expected_id=?, expected_name=?, updated_at=? WHERE org_id=? AND pub_fp=? AND nonce=?"
+  ).bind(expected.id, expectedName || null, now(), org.id, assist.pub_fp, assist.nonce).run();
+}
+
+async function parseAssistRequestInput(input) {
+  if (!input) throw new Error("assist_request required");
+  if (input && typeof input === "object") return input;
+  if (typeof input !== "string") throw new Error("assist_request required");
+  const raw = input.trim();
+  if (raw.startsWith("H:")) return b64urlJsonDecode(raw.slice(2));
+  if (raw.startsWith("HZ:")) return inflateRawB64urlJson(raw.slice(3));
+  return JSON.parse(raw);
+}
+
+async function verifyAssistRequestForAction(env, requestInput, org, expectedPubFp, expectedNonce) {
+  let assist;
+  try {
+    assist = await parseAssistRequestInput(requestInput);
+  } catch {
+    return { error: err("Invalid assist request", 400) };
+  }
+  if (!assist || assist.type !== "assist_request") return { error: err("Invalid assist request", 400) };
+  if (!assist.pub_jwk || !assist.pub_fp || !assist.nonce || !assist.ts) {
+    return { error: err("assist request missing required fields", 400) };
+  }
+  if (expectedPubFp && assist.pub_fp !== expectedPubFp) return { error: err("assist request pub_fp mismatch", 400) };
+  if (expectedNonce && assist.nonce !== expectedNonce) return { error: err("assist request nonce mismatch", 400) };
+  const actualFp = await deviceKeyFp(assist.pub_jwk);
+  if (actualFp !== assist.pub_fp) return { error: err("assist request pub_fp does not match pub_jwk", 401) };
+  const orgCode = String(assist.org_code || "").trim();
+  if (orgCode && ![org.id, org.slug, org.api_key].includes(orgCode)) {
+    return { error: err("assist request org mismatch", 403) };
+  }
+
+  const ts = Number(assist.ts);
+  const t = now();
+  if (!Number.isFinite(ts)) return { error: err("assist request timestamp missing", 400) };
+  if (ts > t + 5) return { error: err("assist request timestamp in future", 401) };
+  if (Math.abs(t - ts) > ASSIST_REQUEST_TTL_S) return { error: err("assist request expired", 410) };
+  if (!assist.sig) return { error: err("assist request signature missing", 401) };
+
+  const signedPayload = { ...assist };
+  delete signedPayload.sig;
+  delete signedPayload.webauthn;
+  delete signedPayload.hash;
+  const computed = await hashDeepPayloadToB64url(signedPayload);
+  if (assist.hash && assist.hash !== computed) return { error: err("assist request hash mismatch", 401) };
+  let sigOk = false;
+  if (assist.webauthn) {
+    try {
+      await verifyV5Envelope(signedPayload, assist.pub_jwk, assist.sig, assist.webauthn);
+      sigOk = true;
+    } catch {
+      sigOk = false;
+    }
+  } else {
+    sigOk = await verifySig(computed, assist.sig, assist.pub_jwk);
+  }
+  if (!sigOk) return { error: err("assist request signature invalid", 401) };
+
+  await env.DB.prepare(
+    "UPDATE org_assist_requests SET pub_jwk=COALESCE(pub_jwk,?), issued_at=?, expires_at=?, updated_at=? WHERE org_id=? AND pub_fp=? AND nonce=? AND status='pending'"
+  ).bind(JSON.stringify(assist.pub_jwk), ts, ts + ASSIST_REQUEST_TTL_S, t, org.id, assist.pub_fp, assist.nonce).run();
+  return { assist };
+}
+
+async function orgAssistPoll(request, env, pubFpFromPath) {
+  const org = await orgFromRequest(request, env);
+  if (!org) return authErr("organisation required", 401);
+
+  const url = new URL(request.url);
+  const pubFp = normaliseDeviceFp(pubFpFromPath);
+  const nonce = normaliseAssistNonce(url.searchParams.get("nonce"));
+  if (!pubFp) return err("pub_fp required");
+  if (!nonce) return err("nonce required");
+
+  const t = now();
+  let row = await getAssistRequestByNonce(env, org, nonce, pubFp);
+  if (!row) {
+    await env.DB.prepare(
+      "INSERT INTO org_assist_requests (org_id,pub_fp,nonce,issued_at,expires_at,status,created_at,updated_at) VALUES (?,?,?,?,?,'pending',?,?)"
+    ).bind(org.id, pubFp, nonce, t, t + ASSIST_REQUEST_TTL_S, t, t).run();
+    return json({ status: "pending", expires_at: t + ASSIST_REQUEST_TTL_S });
+  }
+
+  if (row.status === "pending" && Number(row.expires_at) <= t) {
+    await env.DB.prepare(
+      "UPDATE org_assist_requests SET status='expired', updated_at=? WHERE org_id=? AND pub_fp=? AND nonce=?"
+    ).bind(t, org.id, pubFp, nonce).run();
+    return json({ error: "assist_expired" }, 410);
+  }
+
+  if (row.status === "claimed") {
+    return json({
+      status: "claimed",
+      expected_id: row.expected_id || null,
+      expected_name: row.expected_name || null
+    });
+  }
+  if (row.status === "rejected") {
+    return json({ status: "rejected", reason: row.reason || null });
+  }
+  if (row.status === "expired") return json({ error: "assist_expired" }, 410);
+  return json({ status: "pending", expires_at: row.expires_at });
+}
+
+async function orgExpectedCreateAndClaim(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+
+  const staffError = await requireOrgStaffSession(env, org, body.staff_session);
+  if (staffError) return staffError;
+
+  const firstName = (body.first_name || "").trim();
+  const surname = (body.surname || "").trim();
+  const prototypeRole = expectedMemberRole(body.prototype_role || body.role);
+  const devicePubFp = normaliseDeviceFp(body.device_pub_fp);
+  const assistNonce = normaliseAssistNonce(body.assist_nonce);
+  if (!firstName || !surname) return err("first_name and surname required");
+  if (!devicePubFp) return err("device_pub_fp required");
+  if (!assistNonce) return err("assist_nonce required");
+  if (!isExpectedRoleAllowedFromDashboard(prototypeRole)) {
+    return err("developer role cannot be granted from the dashboard - bootstrap or invite token only", 403);
+  }
+
+  const verifiedAssist = await verifyAssistRequestForAction(env, body.assist_request || body.assistRequest, org, devicePubFp, assistNonce);
+  if (verifiedAssist.error) return verifiedAssist.error;
+  const pending = await requirePendingAssistRequest(env, org, assistNonce, devicePubFp);
+  if (pending.error) return pending.error;
+
+  const existingDevice = await env.DB.prepare(
+    "SELECT id,first_name,surname FROM org_expected WHERE org_code=? AND device_key_fp=? AND status='linked' LIMIT 1"
+  ).bind(org.id, devicePubFp).first();
+  if (existingDevice) {
+    return json({ error: "device_already_bound", existing_id: existingDevice.id, existing_name: `${existingDevice.first_name || ""} ${existingDevice.surname || ""}`.trim() }, 409);
+  }
+
+  const existingName = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
+  ).bind(org.id, firstName, surname).first();
+  if (existingName) return json({ error: "duplicate", existing_id: existingName.id }, 409);
+
+  const t = now();
+  const row = await env.DB.prepare(
+    "INSERT INTO org_expected (org_code,first_name,surname,status,created_at,linked_at,device_key_fp,prototype_role) VALUES (?,?,?,?,?,?,?,?) RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
+  ).bind(org.id, firstName, surname, "linked", t, t, devicePubFp, prototypeRole).first();
+  await markAssistClaimed(env, org, pending.assist, row);
+  return json({ expected: row, link: { linked: true, expected_id: row.id, expected_name: `${row.first_name} ${row.surname}`.trim() } }, 201);
+}
+
+async function orgAssistReject(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+
+  const staffError = await requireOrgStaffSession(env, org, body.staff_session);
+  if (staffError) return staffError;
+
+  const assistNonce = normaliseAssistNonce(body.assist_nonce);
+  if (!assistNonce) return err("assist_nonce required");
+  const verifiedAssist = await verifyAssistRequestForAction(env, body.assist_request || body.assistRequest, org, body.device_pub_fp || null, assistNonce);
+  if (verifiedAssist.error) return verifiedAssist.error;
+  const pending = await requirePendingAssistRequest(env, org, assistNonce, body.device_pub_fp);
+  if (pending.error) return pending.error;
+
+  const reason = body.reason ? String(body.reason).trim().slice(0, 500) : null;
+  const t = now();
+  const checkinId = uuid();
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO org_checkins (id,org_id,mode,attendee_label,attendee_key_id,hello_hash,score,bio_verified,gps_hash,checkin_at,created_at,name,attendee_pub_jwk,device_key_fp,status,expected_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    ).bind(checkinId, org.id, "assist_reject", reason || "Assist rejected", null, null, null, 0, null, t, t, null, pending.assist.pub_jwk || null, pending.assist.pub_fp, "rejected", null),
+    env.DB.prepare(
+      "UPDATE org_assist_requests SET status='rejected', reason=?, updated_at=? WHERE org_id=? AND pub_fp=? AND nonce=?"
+    ).bind(reason, t, org.id, pending.assist.pub_fp, pending.assist.nonce)
+  ]);
+  return json({ rejected: true });
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -1915,7 +2148,17 @@ async function orgExpectedClaim(request, env, id) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
   const devicePubFp = (body.device_pub_fp || "").trim();
+  const assistNonce = normaliseAssistNonce(body.assist_nonce);
   if (!devicePubFp) return err("device_pub_fp required");
+  let pendingAssist = null;
+  if (assistNonce) {
+    const staffError = await requireOrgStaffSession(env, org, body.staff_session);
+    if (staffError) return staffError;
+    const verifiedAssist = await verifyAssistRequestForAction(env, body.assist_request || body.assistRequest, org, devicePubFp, assistNonce);
+    if (verifiedAssist.error) return verifiedAssist.error;
+    pendingAssist = await requirePendingAssistRequest(env, org, assistNonce, devicePubFp);
+    if (pendingAssist.error) return pendingAssist.error;
+  }
 
   const expected = await env.DB.prepare(
     "SELECT id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role FROM org_expected WHERE id=? AND org_code=?"
@@ -1927,6 +2170,7 @@ async function orgExpectedClaim(request, env, id) {
   }
 
   if (expected.device_key_fp === devicePubFp) {
+    if (pendingAssist?.assist) await markAssistClaimed(env, org, pendingAssist.assist, expected);
     return json({ ok: true, expected });
   }
 
@@ -1934,6 +2178,7 @@ async function orgExpectedClaim(request, env, id) {
   const row = await env.DB.prepare(
     "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=? RETURNING id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role"
   ).bind(devicePubFp, t, id, org.id).first();
+  if (pendingAssist?.assist) await markAssistClaimed(env, org, pendingAssist.assist, row);
   return json({ ok: true, expected: row });
 }
 
@@ -2031,14 +2276,18 @@ export default {
       else if (method === "POST" && path === "/org/debug/clear-attendance") response = await orgDebugClearAttendance(request, env);
       else if (method === "GET"  && path === "/org/expected")        response = await orgExpectedList(request, env);
       else if (method === "POST" && path === "/org/expected")        response = await orgExpectedCreate(request, env);
+      else if (method === "POST" && path === "/org/expected/create-and-claim") response = await orgExpectedCreateAndClaim(request, env);
+      else if (method === "POST" && path === "/org/assist/reject")   response = await orgAssistReject(request, env);
 
       else {
+        const mAssistPoll = path.match(/^\/org\/assist\/poll\/([^/]+)$/);
         const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
         const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         const mCheckoutToken = path.match(/^\/org\/checkout-token\/([^/]+)$/);
-        if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
+        if (method === "GET" && mAssistPoll) response = await orgAssistPoll(request, env, decodeURIComponent(mAssistPoll[1]));
+        else if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
         else if (method === "POST" && mExpectedClaim) response = await orgExpectedClaim(request, env, Number(mExpectedClaim[1]));
