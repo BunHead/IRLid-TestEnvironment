@@ -2963,7 +2963,11 @@ async function addExpectedAttendee() {
   const proof = await requireFreshStaffProof(`add ${roleLabelFor(requestedRole)}`);
   if (!proof) return;
   try {
-    const payload = await window.IRLidOrgApi.createExpected(currentOrg.api_key, { first_name: firstName, surname, prototype_role: requestedRole });
+    const payload = await window.IRLidOrgApi.createExpected(
+      currentOrg.api_key,
+      { first_name: firstName, surname, prototype_role: requestedRole },
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
     if (payload.expected) {
       payload.expected.prototype_role = requestedRole;
       expectedAttendees.unshift(payload.expected);
@@ -3010,7 +3014,11 @@ async function confirmExpectedDelete() {
   if (!proof) return;
   cancelExpectedEdit();
   try {
-    await window.IRLidOrgApi.deleteExpected(currentOrg.api_key, id);
+    await window.IRLidOrgApi.deleteExpected(
+      currentOrg.api_key,
+      id,
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
     expectedAttendees = expectedAttendees.filter(row => String(row.id) !== String(id));
     setExpectedDeleteMode(false);
     renderTable(attendanceData);
@@ -3458,6 +3466,9 @@ function saveStaffAuthSession(session) {
 function staffSessionIsActive() {
   return !!staffAuthSession?.staff_session && Number(staffAuthSession.expires_at) > staffAuthNow();
 }
+function developerBearerSessionIsActive() {
+  return !!(qrLoginSession?.is_developer && qrLoginSession?.session_token);
+}
 function formatStaffAuthExpiry(expiresAt) {
   if (!expiresAt) return 'unknown';
   return new Date(Number(expiresAt) * 1000).toLocaleTimeString(displayLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -3622,18 +3633,10 @@ async function requireFreshStaffProof(actionLabel) {
     showToast('Load an organisation first', true);
     return null;
   }
-  // Polish 11 hotfix (5 May 2026) — Developer Bearer session bypasses the
-  // Staff HELLO prompt. The Worker endpoints for Expected attendee add/delete
-  // don't require staff_session; only the frontend was demanding it. With
-  // v5.5 identity sessions, a Developer Bearer is higher-privilege than a
-  // Staff HELLO session, so requiring both for the same operation was
-  // overcautious leftover logic from before v5.5 existed.
-  //
-  // Returning a sentinel object so existing callers' `if (!proof) return;`
-  // truthy checks pass. Lead Admins (not Developer) still see the prompt
-  // until polish 11 Task 2 lands the full Bearer-session-replaces-Staff-HELLO
-  // pattern across all gated endpoints.
-  if (qrLoginSession?.is_developer) {
+  // Polish 11 Task 2: Developer Bearer session is stronger than a Staff HELLO
+  // step-up, so Developer skips this prompt. Lead Admins without Developer
+  // status keep the Staff HELLO path until the v5.6 invite-token batch.
+  if (developerBearerSessionIsActive()) {
     return { developer_bypass: true, action: actionLabel };
   }
   const session = await requestStaffHelloSession(actionLabel);
@@ -3686,7 +3689,7 @@ function setManualCheckinLoading(isLoading) {
 function updateManualCheckinAuthState() {
   const btn = document.getElementById('manualCheckinBtn');
   if (!btn) return;
-  const authenticated = staffSessionIsActive();
+  const authenticated = staffSessionIsActive() || developerBearerSessionIsActive();
   btn.disabled = manualCheckinLoading || !authenticated;
   btn.classList.toggle('btn-loading', manualCheckinLoading);
   btn.innerHTML = manualCheckinLoading
@@ -3713,8 +3716,9 @@ async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
   showManualCheckinResult('', '');
   if (!currentOrg) return showToast('Load an organisation first', true);
-  const authMessage = refreshStaffAuthPanel();
-  if (!staffSessionIsActive()) {
+  const developerBypass = developerBearerSessionIsActive();
+  const authMessage = developerBypass ? '' : refreshStaffAuthPanel();
+  if (!developerBypass && !staffSessionIsActive()) {
     const message = authMessage || 'Authenticate staff before manual check-in.';
     showManualCheckinResult(message, 'error');
     showToast(message, true);
@@ -3722,14 +3726,19 @@ async function manualCheckin() {
   }
   setManualCheckinLoading(true);
   try {
-    const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
+    const checkinPayload = {
       mode: 'doorman_scan',
-      staff_session: staffAuthSession.staff_session,
       name: settings.anonymousMode ? '' : label,
       attendeeLabel: settings.anonymousMode ? '' : label,
       score: settings.minScore || 50,
       bioVerified: !!settings.bioRequired
-    });
+    };
+    if (!developerBypass) checkinPayload.staff_session = staffAuthSession.staff_session;
+    const result = await window.IRLidOrgApi.createCheckin(
+      currentOrg.api_key,
+      checkinPayload,
+      developerBypass ? qrLoginSession.session_token : undefined
+    );
     document.getElementById('manualLabel').value = '';
     await refreshAttendance();
     await refreshExpectedAttendees();
