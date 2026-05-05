@@ -595,6 +595,24 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   color: #7a5500;
 }
 
+/* Batch C polish 8 — light-mode round 2. Captain's second screenshot showed
+   the "Live settings snapshot" panel and the role dropdown (.expected-role-select)
+   still dark. */
+:root[data-theme="light"] .settings-summary {
+  background: #f3f5f8;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .settings-summary strong { color: var(--text) !important; }
+:root[data-theme="light"] .settings-summary-label { color: var(--muted); }
+:root[data-theme="light"] .settings-summary-value,
+:root[data-theme="light"] .settings-summary code { color: var(--text); }
+:root[data-theme="light"] .expected-role-select {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+
 /* Theme variables — set dynamically by JS, used by theme-aware elements. */
 :root {
   --theme-primary: #3FB950;
@@ -3896,7 +3914,19 @@ function wirePortalFields() {
   document.querySelectorAll('.mode-btn').forEach((btn) => {
     btn.addEventListener('click', () => { portalState.activeMode = btn.dataset.mode; renderPortalAll(); });
   });
-  document.getElementById('savePortalSettingsBtn').addEventListener('click', () => { syncLegacyFromPortal(); renderPortalAll(); generateVenueQR(); showToast('Portal settings saved locally'); });
+  // Batch C polish 8 — the "Save All Settings" button used to call only
+  // syncLegacyFromPortal + render + showToast(localOnly). Captain spotted
+  // logoUrl/redirectUrl/welcomeMessage never persisted across reloads despite
+  // an apparently-successful save. Root cause: this handler was the actual
+  // save path; saveSettings() (which polish 7 wired to the Worker) was never
+  // called from any UI. Now also invokes saveSettings() so the values land in
+  // settings_json server-side and survive org switch + refresh.
+  document.getElementById('savePortalSettingsBtn').addEventListener('click', async () => {
+    syncLegacyFromPortal();
+    renderPortalAll();
+    generateVenueQR();
+    await saveSettings();
+  });
   document.getElementById('copyOutcomeUrlBtn').addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
   document.getElementById('copyScanUrlBtn').addEventListener('click', () => copyText(SCAN_URL));
   document.getElementById('copySettingsBtn').addEventListener('click', () => copyText(buildPortalSummaryText()));
