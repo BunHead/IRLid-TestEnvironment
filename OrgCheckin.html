@@ -6,6 +6,7 @@
 <title>IRLid - Organisation Check-in Prototype</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
+<script src="js/vendor/jsqr.min.js"></script>
 <script src="js/orgapi.js"></script>
 <script src="js/qr-fullscreen.js"></script>
 <style>
@@ -164,6 +165,19 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-confirm { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 18px 42px rgba(0,0,0,0.38); }
 .expected-confirm p { color: var(--text); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
 .expected-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.staff-hello-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(1,4,9,0.68); }
+.staff-hello-modal { width: min(560px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 18px 42px rgba(0,0,0,0.38); }
+.staff-hello-modal h3 { font-size: 16px; margin-bottom: 6px; color: var(--text); }
+.staff-hello-modal p { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 14px; }
+.staff-hello-grid { display: grid; gap: 12px; }
+.staff-hello-grid label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+.staff-hello-grid input[type=file], .staff-hello-grid textarea { width: 100%; background: #0a0f15; border: 1px solid var(--line); border-radius: 7px; color: var(--text); padding: 10px; font-size: 12px; }
+.staff-hello-grid textarea { min-height: 112px; resize: vertical; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.staff-hello-grid textarea:focus, .staff-hello-grid input[type=file]:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(88,166,255,0.16); }
+.staff-hello-status { min-height: 18px; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.staff-hello-status.error { color: var(--red); }
+.staff-hello-status.ok { color: var(--green); }
+.staff-hello-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
 .checkin-lower-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .expected-admin-panel { background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .expected-admin-panel h5 { font-size: 13px; margin-bottom: 12px; }
@@ -528,6 +542,17 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   border-color: var(--line);
 }
 :root[data-theme="light"] .staff-auth-title { color: var(--text); }
+:root[data-theme="light"] .staff-hello-modal {
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--text);
+}
+:root[data-theme="light"] .staff-hello-grid input[type=file],
+:root[data-theme="light"] .staff-hello-grid textarea {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
 :root[data-theme="light"] .mode-card {
   background: #ffffff;
   color: var(--text);
@@ -1589,11 +1614,10 @@ body #venueQRWrap.cycle-burst-pattern {
                     <div class="staff-auth-head">
                       <div>
                         <div class="staff-auth-title">Staff Auth</div>
-                        <div class="staff-auth-sub">Paste a staff HELLO QR payload to smoke-test the session endpoint. Manual check-in unlocks after authentication.</div>
+                        <div class="staff-auth-sub">Upload a staff HELLO QR image or paste the payload. Manual check-in unlocks after authentication.</div>
                       </div>
                       <div class="staff-auth-badge" id="staffAuthBadge">Unauthenticated</div>
                     </div>
-                    <textarea class="staff-auth-input" id="staffHelloInput" data-testid="staff-hello-input" placeholder="Paste H: or HZ: HELLO payload"></textarea>
                     <div class="staff-auth-actions">
                       <button class="btn btn-primary btn-sm" type="button" id="staffAuthBtn">Authenticate staff</button>
                       <button class="btn btn-secondary btn-sm" type="button" id="staffAuthClearBtn">Sign out staff</button>
@@ -1965,6 +1989,29 @@ body #venueQRWrap.cycle-burst-pattern {
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="staff-hello-backdrop hidden" id="staffHelloDialog" role="dialog" aria-modal="true" aria-labelledby="staffHelloTitle">
+  <div class="staff-hello-modal">
+    <h3 id="staffHelloTitle">Authenticate Staff HELLO</h3>
+    <p id="staffHelloIntro">Choose a HELLO QR screenshot or paste the payload text.</p>
+    <div class="staff-hello-grid">
+      <div>
+        <label for="staffHelloImageInput">QR image</label>
+        <input type="file" id="staffHelloImageInput" accept="image/*">
+      </div>
+      <div>
+        <label for="staffHelloPayloadInput">Payload text</label>
+        <textarea id="staffHelloPayloadInput" data-testid="staff-hello-input" placeholder="Paste H: or HZ: HELLO payload"></textarea>
+      </div>
+      <div class="staff-hello-status" id="staffHelloDialogStatus"></div>
+    </div>
+    <div class="staff-hello-actions">
+      <button class="btn btn-secondary" type="button" id="staffHelloCancelBtn">Cancel</button>
+      <button class="btn btn-secondary" type="button" id="staffHelloDecodeBtn">Decode image</button>
+      <button class="btn btn-primary" type="button" id="staffHelloSubmitBtn">Authenticate</button>
+    </div>
+    <canvas id="staffHelloDecodeCanvas" hidden></canvas>
+  </div>
+</div>
 <div class="expected-confirm-backdrop hidden" id="expectedConfirmDialog" role="dialog" aria-modal="true" aria-labelledby="expectedConfirmText">
   <div class="expected-confirm">
     <p id="expectedConfirmText"></p>
@@ -3445,21 +3492,108 @@ function clearStaffAuthSession(message='No staff session active.') {
   staffAuthExpiryTimer = null;
   renderStaffAuthPanel(message);
 }
+let staffHelloDialogResolver = null;
+function setStaffHelloDialogStatus(message, kind='') {
+  const status = document.getElementById('staffHelloDialogStatus');
+  if (!status) return;
+  status.textContent = message || '';
+  status.className = 'staff-hello-status' + (kind ? ' ' + kind : '');
+}
+function setStaffHelloDialogBusy(isBusy) {
+  ['staffHelloDecodeBtn','staffHelloSubmitBtn','staffHelloCancelBtn','staffHelloImageInput','staffHelloPayloadInput'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !!isBusy;
+  });
+}
+function openStaffHelloDialog(actionLabel='authenticate staff') {
+  const dialog = document.getElementById('staffHelloDialog');
+  const intro = document.getElementById('staffHelloIntro');
+  const fileInput = document.getElementById('staffHelloImageInput');
+  const payloadInput = document.getElementById('staffHelloPayloadInput');
+  if (intro) intro.textContent = `Choose a HELLO QR screenshot or paste the payload text to ${actionLabel}.`;
+  if (fileInput) fileInput.value = '';
+  if (payloadInput) payloadInput.value = '';
+  setStaffHelloDialogStatus('');
+  setStaffHelloDialogBusy(false);
+  dialog?.classList.remove('hidden');
+  setTimeout(() => payloadInput?.focus(), 0);
+}
+function closeStaffHelloDialog() {
+  document.getElementById('staffHelloDialog')?.classList.add('hidden');
+  setStaffHelloDialogBusy(false);
+}
+function cancelStaffHelloDialog() {
+  const resolver = staffHelloDialogResolver;
+  staffHelloDialogResolver = null;
+  if (resolver) resolver(null);
+  closeStaffHelloDialog();
+}
+function requestStaffHelloSession(actionLabel) {
+  if (staffHelloDialogResolver) staffHelloDialogResolver(null);
+  return new Promise((resolve) => {
+    staffHelloDialogResolver = resolve;
+    openStaffHelloDialog(actionLabel);
+  });
+}
+async function decodeStaffHelloImage() {
+  const file = document.getElementById('staffHelloImageInput')?.files?.[0];
+  const payloadInput = document.getElementById('staffHelloPayloadInput');
+  const canvas = document.getElementById('staffHelloDecodeCanvas');
+  if (!file) return setStaffHelloDialogStatus('Choose a QR image first.', 'error');
+  if (!window.jsQR) return setStaffHelloDialogStatus('QR decoder unavailable.', 'error');
+  setStaffHelloDialogBusy(true);
+  setStaffHelloDialogStatus('Decoding image...');
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read image file.'));
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Could not load image.'));
+      image.src = dataUrl;
+    });
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const decoded = window.jsQR(pixels.data, pixels.width, pixels.height);
+    if (!decoded || !decoded.data) {
+      setStaffHelloDialogStatus('Could not decode QR - try the text paste option or a clearer image.', 'error');
+      return;
+    }
+    if (payloadInput) payloadInput.value = decoded.data;
+    setStaffHelloDialogStatus('QR decoded. Review the payload, then authenticate.', 'ok');
+  } catch (err) {
+    setStaffHelloDialogStatus(err.message || 'Could not decode QR - try the text paste option or a clearer image.', 'error');
+  } finally {
+    setStaffHelloDialogBusy(false);
+  }
+}
 async function authenticateStaffHello() {
-  const input = document.getElementById('staffHelloInput');
-  const btn = document.getElementById('staffAuthBtn');
+  const input = document.getElementById('staffHelloPayloadInput');
+  const btn = document.getElementById('staffHelloSubmitBtn');
   const hello = (input?.value || '').trim();
-  if (!currentOrg) return renderStaffAuthPanel('Load an organisation before authenticating staff.', true);
-  if (!hello) return renderStaffAuthPanel('Paste a staff HELLO payload first.', true);
+  if (!currentOrg) return setStaffHelloDialogStatus('Load an organisation before authenticating staff.', 'error');
+  if (!hello) return setStaffHelloDialogStatus('Paste or decode a staff HELLO payload first.', 'error');
 
   if (btn) { btn.disabled = true; btn.textContent = 'Authenticating...'; }
   try {
-    await authenticateStaffHelloPayload(hello);
+    const session = await authenticateStaffHelloPayload(hello);
     renderStaffAuthPanel();
+    setStaffHelloDialogStatus('Staff authenticated.', 'ok');
+    const resolver = staffHelloDialogResolver;
+    staffHelloDialogResolver = null;
+    if (resolver) resolver(session);
+    closeStaffHelloDialog();
   } catch (err) {
-    renderStaffAuthPanel(err.message || 'Staff auth failed.', true);
+    setStaffHelloDialogStatus(err.message || 'Staff auth failed.', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Authenticate staff'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Authenticate'; }
   }
 }
 async function authenticateStaffHelloPayload(hello) {
@@ -3494,20 +3628,13 @@ async function requireFreshStaffProof(actionLabel) {
   if (qrLoginSession?.is_developer) {
     return { developer_bypass: true, action: actionLabel };
   }
-  const hello = window.prompt(`Staff HELLO required to ${actionLabel}. Paste or scan the Staff HELLO QR payload.`);
-  if (!hello || !hello.trim()) {
+  const session = await requestStaffHelloSession(actionLabel);
+  if (!session) {
     showToast('Staff HELLO proof cancelled', true);
     return null;
   }
-  try {
-    const session = await authenticateStaffHelloPayload(hello.trim());
-    renderStaffAuthPanel(`Staff proof accepted for ${actionLabel}.`);
-    return session;
-  } catch (err) {
-    clearStaffAuthSession(err.message || 'Staff authentication required.');
-    showToast(err.message || 'Staff authentication required', true);
-    return null;
-  }
+  renderStaffAuthPanel(`Staff proof accepted for ${actionLabel}.`);
+  return session;
 }
 function refreshStaffAuthPanel() {
   loadStaffAuthSession();
@@ -4109,8 +4236,18 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   const copyOutcomeMiniBtn = document.getElementById('copyOutcomeMiniBtn');
   if (copyOutcomeMiniBtn) copyOutcomeMiniBtn.addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
-  document.getElementById('staffAuthBtn')?.addEventListener('click', authenticateStaffHello);
+  document.getElementById('staffAuthBtn')?.addEventListener('click', () => { requestStaffHelloSession('authenticate staff'); });
   document.getElementById('staffAuthClearBtn')?.addEventListener('click', () => clearStaffAuthSession('Staff signed out. Paste another HELLO to authenticate.'));
+  document.getElementById('staffHelloDecodeBtn')?.addEventListener('click', decodeStaffHelloImage);
+  document.getElementById('staffHelloSubmitBtn')?.addEventListener('click', authenticateStaffHello);
+  document.getElementById('staffHelloCancelBtn')?.addEventListener('click', cancelStaffHelloDialog);
+  document.getElementById('staffHelloImageInput')?.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    setStaffHelloDialogStatus(file ? `Selected ${file.name}. Click Decode image.` : '');
+  });
+  document.getElementById('staffHelloDialog')?.addEventListener('click', (event) => {
+    if (event.target.id === 'staffHelloDialog') cancelStaffHelloDialog();
+  });
   document.getElementById('clearAttendanceBtn')?.addEventListener('click', clearTestAttendanceDataset);
   setInterval(updateRelativeRefresh, 30000);
   document.getElementById('expectedAddBtn')?.addEventListener('click', addExpectedAttendee);
@@ -4124,7 +4261,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     confirmExpectedDelete();
   });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
+    if (event.key === 'Escape' && !document.getElementById('staffHelloDialog')?.classList.contains('hidden')) cancelStaffHelloDialog();
+    else if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
     else if (event.key === 'Escape' && expectedEditId) cancelExpectedEdit();
     else if (event.key === 'Escape' && checkoutConfirmId) cancelCheckout();
   });
