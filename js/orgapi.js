@@ -176,6 +176,24 @@
       });
     },
 
+    bindAdditionalKey(orgKey, id, body, sessionToken) {
+      return request(`/org/expected/${encodeURIComponent(id)}/bind-additional-key`, {
+        method: "POST",
+        orgKey,
+        body,
+        sessionToken
+      });
+    },
+
+    createAndBindExpected(orgKey, body, sessionToken) {
+      return request("/org/expected/create-and-bind", {
+        method: "POST",
+        orgKey,
+        body,
+        sessionToken
+      });
+    },
+
     claimExpected(orgKey, id, devicePubFp) {
       return request(`/org/expected/${encodeURIComponent(id)}/claim`, {
         method: "POST",
