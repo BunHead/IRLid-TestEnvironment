@@ -2916,7 +2916,11 @@ async function addExpectedAttendee() {
   const proof = await requireFreshStaffProof(`add ${roleLabelFor(requestedRole)}`);
   if (!proof) return;
   try {
-    const payload = await window.IRLidOrgApi.createExpected(currentOrg.api_key, { first_name: firstName, surname, prototype_role: requestedRole });
+    const payload = await window.IRLidOrgApi.createExpected(
+      currentOrg.api_key,
+      { first_name: firstName, surname, prototype_role: requestedRole },
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
     if (payload.expected) {
       payload.expected.prototype_role = requestedRole;
       expectedAttendees.unshift(payload.expected);
@@ -2963,7 +2967,11 @@ async function confirmExpectedDelete() {
   if (!proof) return;
   cancelExpectedEdit();
   try {
-    await window.IRLidOrgApi.deleteExpected(currentOrg.api_key, id);
+    await window.IRLidOrgApi.deleteExpected(
+      currentOrg.api_key,
+      id,
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
     expectedAttendees = expectedAttendees.filter(row => String(row.id) !== String(id));
     setExpectedDeleteMode(false);
     renderTable(attendanceData);
@@ -3403,6 +3411,9 @@ function saveStaffAuthSession(session) {
 function staffSessionIsActive() {
   return !!staffAuthSession?.staff_session && Number(staffAuthSession.expires_at) > staffAuthNow();
 }
+function developerBearerSessionIsActive() {
+  return !!(qrLoginSession?.is_developer && qrLoginSession?.session_token);
+}
 function formatStaffAuthExpiry(expiresAt) {
   if (!expiresAt) return 'unknown';
   return new Date(Number(expiresAt) * 1000).toLocaleTimeString(displayLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -3551,7 +3562,7 @@ function setManualCheckinLoading(isLoading) {
 function updateManualCheckinAuthState() {
   const btn = document.getElementById('manualCheckinBtn');
   if (!btn) return;
-  const authenticated = staffSessionIsActive();
+  const authenticated = staffSessionIsActive() || developerBearerSessionIsActive();
   btn.disabled = manualCheckinLoading || !authenticated;
   btn.classList.toggle('btn-loading', manualCheckinLoading);
   btn.innerHTML = manualCheckinLoading
@@ -3578,8 +3589,9 @@ async function manualCheckin() {
   const label = document.getElementById('manualLabel').value.trim();
   showManualCheckinResult('', '');
   if (!currentOrg) return showToast('Load an organisation first', true);
-  const authMessage = refreshStaffAuthPanel();
-  if (!staffSessionIsActive()) {
+  const developerBypass = developerBearerSessionIsActive();
+  const authMessage = developerBypass ? '' : refreshStaffAuthPanel();
+  if (!developerBypass && !staffSessionIsActive()) {
     const message = authMessage || 'Authenticate staff before manual check-in.';
     showManualCheckinResult(message, 'error');
     showToast(message, true);
@@ -3587,14 +3599,19 @@ async function manualCheckin() {
   }
   setManualCheckinLoading(true);
   try {
-    const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
+    const checkinPayload = {
       mode: 'doorman_scan',
-      staff_session: staffAuthSession.staff_session,
       name: settings.anonymousMode ? '' : label,
       attendeeLabel: settings.anonymousMode ? '' : label,
       score: settings.minScore || 50,
       bioVerified: !!settings.bioRequired
-    });
+    };
+    if (!developerBypass) checkinPayload.staff_session = staffAuthSession.staff_session;
+    const result = await window.IRLidOrgApi.createCheckin(
+      currentOrg.api_key,
+      checkinPayload,
+      developerBypass ? qrLoginSession.session_token : undefined
+    );
     document.getElementById('manualLabel').value = '';
     await refreshAttendance();
     await refreshExpectedAttendees();

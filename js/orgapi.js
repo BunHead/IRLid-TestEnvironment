@@ -88,11 +88,12 @@
       });
     },
 
-    createCheckin(orgKey, body) {
+    createCheckin(orgKey, body, sessionToken) {
       return request("/org/checkin", {
         method: "POST",
         orgKey,
-        body
+        body,
+        sessionToken
       });
     },
 
@@ -142,18 +143,20 @@
       });
     },
 
-    createExpected(orgKey, body) {
+    createExpected(orgKey, body, sessionToken) {
       return request("/org/expected", {
         method: "POST",
         orgKey,
-        body
+        body,
+        sessionToken
       });
     },
 
-    deleteExpected(orgKey, id) {
+    deleteExpected(orgKey, id, sessionToken) {
       return request(`/org/expected/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        orgKey
+        orgKey,
+        sessionToken
       });
     },
 
