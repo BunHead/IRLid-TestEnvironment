@@ -95,6 +95,25 @@ CREATE TABLE IF NOT EXISTS org_staff_sessions (
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_org ON org_staff_sessions(org_id, expires_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_sessions_org_hello ON org_staff_sessions(org_id, hello_hash);
 
+-- Batch C.6 additive migration: assisted identity requests. These are short-lived
+-- phone-originated poll records that staff resolve from the dashboard scanner.
+CREATE TABLE IF NOT EXISTS org_assist_requests (
+  org_id        TEXT NOT NULL REFERENCES organisations(id),
+  pub_fp        TEXT NOT NULL,
+  nonce         TEXT NOT NULL,
+  pub_jwk       TEXT,
+  issued_at     INTEGER NOT NULL,
+  expires_at    INTEGER NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending',
+  expected_id   INTEGER,
+  expected_name TEXT,
+  reason        TEXT,
+  created_at    INTEGER NOT NULL,
+  updated_at    INTEGER NOT NULL,
+  PRIMARY KEY (org_id, pub_fp, nonce)
+);
+CREATE INDEX IF NOT EXISTS idx_org_assist_requests_expiry ON org_assist_requests(org_id, expires_at);
+
 -- Batch 16 Task 1 additive migration: short-lived checkout QR tokens.
 CREATE TABLE IF NOT EXISTS org_checkout_tokens (
   token       TEXT PRIMARY KEY,

@@ -173,11 +173,36 @@
       });
     },
 
-    claimExpected(orgKey, id, devicePubFp) {
+    claimExpected(orgKey, id, devicePubFp, assistNonce, staffSession, assistRequest) {
+      const body = { device_pub_fp: devicePubFp };
+      if (assistNonce) body.assist_nonce = assistNonce;
+      if (staffSession) body.staff_session = staffSession;
+      if (assistRequest) body.assist_request = assistRequest;
       return request(`/org/expected/${encodeURIComponent(id)}/claim`, {
         method: "POST",
         orgKey,
-        body: { device_pub_fp: devicePubFp }
+        body
+      });
+    },
+
+    assistPoll(orgKey, pubFp, nonce) {
+      const qs = `?org=${encodeURIComponent(orgKey)}&nonce=${encodeURIComponent(nonce)}`;
+      return request(`/org/assist/poll/${encodeURIComponent(pubFp)}${qs}`);
+    },
+
+    createAndClaimExpected(orgKey, body) {
+      return request("/org/expected/create-and-claim", {
+        method: "POST",
+        orgKey,
+        body
+      });
+    },
+
+    rejectAssist(orgKey, body) {
+      return request("/org/assist/reject", {
+        method: "POST",
+        orgKey,
+        body
       });
     },
 
