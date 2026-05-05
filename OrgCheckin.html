@@ -3480,6 +3480,20 @@ async function requireFreshStaffProof(actionLabel) {
     showToast('Load an organisation first', true);
     return null;
   }
+  // Polish 11 hotfix (5 May 2026) — Developer Bearer session bypasses the
+  // Staff HELLO prompt. The Worker endpoints for Expected attendee add/delete
+  // don't require staff_session; only the frontend was demanding it. With
+  // v5.5 identity sessions, a Developer Bearer is higher-privilege than a
+  // Staff HELLO session, so requiring both for the same operation was
+  // overcautious leftover logic from before v5.5 existed.
+  //
+  // Returning a sentinel object so existing callers' `if (!proof) return;`
+  // truthy checks pass. Lead Admins (not Developer) still see the prompt
+  // until polish 11 Task 2 lands the full Bearer-session-replaces-Staff-HELLO
+  // pattern across all gated endpoints.
+  if (qrLoginSession?.is_developer) {
+    return { developer_bypass: true, action: actionLabel };
+  }
   const hello = window.prompt(`Staff HELLO required to ${actionLabel}. Paste or scan the Staff HELLO QR payload.`);
   if (!hello || !hello.trim()) {
     showToast('Staff HELLO proof cancelled', true);
