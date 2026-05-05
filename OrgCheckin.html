@@ -6,6 +6,7 @@
 <title>IRLid - Organisation Check-in Prototype</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
+<script src="js/sign.js?v=3.1"></script>
 <script src="js/orgapi.js"></script>
 <script src="js/qr-fullscreen.js"></script>
 <style>
@@ -164,6 +165,23 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-confirm { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 18px 42px rgba(0,0,0,0.38); }
 .expected-confirm p { color: var(--text); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
 .expected-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.assist-modal-backdrop { position: fixed; inset: 0; z-index: 1001; display: grid; place-items: center; padding: 20px; background: rgba(1,4,9,0.72); }
+.assist-modal { width: min(760px, 100%); max-height: min(88dvh, 820px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 20px 52px rgba(0,0,0,0.42); }
+.assist-modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+.assist-modal-head h3 { font-size: 18px; margin-bottom: 4px; }
+.assist-device-meta { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.assist-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.assist-tab { border:1px solid var(--line); border-radius:999px; padding:7px 11px; background:#0b1220; color:var(--muted); cursor:pointer; font-size:12px; font-weight:700; }
+.assist-tab.active { color:#fff; border-color:var(--blue); background:rgba(88,166,255,0.18); }
+.assist-search { margin-bottom:10px; }
+.assist-list { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#11161d; }
+.assist-row { width:100%; border:0; border-bottom:1px solid var(--line-soft); background:transparent; color:var(--text); padding:10px 12px; display:flex; justify-content:space-between; gap:10px; text-align:left; cursor:pointer; }
+.assist-row:last-child { border-bottom:0; }
+.assist-row:hover { background:rgba(88,166,255,0.12); }
+.assist-row[disabled] { opacity:0.55; cursor:not-allowed; }
+.assist-form-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; }
+.assist-error { min-height:18px; margin-top:10px; color:var(--red); font-size:12px; line-height:1.4; }
+.assist-actions { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:14px; }
 .checkin-lower-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .expected-admin-panel { background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .expected-admin-panel h5 { font-size: 13px; margin-bottom: 12px; }
@@ -562,6 +580,25 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 :root[data-theme="light"] .expected-list {
   background: #ffffff;
   border-color: var(--line);
+}
+:root[data-theme="light"] .assist-modal,
+:root[data-theme="light"] .assist-list {
+  background: #ffffff;
+  border-color: var(--line);
+}
+:root[data-theme="light"] .assist-tab {
+  background: #ffffff;
+  color: var(--muted);
+}
+:root[data-theme="light"] .assist-tab.active {
+  background: #e6eef9;
+  color: var(--text);
+}
+:root[data-theme="light"] .assist-row {
+  color: var(--text);
+}
+:root[data-theme="light"] .assist-row:hover {
+  background: #f3f5f8;
 }
 :root[data-theme="light"] .expected-edit-fields input {
   background: #ffffff;
@@ -1610,6 +1647,16 @@ body #venueQRWrap.cycle-burst-pattern {
                     </div>
                     <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
                     <div class="checkin-result" id="manualCheckinResult"></div>
+                    <div class="match-panel">
+                      <h5>Scanner</h5>
+                      <p class="mini-help">Paste a scanned HELLO or assist-request QR payload. Assist requests open the assisted identity modal; regular HELLO codes continue through doorman check-in.</p>
+                      <div class="input-group">
+                        <label for="doormanQrPayload">QR payload</label>
+                        <textarea id="doormanQrPayload" rows="3" placeholder="H:... or HZ:..."></textarea>
+                      </div>
+                      <button class="btn btn-secondary" type="button" style="width:100%;" onclick="processDoormanQrPayload()">Process QR payload</button>
+                      <div class="checkin-result" id="doormanQrResult"></div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2067,6 +2114,7 @@ let staffAuthSession = null;
 let staffAuthExpiryTimer = null;
 let staffAuthExpiredMessage = '';
 let manualCheckinLoading = false;
+let assistModalState = null;
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -3618,6 +3666,237 @@ async function manualCheckin() {
     showToast(err.message || 'Could not record check-in', true);
   } finally {
     setManualCheckinLoading(false);
+  }
+}
+async function decodeDoormanQrPayload(raw) {
+  const text = String(raw || '').trim();
+  if (!text) throw new Error('Paste a QR payload first');
+  if (text.startsWith('HZ:')) {
+    if (typeof irlidDecompressFromB64url !== 'function') throw new Error('Compressed QR decoder unavailable');
+    return irlidDecompressFromB64url(text.slice(3));
+  }
+  if (text.startsWith('H:')) {
+    if (typeof irlidDecodeB64urlJson !== 'function') throw new Error('QR decoder unavailable');
+    return irlidDecodeB64urlJson(text.slice(2));
+  }
+  return JSON.parse(text);
+}
+function setDoormanQrResult(message, kind='') {
+  const el = document.getElementById('doormanQrResult');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = `checkin-result ${kind}`;
+}
+async function processDoormanQrPayload() {
+  const input = document.getElementById('doormanQrPayload');
+  const raw = input?.value || '';
+  setDoormanQrResult('', '');
+  try {
+    const env = await decodeDoormanQrPayload(raw);
+    const scanType = env?.type || 'checkin';
+    if (scanType === 'assist_request') {
+      openAssistModal(env, raw.trim());
+      setDoormanQrResult('Assist request opened', 'info', true);
+      return;
+    }
+    await runDoormanCheckin(env);
+  } catch (err) {
+    flashDoormanPanel('error');
+    setDoormanQrResult(err.message || 'Could not process QR payload', 'error');
+  }
+}
+async function runDoormanCheckin(env) {
+  if (!currentOrg) throw new Error('Load an organisation first');
+  const authMessage = refreshStaffAuthPanel();
+  if (!staffSessionIsActive()) throw new Error(authMessage || 'Authenticate staff before scanner check-in.');
+  if (!env || typeof env !== 'object') throw new Error('Invalid HELLO payload');
+  const helloHash = typeof irlidHelloHashB64url === 'function' ? await irlidHelloHashB64url(env) : null;
+  const result = await window.IRLidOrgApi.createCheckin(currentOrg.api_key, {
+    mode: 'doorman_scan',
+    staff_session: staffAuthSession.staff_session,
+    helloPayload: env,
+    helloHash,
+    name: '',
+    attendeeLabel: '',
+    score: settings.minScore || 50,
+    bioVerified: !!settings.bioRequired
+  });
+  await refreshAttendance();
+  await refreshExpectedAttendees();
+  flashDoormanPanel(result.linked ? 'success' : 'walkin');
+  setDoormanQrResult(result.linked ? `Matched expected attendee: ${result.expected_name || 'linked'}` : 'Regular HELLO recorded', result.linked ? 'success' : 'info', true);
+  try { if (typeof triggerAcceptCycleAnimation === 'function') triggerAcceptCycleAnimation(); } catch(_) {}
+}
+function assistShortFp(fp) {
+  const value = String(fp || '');
+  return value.length > 16 ? `${value.slice(0, 8)}...${value.slice(-6)}` : value;
+}
+function assistRequestTime(env) {
+  const ts = Number(env?.ts || 0);
+  if (!Number.isFinite(ts) || !ts) return 'time unavailable';
+  return new Date(ts * 1000).toLocaleTimeString(displayLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+function roleOptionsForAssist() {
+  const role = currentPrototypeRole();
+  return EXPECTED_ROLE_OPTIONS[role] || EXPECTED_ROLE_OPTIONS.lead_admin;
+}
+function openAssistModal(env, rawPayload) {
+  assistModalState = {
+    env,
+    rawPayload,
+    tab: 'pick',
+    query: '',
+    error: '',
+    busy: false
+  };
+  renderAssistModal();
+}
+function closeAssistModal() {
+  assistModalState = null;
+  document.getElementById('assistModalRoot')?.remove();
+}
+function renderAssistModal() {
+  if (!assistModalState) return;
+  let root = document.getElementById('assistModalRoot');
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'assistModalRoot';
+    document.body.appendChild(root);
+  }
+  const state = assistModalState;
+  const env = state.env || {};
+  const rows = (expectedAttendees || [])
+    .filter(row => !row.device_key_fp && expectedDisplayName(row).toLowerCase().includes(state.query.toLowerCase()))
+    .slice(0, 12);
+  const roleOptions = roleOptionsForAssist().map(role => `<option value="${escapeHtml(role)}">${escapeHtml(roleLabelFor(role))}</option>`).join('');
+  const pickHtml = `
+    <div class="input-group assist-search">
+      <label for="assistSearch">Pick from expected list</label>
+      <input id="assistSearch" type="search" placeholder="Search unlinked expected attendees" value="${escapeHtml(state.query)}">
+    </div>
+    <div class="assist-list">
+      ${rows.length ? rows.map(row => `<button class="assist-row" type="button" data-assist-claim="${escapeHtml(row.id)}"${state.busy ? ' disabled' : ''}><span><strong>${escapeHtml(expectedDisplayName(row))}</strong><div class="expected-meta">${escapeHtml(roleLabelFor(row.prototype_role || 'attendee'))}</div></span><span class="expected-pill warn">claim</span></button>`).join('') : '<div class="expected-state">No unlinked expected attendees match.</div>'}
+    </div>`;
+  const addHtml = `
+    <div class="assist-form-grid">
+      <div class="input-group"><label for="assistFirstName">First name</label><input id="assistFirstName" type="text" autocomplete="given-name"></div>
+      <div class="input-group"><label for="assistSurname">Surname</label><input id="assistSurname" type="text" autocomplete="family-name"></div>
+      <div class="input-group"><label for="assistRole">Role</label><select id="assistRole" class="expected-role-select">${roleOptions}</select></div>
+    </div>
+    <div class="assist-actions"><button class="btn btn-primary" type="button" id="assistCreateBtn"${state.busy ? ' disabled' : ''}>Create and bind</button></div>`;
+  const rejectHtml = `
+    <div class="input-group"><label for="assistRejectReason">Reason</label><textarea id="assistRejectReason" rows="3" placeholder="Optional note for audit trail"></textarea></div>
+    <div class="assist-actions"><button class="btn btn-danger" type="button" id="assistRejectBtn"${state.busy ? ' disabled' : ''}>Reject request</button></div>`;
+  const bodyHtml = state.tab === 'add' ? addHtml : state.tab === 'reject' ? rejectHtml : pickHtml;
+  root.innerHTML = `
+    <div class="assist-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="assistModalTitle">
+      <div class="assist-modal">
+        <div class="assist-modal-head">
+          <div>
+            <h3 id="assistModalTitle">Assist this attendee</h3>
+            <div class="assist-device-meta">Device ${escapeHtml(assistShortFp(env.pub_fp))} · requested ${escapeHtml(assistRequestTime(env))}</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" type="button" id="assistCloseBtn">Cancel</button>
+        </div>
+        <div class="assist-tabs">
+          <button class="assist-tab ${state.tab === 'pick' ? 'active' : ''}" type="button" data-assist-tab="pick">Pick expected</button>
+          <button class="assist-tab ${state.tab === 'add' ? 'active' : ''}" type="button" data-assist-tab="add">Add new</button>
+          <button class="assist-tab ${state.tab === 'reject' ? 'active' : ''}" type="button" data-assist-tab="reject">Reject</button>
+        </div>
+        ${bodyHtml}
+        <div class="assist-error">${escapeHtml(state.error || '')}</div>
+      </div>
+    </div>`;
+  root.querySelector('#assistCloseBtn')?.addEventListener('click', closeAssistModal);
+  root.querySelectorAll('[data-assist-tab]').forEach(btn => btn.addEventListener('click', () => {
+    assistModalState.tab = btn.dataset.assistTab;
+    assistModalState.error = '';
+    renderAssistModal();
+  }));
+  root.querySelector('#assistSearch')?.addEventListener('input', (event) => {
+    assistModalState.query = event.target.value || '';
+    renderAssistModal();
+  });
+  root.querySelectorAll('[data-assist-claim]').forEach(btn => btn.addEventListener('click', () => claimAssistExpected(btn.dataset.assistClaim)));
+  root.querySelector('#assistCreateBtn')?.addEventListener('click', createAssistExpected);
+  root.querySelector('#assistRejectBtn')?.addEventListener('click', rejectAssistRequest);
+}
+async function requireAssistStaffSession() {
+  refreshStaffAuthPanel();
+  if (staffSessionIsActive()) return staffAuthSession;
+  const hello = window.prompt('Staff HELLO required to assist this attendee. Paste the Staff HELLO QR payload.');
+  if (!hello || !hello.trim()) throw new Error('Staff HELLO proof cancelled');
+  await authenticateStaffHelloPayload(hello.trim());
+  renderStaffAuthPanel('Staff proof accepted for assisted identity.');
+  return staffAuthSession;
+}
+function setAssistBusy(isBusy, error='') {
+  if (!assistModalState) return;
+  assistModalState.busy = isBusy;
+  assistModalState.error = error;
+  renderAssistModal();
+}
+async function claimAssistExpected(expectedId) {
+  if (!assistModalState || !expectedId) return;
+  try {
+    setAssistBusy(true);
+    const session = await requireAssistStaffSession();
+    const env = assistModalState.env;
+    await window.IRLidOrgApi.claimExpected(currentOrg.api_key, expectedId, env.pub_fp, env.nonce, session.staff_session, env);
+    closeAssistModal();
+    await refreshExpectedAttendees();
+    await refreshAttendance();
+    showToast('Assist request claimed');
+  } catch (err) {
+    setAssistBusy(false, err.message || 'Could not claim assist request');
+  }
+}
+async function createAssistExpected() {
+  if (!assistModalState) return;
+  try {
+    const firstName = document.getElementById('assistFirstName')?.value.trim() || '';
+    const surname = document.getElementById('assistSurname')?.value.trim() || '';
+    const role = document.getElementById('assistRole')?.value || 'attendee';
+    if (!firstName || !surname) throw new Error('Enter first name and surname');
+    setAssistBusy(true);
+    const session = await requireAssistStaffSession();
+    const env = assistModalState.env;
+    await window.IRLidOrgApi.createAndClaimExpected(currentOrg.api_key, {
+      first_name: firstName,
+      surname,
+      prototype_role: role,
+      device_pub_fp: env.pub_fp,
+      assist_nonce: env.nonce,
+      staff_session: session.staff_session,
+      assist_request: env
+    });
+    closeAssistModal();
+    await refreshExpectedAttendees();
+    await refreshAttendance();
+    showToast('Attendee created and linked');
+  } catch (err) {
+    setAssistBusy(false, err.message || 'Could not create attendee');
+  }
+}
+async function rejectAssistRequest() {
+  if (!assistModalState) return;
+  try {
+    const reason = document.getElementById('assistRejectReason')?.value.trim() || '';
+    setAssistBusy(true);
+    const session = await requireAssistStaffSession();
+    const env = assistModalState.env;
+    await window.IRLidOrgApi.rejectAssist(currentOrg.api_key, {
+      assist_nonce: env.nonce,
+      device_pub_fp: env.pub_fp,
+      staff_session: session.staff_session,
+      assist_request: env,
+      reason
+    });
+    closeAssistModal();
+    await refreshAttendance();
+    showToast('Assist request rejected');
+  } catch (err) {
+    setAssistBusy(false, err.message || 'Could not reject assist request');
   }
 }
 function loadVenueQR() { generateVenueQR(); showToast('Debug QR refreshed'); }
