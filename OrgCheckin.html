@@ -2094,6 +2094,25 @@ function orgFromUrl() {
 function ensureExpectedAttendees() { let stored = loadJson(STORAGE_KEY_EXPECTED, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultExpectedAttendees(); saveJson(STORAGE_KEY_EXPECTED, stored); } return stored; }
 function loadPortalState() { try { const raw = localStorage.getItem(STORAGE_KEY_PORTAL); return { ...PORTAL_DEFAULTS, ...(raw ? JSON.parse(raw) : {}) }; } catch (e) { return { ...PORTAL_DEFAULTS }; } }
 function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.stringify(portalState)); }
+function applyServerSettingsToLocalState(s) {
+  const src = s || {};
+  if (typeof src.minScore === 'number') portalState.minimumTrustScore = src.minScore;
+  if (typeof src.bioRequired === 'boolean') portalState.biometricRequired = src.bioRequired;
+  if (typeof src.privacyMode === 'boolean') portalState.privacyMode = src.privacyMode;
+  if (typeof src.anonymousMode === 'boolean') portalState.anonymousMode = src.anonymousMode;
+  if (typeof src.checkoutEnabled === 'boolean') portalState.checkoutRequired = src.checkoutEnabled;
+  if (typeof src.returnAllowed === 'boolean') portalState.returnAllowed = src.returnAllowed;
+  if (typeof src.logoUrl === 'string') portalState.logoUrl = src.logoUrl;
+  if (typeof src.welcomeMessage === 'string') portalState.welcomeMessage = src.welcomeMessage;
+  if (typeof src.redirectUrl === 'string') portalState.redirectUrl = src.redirectUrl;
+  if (typeof src.allowSelfSelection === 'boolean') portalState.allowSelfSelection = src.allowSelfSelection;
+  if (typeof src.requireDoormanConfirmation === 'boolean') portalState.requireDoormanConfirmation = src.requireDoormanConfirmation;
+  if (typeof src.requireAdditionalProof === 'boolean') portalState.requireAdditionalProof = src.requireAdditionalProof;
+  if (typeof src.allowProofRecording === 'boolean') portalState.allowProofRecording = src.allowProofRecording;
+  if (typeof src.enableIdPhotoCapture === 'boolean') portalState.enableIdPhotoCapture = src.enableIdPhotoCapture;
+  syncLegacyFromPortal();
+  savePortalState();
+}
 
 function showPanel(name, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -2568,26 +2587,7 @@ async function loadDashboardForOrg(org) {
     if (window.IRLidOrgApi && typeof window.IRLidOrgApi.getOrgSettings === 'function') {
       const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
       const s = (res && res.settings) || {};
-      // Map server-side settings into local portalState shape.
-      if (typeof s.minScore === 'number')        portalState.minimumTrustScore     = s.minScore;
-      if (typeof s.bioRequired === 'boolean')    portalState.biometricRequired      = s.bioRequired;
-      if (typeof s.privacyMode === 'boolean')    portalState.privacyMode            = s.privacyMode;
-      if (typeof s.anonymousMode === 'boolean')  portalState.anonymousMode          = s.anonymousMode;
-      if (typeof s.checkoutEnabled === 'boolean')portalState.checkoutRequired       = s.checkoutEnabled;
-      if (typeof s.returnAllowed === 'boolean')  portalState.returnAllowed          = s.returnAllowed;
-      if (typeof s.logoUrl === 'string')         portalState.logoUrl                = s.logoUrl;
-      if (typeof s.welcomeMessage === 'string')  portalState.welcomeMessage         = s.welcomeMessage;
-      if (typeof s.redirectUrl === 'string')     portalState.redirectUrl            = s.redirectUrl;
-      // Mirror into settings legacy object.
-      settings.minScore         = portalState.minimumTrustScore;
-      settings.bioRequired      = portalState.biometricRequired;
-      settings.privacyMode      = portalState.privacyMode;
-      settings.anonymousMode    = portalState.anonymousMode;
-      settings.checkoutEnabled  = portalState.checkoutRequired;
-      settings.returnAllowed    = portalState.returnAllowed;
-      settings.logoUrl          = portalState.logoUrl;
-      settings.welcomeMessage   = portalState.welcomeMessage;
-      settings.redirectUrl      = portalState.redirectUrl;
+      applyServerSettingsToLocalState(s);
     }
   } catch (e) {
     console.warn('Could not load org settings from worker — defaults remain', e);
@@ -2616,6 +2616,7 @@ async function loadDashboardForOrg(org) {
   showPanel('dashboard');
   generateVenueQR();
   renderPortalAll();
+  setPortalFieldValues();
   showToast('Signed in to ' + currentOrg.name + ' as ' + (org.role || 'member'));
 }
 
@@ -2820,13 +2821,10 @@ async function saveSettings() {
   }
 
   // Update portalState from the readback so the UI state matches the Worker.
-  if (typeof r.logoUrl === 'string') { portalState.logoUrl = r.logoUrl; settings.logoUrl = r.logoUrl; }
-  if (typeof r.redirectUrl === 'string') { portalState.redirectUrl = r.redirectUrl; settings.redirectUrl = r.redirectUrl; }
-  if (typeof r.welcomeMessage === 'string') { portalState.welcomeMessage = r.welcomeMessage; settings.welcomeMessage = r.welcomeMessage; }
-  saveJson(STORAGE_KEY_PORTAL, portalState);
-  saveJson(STORAGE_KEY_SETTINGS, settings);
+  applyServerSettingsToLocalState(r);
   updateChromeLogo();
   renderPortalAll();
+  setPortalFieldValues();
 
   showToast('✓ Settings saved and verified');
 }
