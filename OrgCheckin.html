@@ -4284,6 +4284,25 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (DEV_AUTO_LOGIN && bootOrg) {
     currentOrg = bootOrg; ensureExpectedAttendees();
     saveJson(STORAGE_KEY_ORG, currentOrg);
+    // DEV_AUTO_LOGIN should behave like a Developer Bearer session for all
+    // frontend gating: requireFreshStaffProof's developer_bypass, the new
+    // effectiveRoleRank() helper, and the data-developer-only UI elements.
+    // Without this, the Add path prompts for a Staff HELLO scan even though
+    // the user is acting as the developer. The synthetic session_token is NOT
+    // valid for Worker Bearer auth — DEV mode uses currentOrg.api_key
+    // (X-Org-Key) for org operations, not Bearer auth — so passing this token
+    // to Worker endpoints will fail; that's expected. This block parallels the
+    // qrLoginSession population in handleQrLoginSuccess() on real QR sign-in.
+    qrLoginSession = {
+      session_token: 'dev_auto_login',
+      user_id: 'dev_auto_login_user',
+      display_name: 'DEV',
+      can_create_org: true,
+      is_developer: true
+    };
+    document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
+      el.style.display = '';
+    });
     document.getElementById('orgNameInput').value = currentOrg.name || '';
     document.getElementById('existingKeyInput').value = currentOrg.api_key || '';
     document.getElementById('apiKeyDisplay').textContent = currentOrg.api_key || '';
