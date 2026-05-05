@@ -2759,10 +2759,29 @@ async function saveSettings() {
     allowProofRecording: !!settings.allowProofRecording,
     enableIdPhotoCapture: !!settings.allowIdPhotoCapture
   };
+  // Batch C polish 9 — diagnostic logging to track persistence iffiness Captain
+  // flagged. Logs the POST payload, the Worker response, and the readback. Once
+  // we've confirmed the round-trip works, these can be deleted.
+  console.log('[settings save] POST payload:', payload);
   try {
-    await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, payload);
+    const resp = await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, payload);
+    console.log('[settings save] Worker response:', resp);
     showToast('Settings saved');
+    // Immediate readback to confirm persistence — fetch /org/settings and log what came back.
+    try {
+      const readback = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
+      console.log('[settings save] Worker readback:', readback);
+      const r = (readback && readback.settings) || {};
+      const missing = [];
+      if (payload.logoUrl && r.logoUrl !== payload.logoUrl) missing.push('logoUrl');
+      if (payload.redirectUrl && r.redirectUrl !== payload.redirectUrl) missing.push('redirectUrl');
+      if (payload.welcomeMessage && r.welcomeMessage !== payload.welcomeMessage) missing.push('welcomeMessage');
+      if (missing.length) console.warn('[settings save] readback missing/wrong:', missing, 'sent:', payload, 'got:', r);
+    } catch (rbErr) {
+      console.warn('[settings save] readback failed:', rbErr);
+    }
   } catch (err) {
+    console.error('[settings save] POST failed:', err);
     showToast('Saved locally — server save failed: ' + (err.message || 'unknown error'), true);
   }
 }
@@ -3071,7 +3090,7 @@ async function clearTestAttendanceDataset() {
   const btn = document.getElementById('clearAttendanceBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Clearing...'; }
   try {
-    const result = await window.IRLidOrgApi.clearTestAttendance(currentOrg.api_key, includeExpected);
+    const result = await window.IRLidOrgApi.clearTestAttendance(currentOrg.api_key, includeExpected, qrLoginSession?.session_token);
     cancelCheckout(false);
     await refreshAttendance();
     if (includeExpected) await refreshExpectedAttendees();

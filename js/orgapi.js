@@ -75,10 +75,15 @@
       });
     },
 
-    clearTestAttendance(orgKey, includeExpected) {
+    // Batch C polish 9 — accepts an optional sessionToken so the Worker can
+    // identify Developer / Lead Admin users authorised to clear non-DEV orgs.
+    // Existing DEV-key callers keep working without the token (worker's
+    // isDebugOrg path).
+    clearTestAttendance(orgKey, includeExpected, sessionToken) {
       return request("/org/debug/clear-attendance", {
         method: "POST",
         orgKey,
+        sessionToken,
         body: { include_expected: !!includeExpected }
       });
     },

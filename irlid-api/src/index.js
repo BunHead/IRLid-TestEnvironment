@@ -1745,7 +1745,36 @@ async function tableExists(env, tableName) {
 
 async function orgDebugClearAttendance(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
-  if (!isDebugOrg(org)) return err("Debug attendance clear is only available for DEV/test orgs", 403);
+  // Batch C polish 9 — Captain's call: clear-attendance should be available to
+  // Developer (any org, for ops + bake-off testing) and Lead Admin (their own
+  // org, for legitimate dataset reset). The legacy isDebugOrg key/slug match
+  // remains as a third allow path so existing DEV orgs keep working without
+  // requiring a session token. If a Bearer session is present, validate it and
+  // check for Developer or org-scoped lead_admin membership.
+  let allowed = isDebugOrg(org);
+  if (!allowed) {
+    const auth = request.headers.get("Authorization") || "";
+    const m = /^Bearer\s+([A-Za-z0-9_-]{16,})$/.exec(auth.trim());
+    if (m) {
+      const ctx = await requireSession(request, env);
+      if (!ctx.error) {
+        const user = ctx.user;
+        const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+        if (bootstrapFp && user.pub_fp === bootstrapFp) {
+          allowed = true; // Developer — clear any org
+        } else {
+          // Lead Admin / Developer membership of the requested org.
+          const membership = await env.DB.prepare(
+            "SELECT role FROM org_memberships WHERE user_id = ? AND org_id = ?"
+          ).bind(user.id, org.id).first();
+          if (membership && (membership.role === "lead_admin" || membership.role === "developer")) {
+            allowed = true;
+          }
+        }
+      }
+    }
+  }
+  if (!allowed) return err("Clear attendance requires Developer or Lead Admin role", 403);
 
   let body; try { body = await request.json(); } catch { body = {}; }
   const includeExpected = !!body.include_expected;
