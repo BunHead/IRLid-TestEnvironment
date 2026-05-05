@@ -1548,13 +1548,29 @@ async function requireOrgStaffSession(env, org, staffSessionToken) {
   return null;
 }
 
+async function requireDevOrStaffSession(request, env, org, staffSessionToken) {
+  const staffError = await requireOrgStaffSession(env, org, staffSessionToken);
+  if (!staffError) return null;
+
+  const auth = request.headers.get("Authorization") || "";
+  const m = /^Bearer\s+([A-Za-z0-9_-]{16,})$/.exec(auth.trim());
+  if (m) {
+    const ctx = await requireSession(request, env);
+    if (!ctx.error) {
+      const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+      if (bootstrapFp && ctx.user && ctx.user.pub_fp === bootstrapFp) return null;
+    }
+  }
+  return staffError;
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
   const { mode, helloPayload, helloHash, attendeeLabel, name, score, bioVerified, gps, staff_session } = body;
   if (!mode || !["attendee_scan","doorman_scan"].includes(mode)) return err("mode must be attendee_scan or doorman_scan");
   if (mode === "doorman_scan") {
-    const staffError = await requireOrgStaffSession(env, org, staff_session);
+    const staffError = await requireDevOrStaffSession(request, env, org, staff_session);
     if (staffError) return staffError;
   }
   const settings = JSON.parse(org.settings_json || "{}");
