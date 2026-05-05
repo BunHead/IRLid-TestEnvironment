@@ -2726,64 +2726,109 @@ function syncAllSettingsFrom(source) {
   renderPortalAll();
   generateVenueQR();
 }
-// Batch C polish 7 — saveSettings was localStorage-only. After an org switch,
-// loadDashboardForOrg resets portalState then re-hydrates from the Worker's
-// settings_json, which never received logoUrl/redirectUrl/welcomeMessage —
-// they only existed in the local browser. Captain spotted: enter logo URL,
-// click Save, return to Settings later, field is empty. Fix: also POST to
-// /org/settings so the values persist server-side and survive org switch +
-// refresh + browser change.
+// Batch C polish 10 — saveSettings rewritten DOM-first with mandatory post-save
+// readback verification. Captain's bug: branding URLs (logoUrl, redirectUrl,
+// welcomeMessage) weren't surviving refresh even after polish 8 wired the Save
+// button. Theme colours WERE surviving, which proved the Worker endpoint and
+// settings_json column work fine — the bug had to be on the branding payload
+// path.
 //
-// The Worker's allowlist uses different names for some toggles (allowSelfSelect
-// vs allowSelfSelection, requireProof vs requireAdditionalProof, etc.) — map
-// them explicitly here so the proof-rule toggles also persist correctly.
+// Polish 10 makes the save bulletproof and self-verifying:
+//
+// 1. Reads payload DIRECTLY from the DOM at save time — no reliance on
+//    portalState/settings sync chains that could be stale.
+// 2. POSTs to the Worker.
+// 3. Immediately fetches /org/settings back and compares the round-trip.
+// 4. Toast tells the user precisely what happened: "✓ Settings saved" on full
+//    round-trip success, "Saved but X didn't round-trip" if the Worker
+//    accepted but readback shows mismatched values, or "Save failed: <reason>"
+//    if the POST itself errored. No more silent failures.
 async function saveSettings() {
-  syncAllSettingsFrom('canonical');
-  if (!currentOrg || !currentOrg.api_key || !window.IRLidOrgApi || typeof window.IRLidOrgApi.updateOrgSettings !== 'function') {
-    showToast('Settings saved locally');
+  // Read the DOM directly — single source of truth at save time.
+  const payload = {
+    minScore: normalizeScore(document.getElementById('minimumTrustScore')?.value, 50),
+    bioRequired: !!document.getElementById('biometricRequired')?.checked,
+    privacyMode: !!document.getElementById('privacyMode')?.checked,
+    checkoutEnabled: !!document.getElementById('checkoutRequired')?.checked,
+    returnAllowed: !!document.getElementById('returnAllowed')?.checked,
+    anonymousMode: !!document.getElementById('anonymousMode')?.checked,
+    logoUrl: (document.getElementById('logoUrl')?.value || '').trim(),
+    welcomeMessage: (document.getElementById('welcomeMessage')?.value || '').trim(),
+    redirectUrl: (document.getElementById('redirectUrl')?.value || '').trim(),
+    allowSelfSelection: !!document.getElementById('allowSelfSelection')?.checked,
+    requireDoormanConfirmation: !!document.getElementById('requireDoormanConfirmation')?.checked,
+    requireAdditionalProof: !!document.getElementById('requireAdditionalProof')?.checked,
+    allowProofRecording: !!document.getElementById('allowProofRecording')?.checked,
+    enableIdPhotoCapture: !!document.getElementById('enableIdPhotoCapture')?.checked
+  };
+
+  // Mirror DOM into in-memory settings + portalState + localStorage.
+  settings = collectSettingsFromCanonical();
+  saveJson(STORAGE_KEY_SETTINGS, settings);
+  syncPortalFromLegacy();
+  applySettingsToUI();
+  renderPortalAll();
+  generateVenueQR();
+
+  // Need an authenticated org to persist server-side.
+  if (!currentOrg || !currentOrg.api_key) {
+    showToast('Saved locally — no signed-in org', true);
+    console.warn('[settings save] No currentOrg.api_key, skipped server save', { currentOrg });
     return;
   }
-  const payload = {
-    minScore: settings.minScore,
-    bioRequired: !!settings.bioRequired,
-    privacyMode: !!settings.privacyMode,
-    checkoutEnabled: !!settings.checkoutEnabled,
-    returnAllowed: !!settings.returnAllowed,
-    anonymousMode: !!settings.anonymousMode,
-    logoUrl: settings.logoUrl || '',
-    welcomeMessage: settings.welcomeMessage || '',
-    redirectUrl: settings.redirectUrl || '',
-    allowSelfSelection: !!settings.allowSelfSelect,
-    requireDoormanConfirmation: !!settings.requireDoormanConfirm,
-    requireAdditionalProof: !!settings.requireProof,
-    allowProofRecording: !!settings.allowProofRecording,
-    enableIdPhotoCapture: !!settings.allowIdPhotoCapture
-  };
-  // Batch C polish 9 — diagnostic logging to track persistence iffiness Captain
-  // flagged. Logs the POST payload, the Worker response, and the readback. Once
-  // we've confirmed the round-trip works, these can be deleted.
-  console.log('[settings save] POST payload:', payload);
+  if (!window.IRLidOrgApi || typeof window.IRLidOrgApi.updateOrgSettings !== 'function') {
+    showToast('Saved locally — IRLidOrgApi missing', true);
+    return;
+  }
+
+  console.log('[settings save] POST payload:', payload, 'org:', currentOrg.name, 'api_key:', currentOrg.api_key);
+  let resp;
   try {
-    const resp = await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, payload);
+    resp = await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, payload);
     console.log('[settings save] Worker response:', resp);
-    showToast('Settings saved');
-    // Immediate readback to confirm persistence — fetch /org/settings and log what came back.
-    try {
-      const readback = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
-      console.log('[settings save] Worker readback:', readback);
-      const r = (readback && readback.settings) || {};
-      const missing = [];
-      if (payload.logoUrl && r.logoUrl !== payload.logoUrl) missing.push('logoUrl');
-      if (payload.redirectUrl && r.redirectUrl !== payload.redirectUrl) missing.push('redirectUrl');
-      if (payload.welcomeMessage && r.welcomeMessage !== payload.welcomeMessage) missing.push('welcomeMessage');
-      if (missing.length) console.warn('[settings save] readback missing/wrong:', missing, 'sent:', payload, 'got:', r);
-    } catch (rbErr) {
-      console.warn('[settings save] readback failed:', rbErr);
-    }
   } catch (err) {
     console.error('[settings save] POST failed:', err);
-    showToast('Saved locally — server save failed: ' + (err.message || 'unknown error'), true);
+    showToast('Save failed: ' + (err.message || 'unknown error'), true);
+    return;
   }
+
+  // Mandatory post-save readback. If the Worker accepted but the next GET
+  // doesn't show our values, the bug is in the merge layer and we need to know.
+  let readback;
+  try {
+    readback = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
+    console.log('[settings save] Readback:', readback);
+  } catch (rbErr) {
+    console.warn('[settings save] Readback failed:', rbErr);
+    showToast('Saved, but readback failed (network)', true);
+    return;
+  }
+
+  const r = (readback && readback.settings) || {};
+  const lost = [];
+  // Compare — empty string and undefined both treated as "no value".
+  function eq(a, b) { return (a || '') === (b || ''); }
+  if (!eq(payload.logoUrl, r.logoUrl)) lost.push('logoUrl');
+  if (!eq(payload.redirectUrl, r.redirectUrl)) lost.push('redirectUrl');
+  if (!eq(payload.welcomeMessage, r.welcomeMessage)) lost.push('welcomeMessage');
+  if (payload.minScore !== r.minScore) lost.push('minScore');
+
+  if (lost.length) {
+    console.error('[settings save] Round-trip mismatch:', { sent: payload, received: r, mismatched: lost });
+    showToast('⚠ Saved but didn\'t round-trip: ' + lost.join(', '), true);
+    return;
+  }
+
+  // Update portalState from the readback so the UI state matches the Worker.
+  if (typeof r.logoUrl === 'string') { portalState.logoUrl = r.logoUrl; settings.logoUrl = r.logoUrl; }
+  if (typeof r.redirectUrl === 'string') { portalState.redirectUrl = r.redirectUrl; settings.redirectUrl = r.redirectUrl; }
+  if (typeof r.welcomeMessage === 'string') { portalState.welcomeMessage = r.welcomeMessage; settings.welcomeMessage = r.welcomeMessage; }
+  saveJson(STORAGE_KEY_PORTAL, portalState);
+  saveJson(STORAGE_KEY_SETTINGS, settings);
+  updateChromeLogo();
+  renderPortalAll();
+
+  showToast('✓ Settings saved and verified');
 }
 function resetSettingsToDefaults() {
   settings = { minScore: 50, bioRequired: false, privacyMode: true, checkoutEnabled: true, returnAllowed: true, anonymousMode: false, logoUrl: '', welcomeMessage: 'Welcome. Please review and confirm your check-in.', redirectUrl: '', allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true, allowProofRecording: true, allowIdPhotoCapture: false };
@@ -3933,19 +3978,10 @@ function wirePortalFields() {
   document.querySelectorAll('.mode-btn').forEach((btn) => {
     btn.addEventListener('click', () => { portalState.activeMode = btn.dataset.mode; renderPortalAll(); });
   });
-  // Batch C polish 8 — the "Save All Settings" button used to call only
-  // syncLegacyFromPortal + render + showToast(localOnly). Captain spotted
-  // logoUrl/redirectUrl/welcomeMessage never persisted across reloads despite
-  // an apparently-successful save. Root cause: this handler was the actual
-  // save path; saveSettings() (which polish 7 wired to the Worker) was never
-  // called from any UI. Now also invokes saveSettings() so the values land in
-  // settings_json server-side and survive org switch + refresh.
-  document.getElementById('savePortalSettingsBtn').addEventListener('click', async () => {
-    syncLegacyFromPortal();
-    renderPortalAll();
-    generateVenueQR();
-    await saveSettings();
-  });
+  // Batch C polish 10 — single-call handler. saveSettings() now owns the full
+  // flow: read DOM → mirror to in-memory + localStorage → POST → readback →
+  // verify round-trip → toast. No more pre-sync that could prime stale state.
+  document.getElementById('savePortalSettingsBtn').addEventListener('click', saveSettings);
   document.getElementById('copyOutcomeUrlBtn').addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
   document.getElementById('copyScanUrlBtn').addEventListener('click', () => copyText(SCAN_URL));
   document.getElementById('copySettingsBtn').addEventListener('click', () => copyText(buildPortalSummaryText()));
