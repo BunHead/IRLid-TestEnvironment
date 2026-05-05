@@ -3262,7 +3262,7 @@ function buildCheckoutAction(row) {
   const safeId = escapeHtml(checkinId);
   const error = checkoutErrors[checkinId] ? `<div class="checkout-error">${escapeHtml(checkoutErrors[checkinId])}</div>` : '';
   if (!checkinId) return '<span class="att-action-passive" role="status" aria-label="Attendee has checked out">Done</span>';
-  if (prototypeRoleRank() < PROTOTYPE_ROLE_RANK.manager) {
+  if (effectiveRoleRank() < PROTOTYPE_ROLE_RANK.manager) {
     return '<span class="att-action-passive" role="status" aria-label="Attendee is checked in, awaiting check-out">Awaiting check-out</span>';
   }
   if (checkoutConfirmId === checkinId) {
@@ -3276,9 +3276,17 @@ function currentPrototypeRole() {
 function prototypeRoleRank() {
   return PROTOTYPE_ROLE_RANK[currentPrototypeRole()] || PROTOTYPE_ROLE_RANK.lead_admin;
 }
+function effectiveRoleRank() {
+  // Real Developer (Bearer session) overrides any UI prototype-role simulation —
+  // same pattern as the Polish 11 hotfix in requireFreshStaffProof. The prototype-
+  // role dropdown is for testing what each role sees; it shouldn't gate a real
+  // platform-level Developer out of actions they're allowed to perform.
+  if (qrLoginSession?.is_developer) return PROTOTYPE_ROLE_RANK.developer;
+  return prototypeRoleRank();
+}
 function buildExpectedRowAction(row) {
   const id = escapeHtml(String(row.expected_id || '').trim());
-  if (prototypeRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
+  if (effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
     return `<button class="btn btn-danger btn-sm expected-row-delete" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
   }
   return '<span class="att-action-passive" role="status" aria-label="Expected attendee, awaiting check-in">Awaiting check-in</span>';
@@ -3286,7 +3294,7 @@ function buildExpectedRowAction(row) {
 async function deleteExpectedFromAttendance(id) {
   const row = expectedAttendees.find(item => String(item.id) === String(id));
   if (!row) return showToast('Expected attendee not found', true);
-  if (prototypeRoleRank() < PROTOTYPE_ROLE_RANK.manager) return showToast('Manager role required to delete attendees', true);
+  if (effectiveRoleRank() < PROTOTYPE_ROLE_RANK.manager) return showToast('Manager role required to delete attendees', true);
   showExpectedDeleteDialog(row);
 }
 function checkoutNonceFor(checkinId) {
