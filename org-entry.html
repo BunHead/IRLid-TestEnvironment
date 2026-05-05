@@ -321,6 +321,9 @@
     background:rgba(0,0,0,0.18);
   }
   .hello-panel.show{ display:block; }
+  .assist-heading{ display:none; color:#fff; font-weight:800; font-size:16px; margin-bottom:4px; }
+  .hello-panel.assist-mode .assist-heading{ display:block; }
+  .hello-panel.assist-mode .hello-actions{ display:none; }
   .hello-actions{ display:flex; justify-content:center; }
   .hello-btn{
     border:1px solid rgba(255,255,255,0.36);
@@ -412,6 +415,7 @@
         <div class="identity-error" id="identityError"></div>
       </div>
       <div class="hello-panel" id="helloPanel">
+        <div class="assist-heading" id="assistHeading">Show this to staff</div>
         <div class="hello-actions">
           <button class="hello-btn" id="showHelloBtn" type="button">Show my check-in QR</button>
         </div>
@@ -502,6 +506,9 @@
   let returnTimer = null;
   let lastTapAt = 0;
   let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
+  let assistPollTimer = null;
+  let assistRefreshTimer = null;
+  let assistQrData = "";
 
   function entryScore() {
     const parsed = Number.parseInt(scoreLabel, 10);
@@ -588,6 +595,7 @@
   }
 
   function render(state) {
+    stopAssistPolling();
     const body = document.body;
     const iconShell = document.getElementById("iconShell");
     const title = document.getElementById("title");
@@ -605,6 +613,7 @@
     if (state.status === "allow" || state.status === "deny") body.classList.add("flash-" + state.status);
     if (identityPicker) identityPicker.classList.remove("show");
     if (helloPanel) helloPanel.classList.toggle("show", type !== "checkout");
+    if (helloPanel) helloPanel.classList.remove("assist-mode");
 
     iconShell.innerHTML = iconMarkup(state.status);
     title.textContent = state.title;
@@ -860,6 +869,156 @@
     return `${row.first_name || ""} ${row.surname || ""}`.trim() || row.name || "Unnamed attendee";
   }
 
+  function stopAssistPolling() {
+    if (assistPollTimer) clearInterval(assistPollTimer);
+    if (assistRefreshTimer) clearTimeout(assistRefreshTimer);
+    assistPollTimer = null;
+    assistRefreshTimer = null;
+  }
+
+  function randomAssistNonce() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return b64urlEncode(bytes);
+  }
+
+  async function encodeAssistEnvelope(envelope) {
+    if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
+      return "HZ:" + await irlidCompressToB64url(envelope);
+    }
+    return "H:" + irlidEncodeJsonToB64url(envelope);
+  }
+
+  async function makeAssistEnvelope(pub, fp) {
+    const payload = {
+      type: "assist_request",
+      pub_fp: fp,
+      pub_jwk: pub,
+      ts: Math.floor(Date.now() / 1000),
+      org_code: orgParam,
+      nonce: randomAssistNonce()
+    };
+    const payloadHash = await hashPayloadToB64url(payload, 3);
+    const sig = await signHashB64url(payloadHash);
+    return { ...payload, sig };
+  }
+
+  function drawAssistQr(envelope, payload) {
+    const box = document.getElementById("helloQrBox");
+    if (!box) return;
+    box.innerHTML = "";
+    if (typeof QRCode === "function") {
+      new QRCode(box, { text: payload, width: 220, height: 220, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      normalizeHelloQr(box);
+      requestAnimationFrame(() => normalizeHelloQr(box));
+    } else {
+      box.textContent = "QR unavailable";
+    }
+    box.dataset.qrFullscreenPayload = payload;
+    box.dataset.qrFullscreenTitle = "Assist request";
+    box.dataset.qrFullscreenSubtitle = "Show this QR to staff";
+    box.classList.add("show");
+    assistQrData = payload;
+  }
+
+  function assistStatusFor(envelope, message) {
+    const secondsLeft = Math.max(0, (Number(envelope.ts) + 300) - Math.floor(Date.now() / 1000));
+    const mins = Math.floor(secondsLeft / 60);
+    const secs = String(secondsLeft % 60).padStart(2, "0");
+    setHelloStatus(`${message || "Waiting for staff to scan..."} Refreshes in ${mins}:${secs}.`);
+  }
+
+  async function pollAssist(envelope) {
+    try {
+      const result = window.IRLidOrgApi?.assistPoll
+        ? await window.IRLidOrgApi.assistPoll(orgParam, envelope.pub_fp, envelope.nonce)
+        : await getOrg(`/org/assist/poll/${encodeURIComponent(envelope.pub_fp)}?org=${encodeURIComponent(orgParam)}&nonce=${encodeURIComponent(envelope.nonce)}`);
+      if (result?.status === "claimed") {
+        stopAssistPolling();
+        if (result.expected_name) localStorage.setItem(`irlid_org_name_${orgParam}`, result.expected_name);
+        render({
+          status: "review",
+          title: "Identity linked",
+          subtitle: "Checking you in",
+          meta: result.expected_name || "This phone is ready"
+        });
+        await continueVenueWalkin();
+        return true;
+      }
+      if (result?.status === "rejected") {
+        stopAssistPolling();
+        render({
+          status: "deny",
+          title: "Entry not approved",
+          subtitle: "Please see an organiser",
+          meta: result.reason || "Staff did not approve this entry"
+        });
+        document.getElementById("helloPanel")?.classList.remove("show");
+        return true;
+      }
+      assistStatusFor(envelope, "Waiting for staff to scan...");
+    } catch (err) {
+      if (err.status === 410 || err.message === "assist_expired") {
+        await startAssistFlow(identityState.pub, identityState.fp);
+        return true;
+      }
+      setHelloStatus(err.message || "Waiting for staff to scan...", true);
+    }
+    return false;
+  }
+
+  async function startAssistFlow(pub, fp) {
+    stopAssistPolling();
+    if (!pub || !fp) return;
+    const envelope = await makeAssistEnvelope(pub, fp);
+    const payload = await encodeAssistEnvelope(envelope);
+    drawAssistQr(envelope, payload);
+    assistStatusFor(envelope, "Waiting for staff to scan...");
+    if (await pollAssist(envelope)) return;
+    assistPollTimer = setInterval(() => pollAssist(envelope), 2000);
+    const refreshMs = Math.max(1000, ((envelope.ts + 300) * 1000) - Date.now());
+    assistRefreshTimer = setTimeout(() => startAssistFlow(pub, fp), refreshMs);
+  }
+
+  async function renderAssistHold(pub, fp, subtitleText, metaText) {
+    clearTimeout(returnTimer);
+    identityState.pub = pub;
+    identityState.fp = fp;
+    const body = document.body;
+    const iconShell = document.getElementById("iconShell");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const meta = document.getElementById("meta");
+    const nextBtn = document.getElementById("nextBtn");
+    const picker = document.getElementById("identityPicker");
+    const helloPanel = document.getElementById("helloPanel");
+
+    body.className = "";
+    body.classList.add("status-review", "status-identity", "flash-review");
+    iconShell.innerHTML = iconMarkup("review");
+    title.textContent = "See an organiser";
+    subtitle.textContent = subtitleText;
+    meta.textContent = metaText;
+    if (nextBtn) nextBtn.classList.remove("show");
+    picker?.classList.remove("show");
+    helloPanel?.classList.add("show", "assist-mode");
+    applyBranding();
+    requestAnimationFrame(() => body.classList.add("ready"));
+
+    try {
+      await startAssistFlow(pub, fp);
+      if (window.IRLidQrFullscreen && assistQrData) {
+        window.IRLidQrFullscreen.open({
+          payload: assistQrData,
+          title: "Assist request",
+          subtitle: "Show this QR to staff"
+        });
+      }
+    } catch (err) {
+      setHelloStatus(err.message || "Could not create assist QR", true);
+    }
+  }
+
   async function renderIdentityPicker(pub, fp) {
     clearTimeout(returnTimer);
     identityState = { pub, fp, expected: [], query: "", busyId: null, error: "" };
@@ -883,14 +1042,12 @@
     // no auto-redirect — the screen stays put until the attendee speaks to staff.
     const flags = window.IRLID_FIRST_SCAN_FLAGS || {};
     if (flags.allowSelfSelection === false) {
-      title.textContent = "See an organiser";
-      subtitle.textContent = "This phone is not yet linked to your name";
-      meta.textContent = "Please ask staff to add you to the expected list";
-      if (nextBtn) nextBtn.classList.remove("show");
-      document.getElementById("helloPanel")?.classList.remove("show");
-      picker.classList.remove("show");
-      applyBranding();
-      requestAnimationFrame(() => body.classList.add("ready"));
+      await renderAssistHold(
+        pub,
+        fp,
+        "This phone is not yet linked to your name",
+        "Show this request QR to staff"
+      );
       return;
     }
 
@@ -921,14 +1078,13 @@
     // the assisted-identity flow to record an unrecognised attendee. No phone-side
     // POST.  This keeps the audit trail clean — the only checkins in the database
     // are ones a real person validated.
-    document.getElementById("identityWalkinBtn").onclick = () => {
-      title.textContent = "See an organiser";
-      subtitle.textContent = "Your name isn't on the expected list yet";
-      meta.textContent = "Please ask staff to add you to the list before checking in";
-      picker.classList.remove("show");
-      if (nextBtn) nextBtn.classList.remove("show");
-      document.getElementById("helloPanel")?.classList.remove("show");
-      applyBranding();
+    document.getElementById("identityWalkinBtn").onclick = async () => {
+      await renderAssistHold(
+        pub,
+        fp,
+        "Your name isn't on the expected list yet",
+        "Show this request QR to staff"
+      );
     };
 
     try {
