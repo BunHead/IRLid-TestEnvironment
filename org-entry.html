@@ -361,11 +361,27 @@
   }
   body.status-orange .hello-panel{
     display:block;
+    width:min(96vw, 560px);
+    margin-top:14px;
+    padding:clamp(10px, 3vw, 16px);
     border-color:rgba(255,255,255,0.34);
     background:rgba(0,0,0,0.16);
   }
   body.status-orange .hello-actions{ display:none; }
-  body.status-orange .hello-qr{ display:grid; place-items:center; }
+  body.status-orange .hello-qr{
+    display:grid;
+    place-items:center;
+    width:min(86vw, 540px);
+    height:min(86vw, 540px);
+    max-height:min(66dvh, 540px);
+    margin-top:0;
+    padding:clamp(10px, 3vw, 18px);
+    border-radius:14px;
+  }
+  body.status-orange .hello-qr canvas,
+  body.status-orange .hello-qr img{ width:100% !important; height:100% !important; max-width:100%; max-height:100%; }
+  .orange-scan-instruction{ display:none; margin:10px auto 0; color:rgba(255,255,255,0.92); font-size:13px; line-height:1.35; font-weight:800; text-align:center; max-width:34ch; }
+  body.status-orange .orange-scan-instruction{ display:block; }
   body.status-orange .hello-status{ color:rgba(255,255,255,0.86); font-weight:700; }
 
   @media (max-width: 700px){
@@ -435,6 +451,7 @@
           <button class="hello-btn" id="showHelloBtn" type="button">Show my check-in QR</button>
         </div>
         <div class="hello-qr" id="helloQrBox" aria-label="Attendee HELLO QR"></div>
+        <div class="orange-scan-instruction" id="orangeScanInstruction">Hold your phone up so staff can scan it. You don't need to hand it over.</div>
         <div class="hello-status" id="helloStatus"></div>
       </div>
     </div>
@@ -977,7 +994,8 @@
     localStorage.setItem("irlid_last_device_key_b64", irlidEncodeJsonToB64url(envelope));
     box.innerHTML = "";
     if (typeof QRCode === "function") {
-      new QRCode(box, { text: helloQrData, width: 220, height: 220, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      const qrSize = Math.min(720, Math.max(360, Math.floor(Math.min(window.innerWidth || 390, window.innerHeight || 844) * 0.86)));
+      new QRCode(box, { text: helloQrData, width: qrSize, height: qrSize, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.H || QRCode.CorrectLevel.M });
       normalizeHelloQr(box);
       requestAnimationFrame(() => normalizeHelloQr(box));
     } else {
