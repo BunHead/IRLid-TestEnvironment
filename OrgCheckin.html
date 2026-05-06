@@ -3893,12 +3893,27 @@ function doormanDecodeB64urlJson(b64) {
 }
 async function doormanDecompressB64urlJson(b64) {
   if (typeof DecompressionStream !== 'function') throw new Error('Compressed QR requires a browser with DecompressionStream support.');
+  // Explicit reader loop — matches js/sign.js irlidDecompressFromB64url.
+  // Avoids Chrome's `new Response(stream).arrayBuffer()` hang when the
+  // decompression stream errors before any chunks are emitted.
+  const compressed = doormanB64urlDecode(b64);
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
-  await writer.write(doormanB64urlDecode(b64));
-  await writer.close();
-  const ab = await new Response(ds.readable).arrayBuffer();
-  return JSON.parse(new TextDecoder().decode(new Uint8Array(ab)));
+  const reader = ds.readable.getReader();
+  writer.write(compressed).catch(() => {});
+  writer.close().catch(() => {});
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return JSON.parse(new TextDecoder().decode(out));
 }
 function doormanCanonical(val) {
   if (val === null || typeof val !== 'object') return JSON.stringify(val);
