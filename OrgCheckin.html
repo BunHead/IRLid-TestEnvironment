@@ -247,11 +247,13 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
 .dashboard-scan-camera-view[data-state="scanning"] .dashboard-scan-camera-placeholder {
   display: none;
 }
-.dashboard-scan-camera-view > div {
-  max-width: 100% !important;
-  height: auto !important;
-  display: block !important;
-}
+/* v5.7.0o — Match scan.html's overrides exactly. Critical: do NOT force
+   display:block on `> div`. html5-qrcode injects an internal status
+   overlay div ("Scanner paused" / camera state) that the library keeps
+   `display: none` until it deliberately shows a status. Forcing block
+   exposes the overlay on top of the video AND can keep the library in
+   a perceived-paused state. Only override max-width on those wrappers. */
+.dashboard-scan-camera-view > div { max-width: 100% !important; }
 .dashboard-scan-camera-view video {
   width: 100% !important;
   height: auto !important;
