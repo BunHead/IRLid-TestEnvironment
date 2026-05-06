@@ -227,17 +227,25 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   border-bottom-color: transparent;
 }
 /* v5.7.0h — Live webcam scanner inside the Process scan widget.
-   v5.7.0k — Aligned 1:1 with live scan.html overrides. html5-qrcode
-   injects a wrapper div with explicit pixel sizing for both width AND
-   height; we MUST override `height` on that wrapper or the inner video
-   collapses to invisible. Also force display:block on every level so
-   nothing inherits display:none from the library's transient state. */
+   v5.7.0n — Aligned 1:1 with live scan.html (irlid.co.uk/scan.html).
+   Viewport is always rendered. Placeholder shows when idle. When the
+   library is running, it fills the container with a video element. */
 .dashboard-scan-camera { margin: 10px 0; }
 .dashboard-scan-camera-view {
   width: 100%; max-width: 480px; margin: 0 auto;
   background: #0d1117;
   border: 1px solid var(--line); border-radius: 8px;
   overflow: hidden; position: relative;
+  min-height: 180px;
+  display: flex; align-items: center; justify-content: center;
+}
+.dashboard-scan-camera-view[data-state="scanning"] { display: block; }
+.dashboard-scan-camera-placeholder {
+  color: var(--muted); font-size: 12px;
+  padding: 20px; text-align: center;
+}
+.dashboard-scan-camera-view[data-state="scanning"] .dashboard-scan-camera-placeholder {
+  display: none;
 }
 .dashboard-scan-camera-view > div {
   max-width: 100% !important;
@@ -249,7 +257,7 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   height: auto !important;
   display: block !important;
 }
-.dashboard-scan-camera-view #qr-shaded-region { display: none !important; }
+.dashboard-scan-camera-view #qr-shaded-region,
 #qr-shaded-region { display: none !important; }
 .dashboard-scan-camera-controls {
   display: flex; gap: 8px; align-items: center;
@@ -1798,13 +1806,18 @@ body #venueQRWrap.cycle-burst-pattern {
                         <div class="dashboard-scan-sub">Live webcam is the primary path. Paste-or-upload remains as a backup if the camera is unavailable. Device-key QRs open the doorman escalation flow.</div>
                       </div>
                       <!-- v5.7.0h — live webcam scanner. html5-qrcode renders the
-                           video feed into #dashboardScanCameraView. Hidden by
-                           default; revealed when staff click "Scan with camera". -->
-                      <div class="dashboard-scan-camera" id="dashboardScanCameraWrap" hidden>
-                        <div id="dashboardScanCameraView" class="dashboard-scan-camera-view"></div>
+                           video feed into #dashboardScanCameraView.
+                           v5.7.0n — Mirroring live scan.html pattern: viewport
+                           is ALWAYS visible (no hidden attr, no show/hide).
+                           When idle, container shows placeholder text; when
+                           scanning, html5-qrcode fills it with the video. -->
+                      <div class="dashboard-scan-camera" id="dashboardScanCameraWrap">
+                        <div id="dashboardScanCameraView" class="dashboard-scan-camera-view" data-state="idle">
+                          <div class="dashboard-scan-camera-placeholder">Camera idle — click <strong>Scan with camera</strong> to start.</div>
+                        </div>
                         <div class="dashboard-scan-camera-controls">
                           <select id="dashboardScanCameraSelect" class="dashboard-scan-camera-select" aria-label="Select camera"></select>
-                          <button class="btn btn-secondary btn-sm" type="button" id="dashboardScanCameraStopBtn">Stop camera</button>
+                          <button class="btn btn-secondary btn-sm" type="button" id="dashboardScanCameraStopBtn" hidden>Stop camera</button>
                         </div>
                       </div>
                       <div class="dashboard-scan-grid">
@@ -4200,12 +4213,17 @@ async function listDashboardCamerasAndSelectDefault() {
 }
 
 async function startDashboardCameraScan() {
+  // v5.7.0n — Reimplemented to mirror live scan.html (irlid.co.uk) exactly.
+  // No show/hide wrap juggling; the viewport is always rendered. Stop any
+  // prior scanner cleanly, clear the view innerHTML, instantiate a fresh
+  // Html5Qrcode against the visible target, start with the same config the
+  // live site uses (fps: 15, no qrbox, BarcodeDetector preferred).
   if (!canScanAttendeeQr()) return setDashboardScanStatus('Manager role required to scan attendee QRs.', 'error');
   if (typeof Html5Qrcode === 'undefined') return setDashboardScanStatus('Camera library not available.', 'error');
-  const wrap = document.getElementById('dashboardScanCameraWrap');
-  const startBtn = document.getElementById('dashboardScanCameraStartBtn');
   const view = document.getElementById('dashboardScanCameraView');
-  if (!wrap || !view) return;
+  const startBtn = document.getElementById('dashboardScanCameraStartBtn');
+  const stopBtn = document.getElementById('dashboardScanCameraStopBtn');
+  if (!view) return;
 
   setDashboardScanStatus('Starting camera...');
   const camId = await listDashboardCamerasAndSelectDefault();
@@ -4213,26 +4231,28 @@ async function startDashboardCameraScan() {
     setDashboardScanStatus('No camera available. Use Decode image or paste the payload instead.', 'error');
     return;
   }
-  if (startBtn) startBtn.disabled = true;
 
-  // v5.7.0m — CRITICAL ORDER: clean up any prior scanner instance FIRST
-  // (which hides the wrap), THEN reveal the wrap, THEN start the new
-  // scanner. The previous order revealed the wrap, then the stop call
-  // re-hid it, and html5-qrcode initialised against a display:none
-  // parent — the stream was live but the video was rendered at 0x0.
-  // Diagnostic-confirmed root cause of v5.7.0h..k camera-not-visible.
+  // Clean up any prior instance.
   try { await stopDashboardCameraScan(/*silent*/ true); } catch (_) {}
-  // Reveal the wrap AFTER cleanup so the next start() targets a visible
-  // element. Belt-and-braces — both attribute AND inline display so any
-  // cascading [hidden] style is overridden.
-  wrap.removeAttribute('hidden');
-  wrap.style.display = 'block';
+
+  // Toggle button visibility (Stop becomes available, Start hides).
+  if (startBtn) startBtn.hidden = true;
+  if (stopBtn) stopBtn.hidden = false;
+  view.dataset.state = 'scanning';
+  view.innerHTML = ''; // clear placeholder + any stale html5-qrcode content.
 
   try {
     dashboardCameraScanner = new Html5Qrcode('dashboardScanCameraView');
+    const config = {
+      fps: 15,
+      disableFlip: false,
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true
+      }
+    };
     await dashboardCameraScanner.start(
       { deviceId: { exact: camId } },
-      { fps: 10, qrbox: { width: 240, height: 240 } },
+      config,
       async (decodedText) => {
         // First successful decode wins. Stop the camera, populate the
         // textarea, and chain straight into Process scan so staff see the
@@ -4250,25 +4270,30 @@ async function startDashboardCameraScan() {
     setDashboardScanStatus('Camera live - point at attendee QR.', 'ok');
   } catch (err) {
     setDashboardScanStatus('Camera error: ' + (err?.message || err), 'error');
-    if (startBtn) startBtn.disabled = false;
+    if (startBtn) startBtn.hidden = false;
+    if (stopBtn) stopBtn.hidden = true;
+    view.dataset.state = 'idle';
+    view.innerHTML = '<div class="dashboard-scan-camera-placeholder">Camera idle - click <strong>Scan with camera</strong> to start.</div>';
   }
 }
 
 async function stopDashboardCameraScan(silent) {
-  const wrap = document.getElementById('dashboardScanCameraWrap');
+  // v5.7.0n — No show/hide of the wrap. Just stop the scanner, restore
+  // the placeholder content in the viewport, and toggle button visibility.
+  const view = document.getElementById('dashboardScanCameraView');
   const startBtn = document.getElementById('dashboardScanCameraStartBtn');
+  const stopBtn = document.getElementById('dashboardScanCameraStopBtn');
   if (dashboardCameraScanner) {
     try { await dashboardCameraScanner.stop(); } catch (_) {}
     try { await dashboardCameraScanner.clear(); } catch (_) {}
     dashboardCameraScanner = null;
   }
-  // v5.7.0k — Mirror the belt-and-braces reveal: set both the attribute
-  // and the inline display style when re-hiding.
-  if (wrap) {
-    wrap.setAttribute('hidden', '');
-    wrap.style.display = 'none';
+  if (view) {
+    view.dataset.state = 'idle';
+    view.innerHTML = '<div class="dashboard-scan-camera-placeholder">Camera idle - click <strong>Scan with camera</strong> to start.</div>';
   }
-  if (startBtn) startBtn.disabled = false;
+  if (startBtn) startBtn.hidden = false;
+  if (stopBtn) stopBtn.hidden = true;
   if (!silent) setDashboardScanStatus('Camera stopped.');
 }
 
