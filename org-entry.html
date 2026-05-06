@@ -11,6 +11,7 @@
     --muted:rgba(255,255,255,0.82);
     --green:#12da73;
     --amber:#ffb300;
+    --orange:#FF9500;
     --red:#ff4b4b;
   }
 
@@ -33,10 +34,14 @@
 
   body.status-allow { background: var(--green); }
   body.status-review { background: var(--amber); }
+  body.status-orange { background: var(--orange); }
   body.status-deny { background: var(--red); }
   body.status-identity {
     background:#3b2b00;
     overflow:auto;
+  }
+  body.status-orange.status-identity {
+    background:var(--orange);
   }
   body.flash-allow { animation: scanOutcomeAllow 620ms ease-out both; }
   body.flash-review { animation: scanOutcomeReview 620ms ease-out both; }
@@ -348,6 +353,20 @@
   .hello-qr.show{ display:grid; place-items:center; }
   .hello-qr canvas,.hello-qr img{ max-width:220px; max-height:220px; }
   .hello-status{ min-height:17px; margin-top:10px; color:rgba(255,255,255,0.72); font-size:12px; line-height:1.35; text-align:center; }
+  body.status-orange .card{ transform:translateY(0); }
+  body.status-orange .icon-shell{ display:none; }
+  body.status-orange .title{
+    font-size:clamp(96px, 24vw, 188px);
+    line-height:0.86;
+  }
+  body.status-orange .hello-panel{
+    display:block;
+    border-color:rgba(255,255,255,0.34);
+    background:rgba(0,0,0,0.16);
+  }
+  body.status-orange .hello-actions{ display:none; }
+  body.status-orange .hello-qr{ display:grid; place-items:center; }
+  body.status-orange .hello-status{ color:rgba(255,255,255,0.86); font-weight:700; }
 
   @media (max-width: 700px){
     body.ready .card{
@@ -502,6 +521,9 @@
   let returnTimer = null;
   let lastTapAt = 0;
   let identityState = { pub: null, fp: "", expected: [], query: "", busyId: null, error: "" };
+  const ORANGE_POLL_MS = 2000;
+  const ORANGE_QR_TTL_MS = 5 * 60 * 1000;
+  let orangeState = { timer: null, active: false, pub: null, fp: "", cycleStartedAt: 0, pollBusy: false };
 
   function entryScore() {
     const parsed = Number.parseInt(scoreLabel, 10);
@@ -588,6 +610,10 @@
   }
 
   function render(state) {
+    if (state.status !== "orange") {
+      stopOrangePolling();
+      clearOrangeQrDisplay();
+    }
     const body = document.body;
     const iconShell = document.getElementById("iconShell");
     const title = document.getElementById("title");
@@ -692,7 +718,7 @@
         continueVenueWalkin();
         return;
       }
-      await renderIdentityPicker(pub, fp);
+      await renderDoormanEscalation(pub, fp);
     } catch (err) {
       console.warn("Venue first-scan identity check failed", err);
       continueVenueWalkin();
@@ -854,6 +880,195 @@
 
   async function activeCheckinForDevice(fp) {
     return getOrg(`/org/active-checkin?org=${encodeURIComponent(orgParam)}&device_pub=${encodeURIComponent(fp)}`);
+  }
+
+  async function lookupExpectedByFingerprint(fp) {
+    return getOrgAuthed(`/org/expected/lookup-by-fp/${encodeURIComponent(fp)}`);
+  }
+
+  function setOrangeStatus(message, isError=false) {
+    const el = document.getElementById("helloStatus");
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.color = isError ? "#ffe4e4" : "rgba(255,255,255,0.86)";
+  }
+
+  function stopOrangePolling() {
+    if (orangeState.timer) clearTimeout(orangeState.timer);
+    orangeState.timer = null;
+    orangeState.active = false;
+    orangeState.pollBusy = false;
+  }
+
+  function clearOrangeQrDisplay() {
+    const box = document.getElementById("helloQrBox");
+    if (!box || box.dataset.orangeQr !== "true") return;
+    box.classList.remove("show");
+    box.innerHTML = "";
+    delete box.dataset.orangeQr;
+    delete box.dataset.qrFullscreenPayload;
+    delete box.dataset.qrFullscreenTitle;
+    delete box.dataset.qrFullscreenSubtitle;
+  }
+
+  function scheduleOrangePoll() {
+    if (!orangeState.active) return;
+    if (orangeState.timer) clearTimeout(orangeState.timer);
+    orangeState.timer = setTimeout(pollOrangeResolution, ORANGE_POLL_MS);
+  }
+
+  function resolvedExpectedName(result) {
+    if (!result) return "";
+    const expected = result.expected || {};
+    if (result.expected_name || result.name) return result.expected_name || result.name;
+    return Object.keys(expected).length ? expectedDisplayName(expected) : "";
+  }
+
+  function lookupStatus(result) {
+    const status = String(result?.status || "").toLowerCase();
+    if (status) return status;
+    if (result?.linked || result?.recognized) return "linked";
+    if (result?.rejected) return "rejected";
+    return "pending";
+  }
+
+  async function signedDeviceKeyEnvelope(pub, fp) {
+    const payload = {
+      v: 3,
+      type: "device_key",
+      pub_fp: fp,
+      pub_jwk: pub,
+      ts: Math.floor(Date.now() / 1000),
+      org_code: orgParam
+    };
+    const hash = await hashPayloadToB64url(payload, 3);
+    const sig = await signHashB64url(hash);
+    return { ...payload, hash, sig };
+  }
+
+  async function encodeEnvelopeQr(envelope) {
+    const b64 = irlidEncodeJsonToB64url(envelope);
+    if (typeof irlidHasCompression === "function" && irlidHasCompression()) {
+      return "HZ:" + await irlidCompressToB64url(envelope);
+    }
+    return "H:" + b64;
+  }
+
+  async function refreshOrangeQr() {
+    const box = document.getElementById("helloQrBox");
+    if (!box || !orangeState.pub || !orangeState.fp) return;
+    const envelope = await signedDeviceKeyEnvelope(orangeState.pub, orangeState.fp);
+    helloQrData = await encodeEnvelopeQr(envelope);
+    localStorage.setItem("irlid_last_device_key_b64", irlidEncodeJsonToB64url(envelope));
+    box.innerHTML = "";
+    if (typeof QRCode === "function") {
+      new QRCode(box, { text: helloQrData, width: 220, height: 220, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      normalizeHelloQr(box);
+      requestAnimationFrame(() => normalizeHelloQr(box));
+    } else {
+      box.textContent = "QR unavailable";
+    }
+    box.dataset.qrFullscreenPayload = helloQrData;
+    box.dataset.qrFullscreenTitle = "Device key QR";
+    box.dataset.qrFullscreenSubtitle = "Ask staff to scan this orange QR";
+    box.dataset.orangeQr = "true";
+    box.classList.add("show");
+    orangeState.cycleStartedAt = Date.now();
+  }
+
+  async function pollOrangeResolution() {
+    if (!orangeState.active || orangeState.pollBusy) return;
+    if (Date.now() - orangeState.cycleStartedAt >= ORANGE_QR_TTL_MS) {
+      try {
+        await refreshOrangeQr();
+        setOrangeStatus("Waiting for staff to scan...");
+      } catch (err) {
+        console.warn("Could not refresh orange QR", err);
+        setOrangeStatus("Waiting for staff to scan...", true);
+      }
+      scheduleOrangePoll();
+      return;
+    }
+    orangeState.pollBusy = true;
+    try {
+      const result = await lookupExpectedByFingerprint(orangeState.fp);
+      const status = lookupStatus(result);
+      if (status === "linked") {
+        const name = resolvedExpectedName(result);
+        if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
+        stopOrangePolling();
+        render({
+          status: "review",
+          title: "Identity linked",
+          subtitle: "Checking you in",
+          meta: name || "This phone is ready"
+        });
+        await continueVenueWalkin();
+        return;
+      }
+      if (status === "rejected") {
+        stopOrangePolling();
+        render({
+          status: "deny",
+          title: "Check-in rejected",
+          subtitle: result?.reason || "Staff could not approve this device",
+          meta: "Please ask staff for help"
+        });
+        return;
+      }
+      setOrangeStatus("Waiting for staff to scan...");
+    } catch (err) {
+      console.warn("Orange-state lookup failed", err);
+      setOrangeStatus("Waiting for staff to scan...");
+    } finally {
+      orangeState.pollBusy = false;
+    }
+    scheduleOrangePoll();
+  }
+
+  async function renderDoormanEscalation(pub, fp) {
+    clearTimeout(returnTimer);
+    stopOrangePolling();
+    identityState = { pub, fp, expected: [], query: "", busyId: null, error: "" };
+    orangeState = { timer: null, active: true, pub, fp, cycleStartedAt: Date.now(), pollBusy: false };
+
+    const body = document.body;
+    const iconShell = document.getElementById("iconShell");
+    const title = document.getElementById("title");
+    const subtitle = document.getElementById("subtitle");
+    const meta = document.getElementById("meta");
+    const nextBtn = document.getElementById("nextBtn");
+    const picker = document.getElementById("identityPicker");
+    const helloPanel = document.getElementById("helloPanel");
+    const showHelloBtn = document.getElementById("showHelloBtn");
+    const logo = document.getElementById("logo");
+    const brandFallback = document.getElementById("brandFallback");
+
+    body.className = "";
+    body.classList.add("status-orange", "status-identity");
+    if (iconShell) iconShell.innerHTML = "";
+    if (title) title.textContent = "?";
+    if (subtitle) subtitle.textContent = "Get a member of staff";
+    if (meta) meta.textContent = "";
+    if (nextBtn) nextBtn.classList.remove("show");
+    if (picker) picker.classList.remove("show");
+    if (helloPanel) helloPanel.classList.add("show");
+    if (showHelloBtn) showHelloBtn.disabled = false;
+    if (logo) {
+      logo.removeAttribute("src");
+      logo.classList.remove("show");
+    }
+    if (brandFallback) brandFallback.classList.remove("show");
+
+    setOrangeStatus("Waiting for staff to scan...");
+    try {
+      await refreshOrangeQr();
+    } catch (err) {
+      console.warn("Could not create orange device-key QR", err);
+      setOrangeStatus(err.message || "Could not create staff QR", true);
+    }
+    requestAnimationFrame(() => body.classList.add("ready"));
+    scheduleOrangePoll();
   }
 
   function expectedDisplayName(row) {
