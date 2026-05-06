@@ -192,6 +192,26 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .dashboard-staff-scan-card { margin-bottom: 14px; }
 .dashboard-staff-scan-card .staff-auth-panel { margin-bottom: 12px; }
 .dashboard-staff-scan-card .dashboard-scan-box { margin-top: 0; }
+/* v5.7.0e — Developer Bearer makes Staff HELLO panel redundant. Hide it on
+   the dashboard surface when the signed-in user is the developer. Bearer
+   session satisfies all staff-gated endpoints (Polish 11 Task 2 sweep). */
+body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { display: none; }
+/* v5.7.0e — Compact dashboard collapsibles (Debug maintenance, Expected
+   attendee management). Keep the action one click away without dominating
+   the empty-state dashboard. */
+.dashboard-collapsible { margin: 12px 0; }
+.dashboard-collapsible > summary {
+  cursor: pointer; list-style: none;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: #151b23;
+  user-select: none;
+}
+.dashboard-collapsible > summary::-webkit-details-marker { display: none; }
+.dashboard-collapsible > summary::before { content: "▸ "; color: var(--muted); }
+.dashboard-collapsible[open] > summary::before { content: "▾ "; }
+.dashboard-collapsible > summary:hover { color: var(--fg); border-color: var(--accent); }
+.dashboard-collapsible[open] > summary { margin-bottom: 10px; color: var(--fg); }
 .escalation-backdrop { position: fixed; inset: 0; z-index: 1001; display: grid; place-items: center; padding: 18px; background: rgba(1,4,9,0.72); backdrop-filter: blur(10px); }
 .escalation-backdrop.hidden { display: none; }
 .escalation-modal { width: min(880px, 100%); max-height: min(88dvh, 760px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 24px 90px rgba(0,0,0,0.52); }
@@ -1624,16 +1644,19 @@ body #venueQRWrap.cycle-burst-pattern {
             <tbody id="attendanceRows"></tbody>
           </table>
         </div>
-        <div class="debug-maintenance" data-min-role="developer">
-          <div>
-            <div class="debug-maintenance-title">Debug maintenance</div>
-            <div class="debug-maintenance-sub">Clear test attendance rows for the signed-in DEV organisation.</div>
+        <details class="dashboard-collapsible" data-min-role="developer">
+          <summary>Developer diagnostics</summary>
+          <div class="debug-maintenance">
+            <div>
+              <div class="debug-maintenance-title">Debug maintenance</div>
+              <div class="debug-maintenance-sub">Clear test attendance rows for the signed-in DEV organisation.</div>
+            </div>
+            <div class="debug-maintenance-actions">
+              <label class="debug-maintenance-check"><input type="checkbox" id="clearExpectedCheck"> Include expected attendees</label>
+              <button class="btn btn-danger btn-sm" type="button" id="clearAttendanceBtn">Clear test attendance</button>
+            </div>
           </div>
-          <div class="debug-maintenance-actions">
-            <label class="debug-maintenance-check"><input type="checkbox" id="clearExpectedCheck"> Include expected attendees</label>
-            <button class="btn btn-danger btn-sm" type="button" id="clearAttendanceBtn">Clear test attendance</button>
-          </div>
-        </div>
+        </details>
       </div>
     </div>
 
@@ -1729,6 +1752,8 @@ body #venueQRWrap.cycle-burst-pattern {
                   <div id="expectedAttendeeList"></div>
                 </div>
 
+                <details class="dashboard-collapsible">
+                  <summary>Expected attendee management</summary>
                 <div class="checkin-lower-grid">
                   <div class="expected-admin-panel">
                     <h5>Expected attendee management</h5>
@@ -1760,6 +1785,7 @@ body #venueQRWrap.cycle-burst-pattern {
                     </div>
                   </div>
                 </div>
+                </details>
               </div>
 
               <div id="checkoutSettingsCard" data-min-role="lead_admin" style="background:#1a1f29;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -2604,6 +2630,12 @@ async function handleQrLoginSuccess(data) {
   document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
     el.style.display = data.is_developer ? '' : 'none';
   });
+
+  // v5.7.0e — body class signals Developer Bearer session is active. CSS
+  // uses this to hide the Staff Auth panel on the dashboard surface (Bearer
+  // satisfies all staff-gated endpoints; Polish 11 Task 2 sweep makes the
+  // legacy Staff HELLO redundant for developers).
+  document.body.classList.toggle('developer-bearer-active', !!data.is_developer);
 
   // Batch C tidy 2 — prototype role switcher defaults to the user's actual
   // active role. Developer users see the Developer view by default (was
@@ -4728,7 +4760,7 @@ function applyCheckinPrototypeLayout() {
     scanCard.className = 'card dashboard-staff-scan-card';
     scanCard.id = 'dashboardStaffScanCard';
     scanCard.dataset.minRole = 'manager';
-    scanCard.innerHTML = '<div class="card-header"><div class="card-title">Staff scan</div><div style="font-size:11px;color:#8b949e;">Scan attendee HELLO or orange device-key QRs</div></div>';
+    scanCard.innerHTML = '<div class="card-header"><div class="card-title">Process attendee scan</div><div style="font-size:11px;color:#8b949e;">Paste or upload an attendee QR. Device-key QRs open the doorman escalation flow.</div></div>';
     const body = document.createElement('div');
     body.className = 'card-body';
     if (staffAuthPanel) body.appendChild(staffAuthPanel);
@@ -4941,6 +4973,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
       el.style.display = savedSession.is_developer ? '' : 'none';
     });
+    // v5.7.0e — body class signals Developer Bearer session is active. Mirror
+    // of the equivalent toggle in handleQrLoginSuccess so the dashboard
+    // chrome reflects the restored session correctly on hard refresh.
+    document.body.classList.toggle('developer-bearer-active', !!savedSession.is_developer);
     if (savedSession.is_developer) {
       const roleSelect = document.getElementById('prototypeRoleSelect');
       if (roleSelect) {
