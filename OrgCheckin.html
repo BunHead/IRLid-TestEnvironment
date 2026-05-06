@@ -160,6 +160,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-delete-active #venueQRWrap,
 .expected-delete-active #doormanWrap,
 .expected-delete-active #checkoutSettingsCard { opacity: 0.4; pointer-events: none; }
+[hidden] { display: none !important; }
 .expected-shared-panel.expected-delete-mode > :not(.expected-list):not(.expected-delete-banner) { opacity: 0.4; pointer-events: none; }
 .expected-confirm-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(1,4,9,0.68); }
 .expected-confirm { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; box-shadow: 0 18px 42px rgba(0,0,0,0.38); }
@@ -1452,7 +1453,7 @@ body #venueQRWrap.cycle-burst-pattern {
   </nav>
 
   <div class="nav-bottom">
-    <div class="nav-item" id="navSettings" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
+    <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
     <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe</div>
   </div>
 </div>
@@ -1620,7 +1621,7 @@ body #venueQRWrap.cycle-burst-pattern {
             <tbody id="attendanceRows"></tbody>
           </table>
         </div>
-        <div class="debug-maintenance">
+        <div class="debug-maintenance" data-min-role="developer">
           <div>
             <div class="debug-maintenance-title">Debug maintenance</div>
             <div class="debug-maintenance-sub">Clear test attendance rows for the signed-in DEV organisation.</div>
@@ -1758,7 +1759,7 @@ body #venueQRWrap.cycle-burst-pattern {
                 </div>
               </div>
 
-              <div id="checkoutSettingsCard" style="background:#1a1f29;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <div id="checkoutSettingsCard" data-min-role="lead_admin" style="background:#1a1f29;border:1px solid #30363d;border-radius:8px;padding:12px 14px;margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
                 <div>
                   <div style="font-size:13px;font-weight:500;" id="checkoutLabel">✓ Check-out enabled</div>
                   <div style="font-size:11px;color:#8b949e;margin-top:2px;">Records departure time and duration</div>
@@ -2053,11 +2054,11 @@ body #venueQRWrap.cycle-burst-pattern {
 
               <div class="settings-summary" id="settingsSummary"></div>
               <div class="settings-actions">
-                <button class="btn btn-primary" type="button" id="savePortalSettingsBtn">Save All Settings</button>
+                <button class="btn btn-primary" type="button" id="savePortalSettingsBtn" data-min-role="lead_admin">Save All Settings</button>
                 <button class="btn btn-secondary" type="button" id="copyOutcomeUrlBtn">Copy active outcome URL</button>
                 <button class="btn btn-secondary" type="button" id="copySettingsBtn">Copy settings summary</button>
                 <button class="btn btn-secondary" type="button" id="copyScanUrlBtn">Copy hosted scan URL</button>
-                <button class="btn btn-secondary" type="button" id="resetPortalSettingsBtn">Reset to defaults</button>
+                <button class="btn btn-secondary" type="button" id="resetPortalSettingsBtn" data-min-role="lead_admin">Reset to defaults</button>
               </div>
               <div class="small-note">This page only prepares and previews test URLs. It does not perform Cloudflare writes or any production attendance action.</div>
             </div>
@@ -2819,6 +2820,7 @@ async function loadDashboardForOrg(org) {
   const apiKeyDisplay = document.getElementById('apiKeyDisplay'); if (apiKeyDisplay) apiKeyDisplay.textContent = currentOrg.api_key || '';
 
   setSignedInUI(true);
+  if (typeof syncPrototypeRoleFromSession === 'function') syncPrototypeRoleFromSession();
   setPortalFieldValues();
   applySettingsToUI();
   syncLegacyFromPortal();
@@ -3092,10 +3094,14 @@ function renderExpectedAttendeesApiState() {
     const pillClass = status === 'linked' ? 'ok' : 'warn';
     const meta = status === 'linked' && r.linked_at ? `linked · ${formatTimestamp(r.linked_at)}` : 'manual · added by admin';
     const isEditing = String(expectedEditId) === String(r.id);
+    const safeId = escapeHtml(String(r.id || ''));
+    const deleteButton = canDeleteExpected() && safeId
+      ? `<button class="btn btn-danger btn-sm expected-row-delete" type="button" onclick="deleteExpectedFromAttendance('${safeId}')">Delete expected</button>`
+      : '';
     const nameBlock = isEditing
-      ? `<div class="expected-edit-fields"><input id="expectedEditFirst" type="text" value="${escapeHtml(r.first_name || '')}" aria-label="First name"><input id="expectedEditSurname" type="text" value="${escapeHtml(r.surname || '')}" aria-label="Surname"><button class="btn btn-primary btn-sm" type="button" onclick="saveExpectedEdit('${escapeHtml(r.id)}')">Save</button><button class="btn btn-secondary btn-sm" type="button" onclick="cancelExpectedEdit()">Cancel</button></div>${expectedEditError ? `<div class="expected-row-error">${escapeHtml(expectedEditError)}</div>` : ''}`
-      : `<div class="expected-name-display" onclick="startExpectedEdit('${escapeHtml(r.id)}')" title="Edit name">${escapeHtml(expectedDisplayName(r))}</div>`;
-    return `<div class="expected-item${deleteClass}" data-expected-id="${escapeHtml(r.id)}"><div>${nameBlock}<div class="expected-meta">${escapeHtml(meta)}</div></div><span class="expected-pill ${pillClass}">${escapeHtml(status)}</span></div>`;
+      ? `<div class="expected-edit-fields"><input id="expectedEditFirst" type="text" value="${escapeHtml(r.first_name || '')}" aria-label="First name"><input id="expectedEditSurname" type="text" value="${escapeHtml(r.surname || '')}" aria-label="Surname"><button class="btn btn-primary btn-sm" type="button" onclick="saveExpectedEdit('${safeId}')">Save</button><button class="btn btn-secondary btn-sm" type="button" onclick="cancelExpectedEdit()">Cancel</button></div>${expectedEditError ? `<div class="expected-row-error">${escapeHtml(expectedEditError)}</div>` : ''}`
+      : `<div class="expected-name-display" onclick="startExpectedEdit('${safeId}')" title="Edit name">${escapeHtml(expectedDisplayName(r))}</div>`;
+    return `<div class="expected-item${deleteClass}" data-expected-id="${safeId}"><div>${nameBlock}<div class="expected-meta">${escapeHtml(meta)}</div></div><div class="att-action-cell">${deleteButton}<span class="expected-pill ${pillClass}">${escapeHtml(status)}</span></div></div>`;
   }).join('');
   renderTable(attendanceData);
 }
@@ -3165,6 +3171,7 @@ async function addExpectedAttendee() {
   }
 }
 function setExpectedDeleteMode(active) {
+  if (active && !canDeleteExpected()) return showToast('Manager role required to delete attendees', true);
   expectedDeleteMode = active;
   expectedDeleteTargetId = null;
   if (active) cancelExpectedEdit();
@@ -3360,6 +3367,7 @@ async function refreshAttendance() {
   }
 }
 async function clearTestAttendanceDataset() {
+  if (!canClearTestAttendance()) return showToast('Developer role required to clear test attendance', true);
   if (!currentOrg?.api_key) return showToast('Load the DEV organisation first', true);
   const includeExpected = !!document.getElementById('clearExpectedCheck')?.checked;
   const scope = includeExpected ? 'attendance, conflicts, checkout tokens, and expected attendees' : 'attendance, conflicts, and checkout tokens';
@@ -3462,17 +3470,42 @@ function currentPrototypeRole() {
 function prototypeRoleRank() {
   return PROTOTYPE_ROLE_RANK[currentPrototypeRole()] || PROTOTYPE_ROLE_RANK.lead_admin;
 }
-function effectiveRoleRank() {
-  // Real Developer (Bearer session) overrides any UI prototype-role simulation —
-  // same pattern as the Polish 11 hotfix in requireFreshStaffProof. The prototype-
-  // role dropdown is for testing what each role sees; it shouldn't gate a real
-  // platform-level Developer out of actions they're allowed to perform.
+function roleRankFor(role) {
+  return PROTOTYPE_ROLE_RANK[String(role || '').trim().toLowerCase()] || 0;
+}
+function realSessionRoleRank() {
   if (qrLoginSession?.is_developer) return PROTOTYPE_ROLE_RANK.developer;
-  return prototypeRoleRank();
+  return roleRankFor(currentOrg?.role);
+}
+function effectiveRoleRank() {
+  // The visible dashboard is governed by the role currently being viewed. On
+  // real Bearer sessions, loadDashboardForOrg() seeds that dropdown from the
+  // signed-in org role; the toolbar can then intentionally simulate lower roles.
+  if (document.getElementById('prototypeRoleSelect')) return prototypeRoleRank();
+  return realSessionRoleRank() || PROTOTYPE_ROLE_RANK.staff;
+}
+function canDeleteExpected() {
+  return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.manager;
+}
+function canUseSettings() {
+  return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.lead_admin;
+}
+function canClearTestAttendance() {
+  return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.developer;
+}
+function applyRoleGatedVisibility() {
+  const rank = effectiveRoleRank();
+  document.querySelectorAll('[data-min-role]').forEach(el => {
+    el.hidden = rank < roleRankFor(el.dataset.minRole);
+  });
+  if (!canUseSettings() && document.getElementById('panel-settings')?.classList.contains('active')) {
+    showPanel('dashboard', document.getElementById('navDashboard'));
+  }
+  if (expectedDeleteMode && !canDeleteExpected()) setExpectedDeleteMode(false);
 }
 function buildExpectedRowAction(row) {
   const id = escapeHtml(String(row.expected_id || '').trim());
-  if (effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.manager && id) {
+  if (canDeleteExpected() && id) {
     return `<button class="btn btn-danger btn-sm expected-row-delete" type="button" onclick="deleteExpectedFromAttendance('${id}')">Delete expected</button>`;
   }
   return '<span class="att-action-passive" role="status" aria-label="Expected attendee, awaiting check-in">Awaiting check-in</span>';
@@ -3480,7 +3513,7 @@ function buildExpectedRowAction(row) {
 async function deleteExpectedFromAttendance(id) {
   const row = expectedAttendees.find(item => String(item.id) === String(id));
   if (!row) return showToast('Expected attendee not found', true);
-  if (effectiveRoleRank() < PROTOTYPE_ROLE_RANK.manager) return showToast('Manager role required to delete attendees', true);
+  if (!canDeleteExpected()) return showToast('Manager role required to delete attendees', true);
   showExpectedDeleteDialog(row);
 }
 function checkoutNonceFor(checkinId) {
@@ -4432,6 +4465,7 @@ function updateSettingsSlider(el) {
   el.style.background = `linear-gradient(to right, #58a6ff 0%, #58a6ff ${(v-20)/80*100}%, #30363d ${(v-20)/80*100}%, #30363d 100%)`;
 }
 function openSettingsTo(anchorId) {
+  if (!canUseSettings()) return showToast('Lead Admin role required to change settings', true);
   showPanel('settings', document.getElementById('navSettings'));
   requestAnimationFrame(() => {
     const el = document.getElementById(anchorId); if (!el) return;
@@ -4668,8 +4702,8 @@ const PROTOTYPE_ROLE_RANK = { staff: 1, manager: 2, lead_admin: 3, developer: 4 
 // allowed for Developer (one Lead Admin per org enforced server-side).
 const EXPECTED_ROLE_OPTIONS = {
   staff: ['attendee'],
-  manager: ['attendee', 'staff', 'manager'],
-  lead_admin: ['attendee', 'staff', 'manager'],
+  manager: ['attendee', 'staff'],
+  lead_admin: ['attendee', 'staff', 'manager', 'lead_admin'],
   developer: ['attendee', 'staff', 'manager', 'lead_admin']
 };
 function roleLabelFor(role) {
@@ -4693,19 +4727,29 @@ function setPrototypeRole(role) {
   const value = PROTOTYPE_ROLE_DETAILS[role] ? role : 'lead_admin';
   const rank = PROTOTYPE_ROLE_RANK[value] || 3;
   document.body.dataset.prototypeRole = value;
+  const select = document.getElementById('prototypeRoleSelect');
+  if (select && select.value !== value) select.value = value;
   document.querySelectorAll('[data-role-card]').forEach(card => {
     card.classList.toggle('active', card.dataset.roleCard === value);
   });
   const detail = document.getElementById('prototypeRoleDetail');
   if (detail) detail.textContent = PROTOTYPE_ROLE_DETAILS[value];
   const canAddExpected = rank >= PROTOTYPE_ROLE_RANK.staff;
-  const canClear = rank >= PROTOTYPE_ROLE_RANK.lead_admin;
   document.getElementById('expectedAddBtn')?.toggleAttribute('disabled', !canAddExpected);
-  document.getElementById('clearAttendanceBtn')?.toggleAttribute('disabled', !canClear);
   document.querySelector('.expected-admin-panel')?.classList.toggle('prototype-permission-disabled', !canAddExpected);
-  document.querySelector('.debug-maintenance')?.classList.toggle('prototype-permission-disabled', !canClear);
   updateExpectedRoleOptions(value);
+  applyRoleGatedVisibility();
+  renderExpectedAttendees();
   renderTable(attendanceData);
+  if (!document.getElementById('doormanEscalationDialog')?.classList.contains('hidden')) renderEscalationRoleTabs();
+}
+function sessionDefaultDashboardRole() {
+  if (qrLoginSession?.is_developer) return 'developer';
+  const role = String(currentOrg?.role || '').trim().toLowerCase();
+  return PROTOTYPE_ROLE_DETAILS[role] ? role : 'lead_admin';
+}
+function syncPrototypeRoleFromSession() {
+  setPrototypeRole(sessionDefaultDashboardRole());
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
