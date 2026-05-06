@@ -55,10 +55,15 @@ function authErr(message, status = 401) {
 function randomToken() { return b64urlEncode(crypto.getRandomValues(new Uint8Array(32))); }
 
 const EXPECTED_MEMBER_ROLES = new Set(["attendee", "staff", "manager", "lead_admin", "developer"]);
+const EXPECTED_ROLE_RANK = { attendee: 0, staff: 1, manager: 2, lead_admin: 3, developer: 4 };
 
 function expectedMemberRole(value) {
   const role = String(value || "attendee").trim().toLowerCase();
   return EXPECTED_MEMBER_ROLES.has(role) ? role : "attendee";
+}
+
+function expectedRoleRank(role) {
+  return EXPECTED_ROLE_RANK[expectedMemberRole(role)] ?? 0;
 }
 
 // Batch C polish 5 — Developer role is bootstrap-only. The /org/expected create
@@ -1451,15 +1456,64 @@ async function orgFromRequest(request, env) {
   return env.DB.prepare("SELECT * FROM organisations WHERE api_key=? OR id=? OR slug=?").bind(key, key, key).first();
 }
 
+const EXPECTED_SELECT =
+  "id,org_code,first_name,surname,status,created_at,linked_at,device_key_fp,COALESCE(prototype_role,'attendee') AS prototype_role";
+
+async function expectedKeySet(env, orgCode, expectedId) {
+  const keys = new Set();
+  const primary = await env.DB.prepare(
+    "SELECT device_key_fp FROM org_expected WHERE id=? AND org_code=?"
+  ).bind(expectedId, orgCode).first();
+  if (primary?.device_key_fp) keys.add(primary.device_key_fp);
+  if (await tableExists(env, "rebind_history")) {
+    const rows = await env.DB.prepare(
+      "SELECT new_device_fp FROM rebind_history WHERE org_code=? AND expected_id=? ORDER BY created_at ASC, id ASC"
+    ).bind(orgCode, expectedId).all();
+    for (const row of (rows.results || [])) {
+      if (row.new_device_fp) keys.add(row.new_device_fp);
+    }
+  }
+  return Array.from(keys);
+}
+
+async function expectedRowWithKeys(env, orgCode, expectedId) {
+  const row = await env.DB.prepare(
+    `SELECT ${EXPECTED_SELECT} FROM org_expected WHERE id=? AND org_code=?`
+  ).bind(expectedId, orgCode).first();
+  if (!row) return null;
+  row.device_key_fps = await expectedKeySet(env, orgCode, expectedId);
+  return row;
+}
+
+async function findExpectedByDeviceFp(env, orgCode, deviceFp) {
+  const fp = String(deviceFp || "").trim();
+  if (!fp) return null;
+  const direct = await env.DB.prepare(
+    `SELECT ${EXPECTED_SELECT} FROM org_expected WHERE org_code=? AND device_key_fp=? AND status='linked' ORDER BY linked_at DESC, id DESC LIMIT 1`
+  ).bind(orgCode, fp).first();
+  if (direct) {
+    direct.device_key_fps = await expectedKeySet(env, orgCode, direct.id);
+    return direct;
+  }
+  if (await tableExists(env, "rebind_history")) {
+    const viaHistory = await env.DB.prepare(
+      "SELECT e.id,e.org_code,e.first_name,e.surname,e.status,e.created_at,e.linked_at,e.device_key_fp,COALESCE(e.prototype_role,'attendee') AS prototype_role FROM rebind_history r JOIN org_expected e ON e.id=r.expected_id AND e.org_code=r.org_code WHERE r.org_code=? AND r.new_device_fp=? AND e.status='linked' ORDER BY r.created_at DESC, r.id DESC LIMIT 1"
+    ).bind(orgCode, fp).first();
+    if (viaHistory) {
+      viaHistory.device_key_fps = await expectedKeySet(env, orgCode, viaHistory.id);
+      return viaHistory;
+    }
+  }
+  return null;
+}
+
 async function orgRecognize(request, env) {
   const org = await orgFromRequest(request, env);
   if (!org) return authErr("organisation required", 401);
   const url = new URL(request.url);
   const deviceFp = (url.searchParams.get("device_pub") || "").trim();
   if (!deviceFp) return err("device_pub required");
-  const row = await env.DB.prepare(
-    "SELECT id,first_name,surname FROM org_expected WHERE org_code=? AND device_key_fp=? AND status='linked' ORDER BY linked_at DESC, id DESC LIMIT 1"
-  ).bind(org.id, deviceFp).first();
+  const row = await findExpectedByDeviceFp(env, org.id, deviceFp);
   if (!row) return json({ recognized: false });
   return json({ recognized: true, name: `${row.first_name || ""} ${row.surname || ""}`.trim(), expected_id: row.id });
 }
@@ -1565,6 +1619,72 @@ async function requireDevOrStaffSession(request, env, org, staffSessionToken) {
   return staffError;
 }
 
+async function bootstrapDeveloperFromBearer(request, env) {
+  const auth = request.headers.get("Authorization") || "";
+  if (!/^Bearer\s+([A-Za-z0-9_-]{16,})$/.test(auth.trim())) return null;
+  const ctx = await requireSession(request, env);
+  if (ctx.error) return null;
+  const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+  if (bootstrapFp && ctx.user && ctx.user.pub_fp === bootstrapFp) return ctx.user;
+  return null;
+}
+
+async function roleForStaffPubFp(env, org, staffPubFp) {
+  const fp = String(staffPubFp || "").trim();
+  if (!fp) return "staff";
+  const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+  if (bootstrapFp && fp === bootstrapFp) return "developer";
+
+  const user = await env.DB.prepare(
+    "SELECT id FROM portal_users WHERE pub_fp=?"
+  ).bind(fp).first();
+  if (user) {
+    const membership = await env.DB.prepare(
+      "SELECT role FROM org_memberships WHERE user_id=? AND org_id=?"
+    ).bind(user.id, org.id).first();
+    if (membership && EXPECTED_MEMBER_ROLES.has(membership.role)) return membership.role;
+  }
+
+  const expected = await env.DB.prepare(
+    "SELECT COALESCE(prototype_role,'staff') AS prototype_role FROM org_expected WHERE org_code=? AND device_key_fp=? ORDER BY linked_at DESC, id DESC LIMIT 1"
+  ).bind(org.id, fp).first();
+  return expectedMemberRole(expected?.prototype_role || "staff");
+}
+
+async function requireFreshStaffProof(request, env, org) {
+  const developer = await bootstrapDeveloperFromBearer(request, env);
+  if (developer) return { ok: true, role: "developer", developer: true, user: developer };
+
+  let body = {};
+  try { body = await request.clone().json(); } catch {}
+  const token = String(body.staff_session || body.staffSession || "").trim();
+  const freshnessS = Math.max(1, parseInt(env.STAFF_HELLO_FRESHNESS_S || "300", 10) || 300);
+  const t = now();
+  if (!token) {
+    return { error: json({ error: "stale_staff_proof", fresh_required_within_s: freshnessS }, 401) };
+  }
+
+  const session = await env.DB.prepare(
+    "SELECT id, staff_pub_fp, expires_at, created_at FROM org_staff_sessions WHERE id=? AND org_id=?"
+  ).bind(token, org.id).first();
+  if (!session) return { error: authErr("Invalid staff session", 401) };
+  if (Number(session.expires_at) <= t) {
+    await env.DB.prepare("DELETE FROM org_staff_sessions WHERE id=?").bind(session.id).run();
+    return { error: authErr("Staff session expired", 401) };
+  }
+  if (Number(session.created_at || 0) < t - freshnessS) {
+    return { error: json({ error: "stale_staff_proof", fresh_required_within_s: freshnessS }, 401) };
+  }
+
+  await env.DB.prepare("UPDATE org_staff_sessions SET last_seen_at=? WHERE id=?").bind(t, session.id).run();
+  return {
+    ok: true,
+    role: await roleForStaffPubFp(env, org, session.staff_pub_fp),
+    staff_session: session.id,
+    staff_pub_fp: session.staff_pub_fp
+  };
+}
+
 async function orgCheckin(request, env) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -1605,13 +1725,19 @@ async function orgCheckin(request, env) {
   let status = "checked_in";
   let expectedId = null;
   let conflictId = null;
-  if (displayName) {
+  if (attendeeDeviceFp) {
+    expected = await findExpectedByDeviceFp(env, org.id, attendeeDeviceFp);
+    if (expected) expectedId = expected.id;
+  }
+  if (!expected && displayName) {
     expected = await env.DB.prepare(
-      "SELECT id,first_name,surname,device_key_fp FROM org_expected WHERE org_code=? AND status IN ('assist','linked') AND LOWER(first_name || ' ' || surname)=LOWER(?) ORDER BY id ASC LIMIT 1"
+      `SELECT ${EXPECTED_SELECT} FROM org_expected WHERE org_code=? AND status IN ('assist','linked') AND LOWER(first_name || ' ' || surname)=LOWER(?) ORDER BY id ASC LIMIT 1`
     ).bind(org.id, displayName).first();
     if (expected) {
+      expected.device_key_fps = await expectedKeySet(env, org.id, expected.id);
       expectedId = expected.id;
-      if (expected.device_key_fp && attendeeDeviceFp && expected.device_key_fp !== attendeeDeviceFp) {
+      const knownKeys = new Set(expected.device_key_fps || []);
+      if (expected.device_key_fp && attendeeDeviceFp && !knownKeys.has(attendeeDeviceFp)) {
         status = "conflict";
       }
     }
@@ -1858,6 +1984,128 @@ async function orgExpectedCreate(request, env) {
   return json({ expected: row });
 }
 
+function validDevicePubJwk(pubJwk) {
+  return !!pubJwk
+    && pubJwk.kty === "EC"
+    && pubJwk.crv === "P-256"
+    && typeof pubJwk.x === "string"
+    && typeof pubJwk.y === "string";
+}
+
+function doorRolePermitted(actorRole, targetRole) {
+  const actor = expectedMemberRole(actorRole);
+  const target = expectedMemberRole(targetRole);
+  if (actor === "developer") return true;
+  if (target === "developer") return false;
+  return expectedRoleRank(actor) >= expectedRoleRank(target);
+}
+
+async function expectedBoundToDevice(env, orgCode, deviceFp) {
+  const direct = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND device_key_fp=? LIMIT 1"
+  ).bind(orgCode, deviceFp).first();
+  if (direct) return direct.id;
+  if (await tableExists(env, "rebind_history")) {
+    const historical = await env.DB.prepare(
+      "SELECT expected_id AS id FROM rebind_history WHERE org_code=? AND new_device_fp=? ORDER BY created_at DESC, id DESC LIMIT 1"
+    ).bind(orgCode, deviceFp).first();
+    if (historical) return historical.id;
+  }
+  return null;
+}
+
+async function bindAdditionalExpectedKey(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const staffError = await requireDevOrStaffSession(request, env, org, body.staff_session || body.staffSession);
+  if (staffError) return staffError;
+
+  const pubJwk = body.pub_jwk || body.pub || body.device_pub_jwk;
+  if (!validDevicePubJwk(pubJwk)) return err("pub_jwk must be a P-256 public JWK");
+  const pubFp = String(body.pub_fp || body.device_pub_fp || "").trim();
+  const computedFp = await deviceKeyFp(pubJwk);
+  if (!pubFp) return err("pub_fp required");
+  if (pubFp !== computedFp) return err("pub_fp does not match pub_jwk", 422);
+
+  const expected = await expectedRowWithKeys(env, org.id, id);
+  if (!expected) return err("Expected attendee not found", 404);
+  if ((expected.device_key_fps || []).includes(pubFp)) {
+    return json({ ok: true, already_bound: true, expected });
+  }
+  const boundExpectedId = await expectedBoundToDevice(env, org.id, pubFp);
+  if (boundExpectedId && Number(boundExpectedId) !== Number(id)) {
+    return json({ error: "device_key_already_bound", expected_id: boundExpectedId }, 409);
+  }
+
+  const t = now();
+  if (!expected.device_key_fp) {
+    await env.DB.prepare(
+      "UPDATE org_expected SET device_key_fp=?, status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=?"
+    ).bind(pubFp, t, id, org.id).run();
+  } else {
+    await env.DB.prepare(
+      "INSERT INTO rebind_history (org_code,expected_id,old_device_fp,new_device_fp,admin_signature,reason,created_at) VALUES (?,?,?,?,?,?,?)"
+    ).bind(org.id, id, expected.device_key_fp, pubFp, `bind-additional:${org.id}:${t}`, "doorman_choose_from_list", t).run();
+    await env.DB.prepare(
+      "UPDATE org_expected SET status='linked', linked_at=COALESCE(linked_at,?) WHERE id=? AND org_code=?"
+    ).bind(t, id, org.id).run();
+  }
+
+  return json({ ok: true, expected: await expectedRowWithKeys(env, org.id, id) });
+}
+
+async function orgExpectedCreateAndBind(request, env) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+  const proof = await requireFreshStaffProof(request, env, org);
+  if (proof.error) return proof.error;
+
+  let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
+  const firstName = (body.first_name || "").trim();
+  const surname = (body.surname || "").trim();
+  const prototypeRole = expectedMemberRole(body.prototype_role || body.role);
+  const pubJwk = body.device_pub_jwk || body.pub_jwk || body.pub;
+  const suppliedFp = String(body.device_pub_fp || body.pub_fp || "").trim();
+  if (!firstName || !surname) return err("first_name and surname required");
+  if (!validDevicePubJwk(pubJwk)) return err("device_pub_jwk must be a P-256 public JWK");
+  const computedFp = await deviceKeyFp(pubJwk);
+  if (suppliedFp && suppliedFp !== computedFp) return err("device_pub_fp does not match device_pub_jwk", 422);
+  const deviceFp = suppliedFp || computedFp;
+
+  if (!doorRolePermitted(proof.role, prototypeRole)) {
+    return json({ error: "role_not_permitted_at_door" }, 403);
+  }
+  const boundExpectedId = await expectedBoundToDevice(env, org.id, deviceFp);
+  if (boundExpectedId) return json({ error: "device_key_already_bound", expected_id: boundExpectedId }, 409);
+  const existing = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE org_code=? AND LOWER(first_name)=LOWER(?) AND LOWER(surname)=LOWER(?) LIMIT 1"
+  ).bind(org.id, firstName, surname).first();
+  if (existing) return json({ error: "duplicate", existing_id: existing.id }, 409);
+
+  const t = now();
+  const expected = await env.DB.prepare(
+    `INSERT INTO org_expected (org_code,first_name,surname,status,created_at,linked_at,device_key_fp,prototype_role) VALUES (?,?,?,?,?,?,?,?) RETURNING ${EXPECTED_SELECT}`
+  ).bind(org.id, firstName, surname, "linked", t, t, deviceFp, prototypeRole).first();
+  expected.device_key_fps = [deviceFp];
+
+  let member = null;
+  if (prototypeRole !== "attendee") {
+    let user = await env.DB.prepare("SELECT id FROM portal_users WHERE pub_fp=?").bind(deviceFp).first();
+    if (!user) {
+      const userId = uuid();
+      await env.DB.prepare(
+        "INSERT INTO portal_users (id,pub_jwk,pub_fp,display_name,created_at,updated_at) VALUES (?,?,?,?,?,?)"
+      ).bind(userId, JSON.stringify(pubJwk), deviceFp, `${firstName} ${surname}`.trim(), t, t).run();
+      user = { id: userId };
+    }
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO org_memberships (user_id,org_id,role,granted_by,granted_at) VALUES (?,?,?,?,?)"
+    ).bind(user.id, org.id, prototypeRole, proof.user?.id || proof.staff_pub_fp || null, t).run();
+    member = { user_id: user.id, org_id: org.id, role: prototypeRole, granted_at: t };
+  }
+
+  return json({ ok: true, expected, ...(member ? { member } : {}) });
+}
+
 async function orgExpectedDelete(request, env, id) {
   const org = await orgAuth(request, env); if (org.error) return org;
   const result = await env.DB.prepare(
@@ -2048,16 +2296,19 @@ export default {
       else if (method === "POST" && path === "/org/debug/clear-attendance") response = await orgDebugClearAttendance(request, env);
       else if (method === "GET"  && path === "/org/expected")        response = await orgExpectedList(request, env);
       else if (method === "POST" && path === "/org/expected")        response = await orgExpectedCreate(request, env);
+      else if (method === "POST" && path === "/org/expected/create-and-bind") response = await orgExpectedCreateAndBind(request, env);
 
       else {
         const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
+        const mExpectedBindAdditional = path.match(/^\/org\/expected\/(\d+)\/bind-additional-key$/);
         const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         const mCheckoutToken = path.match(/^\/org\/checkout-token\/([^/]+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
+        else if (method === "POST" && mExpectedBindAdditional) response = await bindAdditionalExpectedKey(request, env, Number(mExpectedBindAdditional[1]));
         else if (method === "POST" && mExpectedClaim) response = await orgExpectedClaim(request, env, Number(mExpectedClaim[1]));
         else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
         else if (method === "GET" && mCheckoutToken) response = await orgResolveCheckoutToken(request, env, decodeURIComponent(mCheckoutToken[1]));
