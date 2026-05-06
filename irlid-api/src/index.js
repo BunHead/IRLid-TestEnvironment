@@ -45,6 +45,11 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
 }
 
+function noStore(response) {
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+}
+
 function err(message, status = 400) { return json({ error: message }, status); }
 function authErr(message, status = 401) {
   const response = err(message, status);
@@ -1518,6 +1523,34 @@ async function orgRecognize(request, env) {
   return json({ recognized: true, name: `${row.first_name || ""} ${row.surname || ""}`.trim(), expected_id: row.id });
 }
 
+async function orgExpectedLookupByFp(request, env, fpParam) {
+  const org = await orgAuth(request, env);
+  if (org.error) return noStore(err("organisation not found", 404));
+  const fp = String(fpParam || "").trim();
+  if (!fp) return noStore(err("pub_fp required", 400));
+
+  const expected = await findExpectedByDeviceFp(env, org.id, fp);
+  if (expected) {
+    return noStore(json({
+      status: "linked",
+      expected_id: expected.id,
+      expected_name: `${expected.first_name || ""} ${expected.surname || ""}`.trim()
+    }));
+  }
+
+  const rejected = await env.DB.prepare(
+    "SELECT id,status FROM org_checkins WHERE org_id=? AND device_key_fp=? AND status IN ('rejected','invalid') ORDER BY checkin_at DESC, id DESC LIMIT 1"
+  ).bind(org.id, fp).first();
+  if (rejected) {
+    return noStore(json({
+      status: "rejected",
+      reason: rejected.status === "invalid" ? "Staff could not approve this device" : "Not allowed"
+    }));
+  }
+
+  return noStore(json({ status: "pending" }));
+}
+
 async function orgActiveCheckin(request, env) {
   const org = await orgFromRequest(request, env);
   if (!org) return authErr("organisation required", 401);
@@ -2303,6 +2336,7 @@ export default {
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
         const mExpectedBindAdditional = path.match(/^\/org\/expected\/(\d+)\/bind-additional-key$/);
         const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
+        const mExpectedLookupByFp = path.match(/^\/org\/expected\/lookup-by-fp\/([^/]+)$/);
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         const mCheckoutToken = path.match(/^\/org\/checkout-token\/([^/]+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
@@ -2310,6 +2344,7 @@ export default {
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
         else if (method === "POST" && mExpectedBindAdditional) response = await bindAdditionalExpectedKey(request, env, Number(mExpectedBindAdditional[1]));
         else if (method === "POST" && mExpectedClaim) response = await orgExpectedClaim(request, env, Number(mExpectedClaim[1]));
+        else if (method === "GET" && mExpectedLookupByFp) response = await orgExpectedLookupByFp(request, env, decodeURIComponent(mExpectedLookupByFp[1]));
         else if (method === "POST" && mConflict) response = await orgResolveConflict(request, env, Number(mConflict[1]));
         else if (method === "GET" && mCheckoutToken) response = await orgResolveCheckoutToken(request, env, decodeURIComponent(mCheckoutToken[1]));
         else {
