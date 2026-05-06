@@ -2475,7 +2475,7 @@ async function registerOrg() {
 }
 async function saveKeyAndContinue() {
   if (!currentOrg) return showToast('No organisation ready to continue with', true);
-  setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('dashboard'); showToast('Organisation loaded');
+  setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('checkin'); showToast('Organisation loaded');
 }
 async function loadExistingKey() {
   const k = document.getElementById('existingKeyInput').value.trim();
@@ -2484,7 +2484,7 @@ async function loadExistingKey() {
   currentOrg = stored && stored.api_key === k ? stored : { name: 'IRLid Test Organisation', api_key: k, mode: 'irlid-api-test' };
   saveJson(STORAGE_KEY_ORG, currentOrg);
   document.getElementById('orgNameInput').value = currentOrg.name || '';
-  setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('dashboard'); showToast('Organisation loaded');
+  setSignedInUI(true); await refreshAttendance(); await refreshExpectedAttendees(); generateVenueQR(); showPanel('checkin'); showToast('Organisation loaded');
 }
 function signOutOrg() {
   clearStaffAuthSession();
@@ -2866,7 +2866,11 @@ async function loadDashboardForOrg(org) {
 
   try { await refreshAttendance(); } catch (_) {}
   try { await refreshExpectedAttendees(); } catch (_) {}
-  showPanel('dashboard');
+  // v5.7.0f — GDPR default: land on Check-in (public-safe branded screen,
+  // no names / expected list / attendance table visible) rather than the
+  // Dashboard which surfaces PII. Staff navigate to Dashboard explicitly
+  // when they're ready to do role-gated work.
+  showPanel('checkin');
   generateVenueQR();
   renderPortalAll();
   setPortalFieldValues();
@@ -4766,7 +4770,20 @@ function applyCheckinPrototypeLayout() {
     if (staffAuthPanel) body.appendChild(staffAuthPanel);
     if (scanBox) body.appendChild(scanBox);
     scanCard.appendChild(body);
-    dashboard.insertBefore(scanCard, attendanceCard || dashboard.firstChild);
+    // v5.7.0f — order Attendance Today FIRST (the table containing expected +
+    // checked-in attendees is what staff orient against), Process scan SECOND
+    // (the action they take based on what they see), Expected admin form
+    // THIRD (less frequent admin work). Insert scan card just before the
+    // expected-dock if present (so it lands between attendance and expected),
+    // otherwise just after the attendance card.
+    const expectedDock = dashboard.querySelector('.dashboard-expected-dock');
+    if (expectedDock) {
+      dashboard.insertBefore(scanCard, expectedDock);
+    } else if (attendanceCard?.nextSibling) {
+      dashboard.insertBefore(scanCard, attendanceCard.nextSibling);
+    } else {
+      dashboard.appendChild(scanCard);
+    }
   }
   const roleToolbar = document.querySelector('.prototype-role-toolbar');
   const roleDetail = document.getElementById('prototypeRoleDetail');
