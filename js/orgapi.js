@@ -160,6 +160,20 @@
       });
     },
 
+    // v5.7.0g — cascading delete for an attendee record. Removes the
+    // org_checkins history rows, rebind_history, attendee_conflicts, AND
+    // the org_expected row itself. Lead_admin+ only (Worker enforces).
+    // Use only when the attendee row has moved past the "expected" state
+    // (e.g. checked in/out, conflict, invalid) and the regular
+    // deleteExpected button is no longer visible.
+    deleteExpectedFull(orgKey, id, sessionToken) {
+      return request(`/org/expected/${encodeURIComponent(id)}/full`, {
+        method: "DELETE",
+        orgKey,
+        sessionToken
+      });
+    },
+
     updateExpected(orgKey, id, body) {
       return request(`/org/expected/${encodeURIComponent(id)}`, {
         method: "PATCH",

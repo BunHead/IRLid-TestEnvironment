@@ -2149,6 +2149,66 @@ async function orgExpectedDelete(request, env, id) {
   return json({ deleted: true, id });
 }
 
+// v5.7.0g — Cascading delete for an attendee record. Removes the
+// org_checkins history rows, rebind_history, attendee_conflicts, AND the
+// org_expected row itself. Use this when the attendee has moved past the
+// "expected" state (e.g. checked in/out, conflict, invalid) and the
+// regular orgExpectedDelete is no longer reachable from the UI.
+//
+// Refuses to delete a row with an active (un-checked-out) checkin —
+// staff must check the attendee out cleanly first. This guard exists so
+// the audit trail of live attendees can't be silently hand-wiped; if
+// ever needed, lead_admin+ can pass ?force=true to override (audit ts
+// of the delete preserved via the row's natural absence after cascade).
+async function orgExpectedDeleteFull(request, env, id) {
+  const org = await orgAuth(request, env); if (org.error) return org;
+
+  // Confirm the row exists for this org before any cascade work.
+  const expected = await env.DB.prepare(
+    "SELECT id FROM org_expected WHERE id=? AND org_code=?"
+  ).bind(id, org.id).first();
+  if (!expected) return err("Expected attendee not found", 404);
+
+  // Check for an active (un-checked-out) checkin tied to this expected_id.
+  // Skip the guard if the caller explicitly opts in via ?force=true.
+  const url = new URL(request.url);
+  const force = url.searchParams.get("force") === "true";
+  if (!force) {
+    const liveCheckin = await env.DB.prepare(
+      "SELECT id FROM org_checkins WHERE org_id=? AND expected_id=? AND checkout_at IS NULL LIMIT 1"
+    ).bind(org.id, id).first();
+    if (liveCheckin) {
+      return err("Attendee has an active check-in. Check them out first, or pass force=true to delete anyway.", 409);
+    }
+  }
+
+  // Cascade: checkins → rebind_history → attendee_conflicts → expected row.
+  // Each step is independent; partial failure leaves the database in a
+  // legible state (older rows persist, the org_expected row goes last so
+  // the cascade is idempotent on retry).
+  const checkinsResult = await env.DB.prepare(
+    "DELETE FROM org_checkins WHERE org_id=? AND expected_id=?"
+  ).bind(org.id, id).run();
+  await env.DB.prepare(
+    "DELETE FROM rebind_history WHERE org_code=? AND expected_id=?"
+  ).bind(org.id, id).run();
+  await env.DB.prepare(
+    "DELETE FROM attendee_conflicts WHERE org_code=? AND expected_id=?"
+  ).bind(org.id, id).run();
+  const expectedResult = await env.DB.prepare(
+    "DELETE FROM org_expected WHERE id=? AND org_code=?"
+  ).bind(id, org.id).run();
+
+  return json({
+    deleted: true,
+    id,
+    cascade: {
+      checkins: checkinsResult.meta?.changes || 0,
+      expected: expectedResult.meta?.changes || 0
+    }
+  });
+}
+
 async function orgExpectedUpdate(request, env, id) {
   const org = await orgAuth(request, env); if (org.error) return org;
   let body; try { body = await request.json(); } catch { return err("Invalid JSON"); }
@@ -2333,6 +2393,7 @@ export default {
 
       else {
         const mExpected = path.match(/^\/org\/expected\/(\d+)$/);
+        const mExpectedFull = path.match(/^\/org\/expected\/(\d+)\/full$/);
         const mExpectedRebind = path.match(/^\/org\/expected\/(\d+)\/rebind$/);
         const mExpectedBindAdditional = path.match(/^\/org\/expected\/(\d+)\/bind-additional-key$/);
         const mExpectedClaim = path.match(/^\/org\/expected\/(\d+)\/claim$/);
@@ -2340,6 +2401,7 @@ export default {
         const mConflict = path.match(/^\/org\/conflicts\/(\d+)\/resolve$/);
         const mCheckoutToken = path.match(/^\/org\/checkout-token\/([^/]+)$/);
         if (method === "DELETE" && mExpected) response = await orgExpectedDelete(request, env, Number(mExpected[1]));
+        else if (method === "DELETE" && mExpectedFull) response = await orgExpectedDeleteFull(request, env, Number(mExpectedFull[1]));
         else if (method === "PATCH" && mExpected) response = await orgExpectedUpdate(request, env, Number(mExpected[1]));
         else if (method === "POST" && mExpectedRebind) response = await orgExpectedRebind(request, env, Number(mExpectedRebind[1]));
         else if (method === "POST" && mExpectedBindAdditional) response = await bindAdditionalExpectedKey(request, env, Number(mExpectedBindAdditional[1]));

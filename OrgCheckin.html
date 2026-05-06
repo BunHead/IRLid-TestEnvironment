@@ -3485,16 +3485,25 @@ function expectedRoleBadge(role) {
   const short = { attendee: 'A', staff: 'S', manager: 'M', lead_admin: 'L', developer: 'D' }[normalized] || 'A';
   return `<span class="role-mini ${escapeHtml(normalized)}" title="${escapeHtml(label)}">${short}</span>`;
 }
+function buildDeleteRecordButton(row) {
+  // v5.7.0g — Lead Admin+ secondary action on settled rows (OUT / Done /
+  // conflict / invalid). Cascades to remove the org_checkins history and
+  // the org_expected row in one call. Active IN rows skip this button
+  // (must check out first; the Worker also enforces this guard).
+  const expectedId = String(row.expected_id || '').trim();
+  if (!expectedId || !canDeleteAttendeeRecord()) return '';
+  return `<button class="btn btn-danger btn-sm record-row-delete" type="button" onclick="deleteAttendeeRecordFromAttendance('${escapeHtml(expectedId)}')" title="Delete attendee record (lead admin+)">Delete record</button>`;
+}
 function buildCheckoutAction(row) {
   if (row.status === 'conflict' && row.conflict_id) {
     const conflictId = escapeHtml(String(row.conflict_id));
-    return `<div class="conflict-actions"><button class="btn btn-primary btn-sm" type="button" onclick="resolveConflict('${conflictId}','confirmed_new_device')">Confirm new device</button><button class="btn btn-danger btn-sm" type="button" onclick="resolveConflict('${conflictId}','rejected')">Reject</button></div>`;
+    return `<div class="conflict-actions"><button class="btn btn-primary btn-sm" type="button" onclick="resolveConflict('${conflictId}','confirmed_new_device')">Confirm new device</button><button class="btn btn-danger btn-sm" type="button" onclick="resolveConflict('${conflictId}','rejected')">Reject</button>${buildDeleteRecordButton(row)}</div>`;
   }
-  if (row.status === 'invalid') return '<span class="att-action-passive" role="status" aria-label="Attendee was rejected at entry">Rejected</span>';
+  if (row.status === 'invalid') return `<span class="att-action-passive" role="status" aria-label="Attendee was rejected at entry">Rejected</span>${buildDeleteRecordButton(row)}`;
   const checkinId = row.active_checkin_id || '';
   const safeId = escapeHtml(checkinId);
   const error = checkoutErrors[checkinId] ? `<div class="checkout-error">${escapeHtml(checkoutErrors[checkinId])}</div>` : '';
-  if (!checkinId) return '<span class="att-action-passive" role="status" aria-label="Attendee has checked out">Done</span>';
+  if (!checkinId) return `<span class="att-action-passive" role="status" aria-label="Attendee has checked out">Done</span>${buildDeleteRecordButton(row)}`;
   if (effectiveRoleRank() < PROTOTYPE_ROLE_RANK.manager) {
     return '<span class="att-action-passive" role="status" aria-label="Attendee is checked in, awaiting check-out">Awaiting check-out</span>';
   }
@@ -3502,6 +3511,30 @@ function buildCheckoutAction(row) {
     return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button><div class="checkout-qr-panel"><div class="checkout-qr-box" id="checkoutQr_${safeId}"></div><div class="checkout-qr-help">Attendee scans this on the same IRLid phone to sign check-out.</div></div>${error}</div>`;
   }
   return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Initiate check-out</button>${error}</div>`;
+}
+async function deleteAttendeeRecordFromAttendance(expectedId) {
+  if (!canDeleteAttendeeRecord()) return showToast('Lead Admin role required to delete attendee records', true);
+  if (!currentOrg?.api_key) return showToast('No organisation loaded', true);
+  // Find a display name from current attendance / expected lists for the
+  // confirm dialog. Fall back to "this attendee" if the row has just been
+  // wiped from local state.
+  const att = (window.lastAttendanceRows || []).find(r => String(r.expected_id) === String(expectedId));
+  const exp = expectedAttendees.find(r => String(r.id) === String(expectedId));
+  const name = (att && (att.display_name || att.name)) || (exp && `${exp.first_name || ''} ${exp.surname || ''}`.trim()) || 'this attendee';
+  const ok = window.confirm(`Delete the full attendee record for ${name}?\n\nThis cascades to remove all check-in / check-out history rows AND the Expected entry. Cannot be undone.`);
+  if (!ok) return;
+  try {
+    await window.IRLidOrgApi.deleteExpectedFull(
+      currentOrg.api_key,
+      expectedId,
+      qrLoginSession?.session_token
+    );
+    showToast(`Deleted record for ${name}`);
+    await refreshAttendance();
+    await refreshExpectedAttendees();
+  } catch (err) {
+    showToast(err.message || 'Could not delete attendee record', true);
+  }
 }
 function currentPrototypeRole() {
   return document.body.dataset.prototypeRole || document.getElementById('prototypeRoleSelect')?.value || 'lead_admin';
@@ -3525,6 +3558,13 @@ function effectiveRoleRank() {
 }
 function canDeleteExpected() {
   return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.manager;
+}
+// v5.7.0g — Cascading delete (full record + checkin history) is more
+// destructive than the regular Manager-tier "Delete expected", so it
+// requires Lead Admin+. Active-checkin rows are blocked at the Worker
+// (must check out first) regardless of role.
+function canDeleteAttendeeRecord() {
+  return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.lead_admin;
 }
 function canUseSettings() {
   return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.lead_admin;
