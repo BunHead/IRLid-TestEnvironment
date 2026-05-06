@@ -227,25 +227,30 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   border-bottom-color: transparent;
 }
 /* v5.7.0h — Live webcam scanner inside the Process scan widget.
-   v5.7.0j — CSS overrides ported from live scan.html so html5-qrcode's
-   injected wrapper div + video render visibly. The library wraps the
-   target with its own <div> that needs max-width override; the video
-   inside needs explicit display:block + width:100% + height:auto. The
-   #qr-shaded-region overlay the library injects defaults to a heavy
-   shade that we don't need on the dashboard widget. */
+   v5.7.0k — Aligned 1:1 with live scan.html overrides. html5-qrcode
+   injects a wrapper div with explicit pixel sizing for both width AND
+   height; we MUST override `height` on that wrapper or the inner video
+   collapses to invisible. Also force display:block on every level so
+   nothing inherits display:none from the library's transient state. */
 .dashboard-scan-camera { margin: 10px 0; }
 .dashboard-scan-camera-view {
   width: 100%; max-width: 480px; margin: 0 auto;
   background: #0d1117;
   border: 1px solid var(--line); border-radius: 8px;
   overflow: hidden; position: relative;
-  min-height: 240px;
 }
-.dashboard-scan-camera-view > div { max-width: 100% !important; }
+.dashboard-scan-camera-view > div {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block !important;
+}
 .dashboard-scan-camera-view video {
-  width: 100% !important; height: auto !important; display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  display: block !important;
 }
 .dashboard-scan-camera-view #qr-shaded-region { display: none !important; }
+#qr-shaded-region { display: none !important; }
 .dashboard-scan-camera-controls {
   display: flex; gap: 8px; align-items: center;
   margin-top: 8px; flex-wrap: wrap;
@@ -323,13 +328,19 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .att-table td { height: 42px; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
 .att-table tr:last-child td { border-bottom: none; }
 .att-table tr:hover td { background: var(--panel-2); }
+/* v5.7.0k — Seven columns: Name / First seen / Last seen / Scan count /
+   Status / Role / Action. Role column carries the small role badge
+   (was previously squeezed into the Action cell for expected_only rows).
+   Hidden in staff prototype-view via the body data attribute. */
 .att-table th:nth-child(1), .att-table td:nth-child(1) { width: 16%; }
 .att-table th:nth-child(2), .att-table td:nth-child(2),
-.att-table th:nth-child(3), .att-table td:nth-child(3) { width: 18%; }
-.att-table th:nth-child(4), .att-table td:nth-child(4) { width: 11%; }
+.att-table th:nth-child(3), .att-table td:nth-child(3) { width: 17%; }
+.att-table th:nth-child(4), .att-table td:nth-child(4) { width: 10%; }
 .att-table th:nth-child(5), .att-table td:nth-child(5) { width: 12%; }
-.att-table th:nth-child(6), .att-table td:nth-child(6) { width: 25%; }
-.att-table td:nth-child(6) { overflow: visible; }
+.att-table th:nth-child(6), .att-table td:nth-child(6) { width: 8%; text-align: center; }
+.att-table th:nth-child(7), .att-table td:nth-child(7) { width: 20%; }
+.att-table td:nth-child(7) { overflow: visible; }
+body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
 .att-action-cell { min-height: 32px; display: flex; align-items: center; gap: 8px; }
 .att-action-cell .expected-row-delete { margin-left: auto; margin-right: 18px; }
 .att-action-passive { min-height: 28px; color: #8b949e; font-size: 11px; display: inline-flex; align-items: center; white-space: nowrap; }
@@ -3519,7 +3530,7 @@ function renderTable(rows) {
     }));
   const displayRows = rows.concat(expectedRows);
   if (!displayRows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
-  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th><th>Status</th><th>Action</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
+  document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th><th>Status</th><th class="att-role-col">Role</th><th>Action</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = displayRows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
@@ -3533,8 +3544,11 @@ function renderTable(rows) {
       ? '<span class="status-conflict">? CONFLICT</span>'
       : (r.status === 'invalid' ? '<span class="status-invalid">INVALID</span>' : (checkinId ? '<span class="status-in">● IN</span>' : `<span class="status-out">● OUT</span>${methodBadge}`));
     const rowClass = recentlyCheckedOutId && recentlyCheckedOutId === r.id ? ' class="checkout-row-complete"' : '';
-    const actionHtml = r.expected_only ? `${expectedRoleBadge(r.prototype_role)}${buildExpectedRowAction(r)}` : buildCheckoutAction(r);
-    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td><div class="att-action-cell">${actionHtml}</div></td></tr>`;
+    // v5.7.0k — Role badge moves to its own column; Action holds only the
+    // verbs (Initiate check-out / Delete record / Delete expected / etc.).
+    const actionHtml = r.expected_only ? buildExpectedRowAction(r) : buildCheckoutAction(r);
+    const roleHtml = expectedRoleBadge(r.prototype_role);
+    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td class="att-role-col">${roleHtml}</td><td><div class="att-action-cell">${actionHtml}</div></td></tr>`;
   }).join('');
 }
 function expectedRoleBadge(role) {
@@ -4190,8 +4204,11 @@ async function startDashboardCameraScan() {
     setDashboardScanStatus('No camera available. Use Decode image or paste the payload instead.', 'error');
     return;
   }
-  // Reveal the camera section before starting; html5-qrcode needs a visible target.
-  wrap.hidden = false;
+  // v5.7.0k — Belt-and-braces reveal: remove the hidden attribute AND set
+  // an explicit inline display so any cascading [hidden] style is overridden.
+  // html5-qrcode needs a visible, sized target to inject its video into.
+  wrap.removeAttribute('hidden');
+  wrap.style.display = 'block';
   if (startBtn) startBtn.disabled = true;
 
   try { await stopDashboardCameraScan(/*silent*/ true); } catch (_) {}
@@ -4229,7 +4246,12 @@ async function stopDashboardCameraScan(silent) {
     try { await dashboardCameraScanner.clear(); } catch (_) {}
     dashboardCameraScanner = null;
   }
-  if (wrap) wrap.hidden = true;
+  // v5.7.0k — Mirror the belt-and-braces reveal: set both the attribute
+  // and the inline display style when re-hiding.
+  if (wrap) {
+    wrap.setAttribute('hidden', '');
+    wrap.style.display = 'none';
+  }
   if (startBtn) startBtn.disabled = false;
   if (!silent) setDashboardScanStatus('Camera stopped.');
 }
