@@ -3898,8 +3898,13 @@ async function doormanVerifyDeviceEnvelope(env) {
   return env;
 }
 async function decodeDashboardQrPayload(raw) {
-  const text = String(raw || '').trim();
+  let text = String(raw || '').trim();
   if (!text) throw new Error('Paste or decode a QR payload first.');
+  try {
+    const url = new URL(text);
+    const wrapped = url.searchParams.get('payload') || url.searchParams.get('qr') || url.searchParams.get('irlid');
+    if (wrapped) text = wrapped.trim();
+  } catch {}
   let env;
   if (text.startsWith('HZ:')) env = await doormanDecompressB64urlJson(text.slice(3));
   else if (text.startsWith('H:')) env = doormanDecodeB64urlJson(text.slice(2));
