@@ -7,6 +7,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
 <script src="js/vendor/jsqr.min.js"></script>
+<!-- v5.7.0h — html5-qrcode for live webcam scanning in the Process attendee scan
+     widget. Same library used by live repo scan.html for receipt scanning. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <script src="js/orgapi.js"></script>
 <script src="js/qr-fullscreen.js"></script>
 <style>
@@ -202,16 +205,51 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
 .dashboard-collapsible { margin: 12px 0; }
 .dashboard-collapsible > summary {
   cursor: pointer; list-style: none;
-  font-size: 12px; font-weight: 600; color: var(--muted);
-  padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px;
+  font-size: 13px; font-weight: 600; color: var(--muted);
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px;
   background: #151b23;
   user-select: none;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+  display: flex; align-items: center; gap: 8px;
 }
 .dashboard-collapsible > summary::-webkit-details-marker { display: none; }
-.dashboard-collapsible > summary::before { content: "▸ "; color: var(--muted); }
-.dashboard-collapsible[open] > summary::before { content: "▾ "; }
-.dashboard-collapsible > summary:hover { color: var(--fg); border-color: var(--accent); }
-.dashboard-collapsible[open] > summary { margin-bottom: 10px; color: var(--fg); }
+.dashboard-collapsible > summary::before {
+  content: "▸"; color: var(--muted);
+  font-size: 11px; line-height: 1;
+  width: 12px; display: inline-block; text-align: center;
+  transition: transform .15s ease, color .15s ease;
+}
+.dashboard-collapsible[open] > summary::before { content: "▾"; color: var(--accent); }
+.dashboard-collapsible > summary:hover { color: var(--fg); border-color: var(--accent); background: #1a2230; }
+.dashboard-collapsible[open] > summary {
+  margin-bottom: 10px; color: var(--fg);
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+/* v5.7.0h — Live webcam scanner inside the Process scan widget. */
+.dashboard-scan-camera { margin: 10px 0; }
+.dashboard-scan-camera-view {
+  width: 100%; max-width: 480px; margin: 0 auto;
+  aspect-ratio: 4 / 3; background: #0d1117;
+  border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; position: relative;
+}
+.dashboard-scan-camera-view video {
+  width: 100% !important; height: 100% !important; object-fit: cover;
+}
+.dashboard-scan-camera-controls {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 8px; flex-wrap: wrap;
+}
+.dashboard-scan-camera-select {
+  flex: 1 1 200px; min-width: 0;
+  background: #151b23; color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 10px; font-size: 13px;
+}
+.dashboard-scan-camera-select:focus {
+  outline: none; border-color: var(--accent);
+}
 .escalation-backdrop { position: fixed; inset: 0; z-index: 1001; display: grid; place-items: center; padding: 18px; background: rgba(1,4,9,0.72); backdrop-filter: blur(10px); }
 .escalation-backdrop.hidden { display: none; }
 .escalation-modal { width: min(880px, 100%); max-height: min(88dvh, 760px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 24px 90px rgba(0,0,0,0.52); }
@@ -1728,15 +1766,26 @@ body #venueQRWrap.cycle-burst-pattern {
                     <div class="dashboard-scan-box" id="dashboardScanBox">
                       <div>
                         <div class="dashboard-scan-title">Scan attendee QR</div>
-                        <div class="dashboard-scan-sub">Paste or upload a scanned HELLO/device-key QR. Device-key QRs open the doorman escalation flow.</div>
+                        <div class="dashboard-scan-sub">Live webcam is the primary path. Paste-or-upload remains as a backup if the camera is unavailable. Device-key QRs open the doorman escalation flow.</div>
+                      </div>
+                      <!-- v5.7.0h — live webcam scanner. html5-qrcode renders the
+                           video feed into #dashboardScanCameraView. Hidden by
+                           default; revealed when staff click "Scan with camera". -->
+                      <div class="dashboard-scan-camera" id="dashboardScanCameraWrap" hidden>
+                        <div id="dashboardScanCameraView" class="dashboard-scan-camera-view"></div>
+                        <div class="dashboard-scan-camera-controls">
+                          <select id="dashboardScanCameraSelect" class="dashboard-scan-camera-select" aria-label="Select camera"></select>
+                          <button class="btn btn-secondary btn-sm" type="button" id="dashboardScanCameraStopBtn">Stop camera</button>
+                        </div>
                       </div>
                       <div class="dashboard-scan-grid">
                         <textarea id="dashboardScanPayloadInput" placeholder="Paste H: / HZ: payload or raw JSON"></textarea>
                         <input type="file" id="dashboardScanImageInput" accept="image/*">
                       </div>
                       <div class="dashboard-scan-actions">
+                        <button class="btn btn-primary btn-sm" type="button" id="dashboardScanCameraStartBtn">Scan with camera</button>
                         <button class="btn btn-secondary btn-sm" type="button" id="dashboardScanDecodeBtn">Decode image</button>
-                        <button class="btn btn-primary btn-sm" type="button" id="dashboardScanSubmitBtn">Process scan</button>
+                        <button class="btn btn-secondary btn-sm" type="button" id="dashboardScanSubmitBtn">Process scan</button>
                       </div>
                       <div class="dashboard-scan-status" id="dashboardScanStatus"></div>
                       <canvas id="dashboardScanDecodeCanvas" hidden></canvas>
@@ -4075,6 +4124,112 @@ async function decodeDashboardScanImage() {
     setDashboardScanStatus(err.message || 'Could not decode QR.', 'error');
   }
 }
+// v5.7.0h — Live webcam scanner (html5-qrcode). Camera is the primary
+// scan path; image upload + paste remain as backups. Default camera prefers
+// `environment` (rear-facing) on devices that have one; on laptops with a
+// single front-facing webcam it falls back gracefully.
+let dashboardCameraScanner = null;
+let dashboardCameraDeviceId = null;
+const DASHBOARD_CAMERA_PREF_KEY = 'irlid_dashboard_camera_id';
+
+function getStoredDashboardCameraId() {
+  try { return localStorage.getItem(DASHBOARD_CAMERA_PREF_KEY); } catch (_) { return null; }
+}
+function setStoredDashboardCameraId(id) {
+  try { id ? localStorage.setItem(DASHBOARD_CAMERA_PREF_KEY, id) : localStorage.removeItem(DASHBOARD_CAMERA_PREF_KEY); } catch (_) {}
+}
+
+async function listDashboardCamerasAndSelectDefault() {
+  if (typeof Html5Qrcode === 'undefined' || !Html5Qrcode.getCameras) return null;
+  const select = document.getElementById('dashboardScanCameraSelect');
+  if (!select) return null;
+  let cams = [];
+  try { cams = await Html5Qrcode.getCameras(); }
+  catch (err) { console.warn('[scan] camera enumeration failed:', err); return null; }
+  if (!cams || !cams.length) return null;
+  // Populate dropdown.
+  select.innerHTML = cams.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label || ('Camera ' + c.id.slice(0, 6)))}</option>`).join('');
+  // Default selection: stored preference if still present, else first
+  // back-facing camera (label hint), else first available.
+  const stored = getStoredDashboardCameraId();
+  let pick = cams.find(c => c.id === stored);
+  if (!pick) pick = cams.find(c => /back|rear|environment/i.test(c.label || ''));
+  if (!pick) pick = cams[0];
+  select.value = pick.id;
+  dashboardCameraDeviceId = pick.id;
+  return pick.id;
+}
+
+async function startDashboardCameraScan() {
+  if (!canScanAttendeeQr()) return setDashboardScanStatus('Manager role required to scan attendee QRs.', 'error');
+  if (typeof Html5Qrcode === 'undefined') return setDashboardScanStatus('Camera library not available.', 'error');
+  const wrap = document.getElementById('dashboardScanCameraWrap');
+  const startBtn = document.getElementById('dashboardScanCameraStartBtn');
+  const view = document.getElementById('dashboardScanCameraView');
+  if (!wrap || !view) return;
+
+  setDashboardScanStatus('Starting camera...');
+  const camId = await listDashboardCamerasAndSelectDefault();
+  if (!camId) {
+    setDashboardScanStatus('No camera available. Use Decode image or paste the payload instead.', 'error');
+    return;
+  }
+  // Reveal the camera section before starting; html5-qrcode needs a visible target.
+  wrap.hidden = false;
+  if (startBtn) startBtn.disabled = true;
+
+  try { await stopDashboardCameraScan(/*silent*/ true); } catch (_) {}
+  try {
+    dashboardCameraScanner = new Html5Qrcode('dashboardScanCameraView');
+    await dashboardCameraScanner.start(
+      { deviceId: { exact: camId } },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      async (decodedText) => {
+        // First successful decode wins. Stop the camera, populate the
+        // textarea, and chain straight into Process scan so staff see the
+        // escalation modal / runDoormanCheckin result immediately.
+        try { await stopDashboardCameraScan(/*silent*/ true); } catch (_) {}
+        const input = document.getElementById('dashboardScanPayloadInput');
+        if (input) input.value = decodedText;
+        setDashboardScanStatus('QR decoded. Processing...', 'ok');
+        try { await processDashboardScan(); } catch (err) {
+          setDashboardScanStatus(err?.message || 'Could not process scan.', 'error');
+        }
+      },
+      () => { /* per-frame errors are noisy; ignore. */ }
+    );
+    setDashboardScanStatus('Camera live - point at attendee QR.', 'ok');
+  } catch (err) {
+    setDashboardScanStatus('Camera error: ' + (err?.message || err), 'error');
+    if (startBtn) startBtn.disabled = false;
+  }
+}
+
+async function stopDashboardCameraScan(silent) {
+  const wrap = document.getElementById('dashboardScanCameraWrap');
+  const startBtn = document.getElementById('dashboardScanCameraStartBtn');
+  if (dashboardCameraScanner) {
+    try { await dashboardCameraScanner.stop(); } catch (_) {}
+    try { await dashboardCameraScanner.clear(); } catch (_) {}
+    dashboardCameraScanner = null;
+  }
+  if (wrap) wrap.hidden = true;
+  if (startBtn) startBtn.disabled = false;
+  if (!silent) setDashboardScanStatus('Camera stopped.');
+}
+
+async function changeDashboardCamera() {
+  const select = document.getElementById('dashboardScanCameraSelect');
+  if (!select) return;
+  const id = select.value;
+  setStoredDashboardCameraId(id);
+  // Restart with the newly chosen camera if currently scanning.
+  if (dashboardCameraScanner) {
+    try { await stopDashboardCameraScan(true); } catch (_) {}
+    await startDashboardCameraScan();
+  }
+}
+
 async function processDashboardScan() {
   const input = document.getElementById('dashboardScanPayloadInput');
   if (!currentOrg) return setDashboardScanStatus('Load an organisation first.', 'error');
@@ -4959,6 +5114,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     const hasFile = !!document.getElementById('dashboardScanImageInput')?.files?.[0];
     console.log('[scan] Process scan clicked', { source: text ? 'textarea' : hasFile ? 'decoded-image-required' : 'empty', has_textarea: !!text, has_file: hasFile });
     processDashboardScan();
+  });
+  // v5.7.0h — Live webcam scanner. Camera is the primary scan path; Decode
+  // image and paste remain as backups.
+  document.getElementById('dashboardScanCameraStartBtn')?.addEventListener('click', () => {
+    console.log('[scan] Scan with camera clicked');
+    startDashboardCameraScan();
+  });
+  document.getElementById('dashboardScanCameraStopBtn')?.addEventListener('click', () => {
+    console.log('[scan] Stop camera clicked');
+    stopDashboardCameraScan();
+  });
+  document.getElementById('dashboardScanCameraSelect')?.addEventListener('change', () => {
+    console.log('[scan] Camera changed');
+    changeDashboardCamera();
   });
   document.getElementById('dashboardScanImageInput')?.addEventListener('change', (event) => {
     const file = event.target.files && event.target.files[0];
