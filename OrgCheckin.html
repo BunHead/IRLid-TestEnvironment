@@ -3988,11 +3988,22 @@ async function processDashboardScan() {
   const input = document.getElementById('dashboardScanPayloadInput');
   if (!currentOrg) return setDashboardScanStatus('Load an organisation first.', 'error');
   if (!canScanAttendeeQr()) return setDashboardScanStatus('Manager role required to scan attendee QRs.', 'error');
+  const text = (input?.value || '').trim();
+  const hasFile = !!document.getElementById('dashboardScanImageInput')?.files?.[0];
+  console.log('[scan] processDashboardScan start', {
+    source: text ? 'textarea' : hasFile ? 'decoded-image-required' : 'empty',
+    has_textarea: !!text,
+    has_file: hasFile,
+    developer_bearer: developerBearerSessionIsActive(),
+    staff_session: staffSessionIsActive()
+  });
+  if (!text && hasFile) return setDashboardScanStatus('Click Decode image first, then Process scan.', 'error');
   try {
     setDashboardScanStatus('Processing scan...');
-    const env = await decodeDashboardQrPayload(input?.value || '');
+    const env = await decodeDashboardQrPayload(text);
+    console.log('[scan] decoded payload', { type: env.type || 'hello', pub_fp: env.pub_fp || env.fp || null });
     if (env.type === 'device_key') {
-      await openEscalationModal(env);
+      openEscalationModal(env);
       setDashboardScanStatus('Device-key QR opened escalation.', 'ok');
     } else {
       await runDoormanCheckin(env);
@@ -4039,7 +4050,7 @@ function renderEscalationExpectedList() {
     return `<button class="escalation-row" type="button" data-bind-expected-id="${escapeHtml(row.id)}"><div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(meta)}</span></div><span>Bind</span></button>`;
   }).join('');
 }
-async function openEscalationModal(env) {
+function openEscalationModal(env) {
   doormanEscalationState = { env, scannedAt: Date.now() };
   doormanEscalationRole = escalationRolesForActor()[0] || 'attendee';
   document.getElementById('escalationFpShort').textContent = shortFingerprint(env.pub_fp);
@@ -4048,11 +4059,24 @@ async function openEscalationModal(env) {
   document.getElementById('escalationSurname').value = '';
   document.getElementById('escalationSearchInput').value = '';
   setEscalationStatus('');
-  if (!expectedAttendees.length && !expectedLoading) await refreshExpectedAttendees();
   renderEscalationRoleTabs();
   renderEscalationExpectedList();
   document.getElementById('doormanEscalationDialog')?.classList.remove('hidden');
   setTimeout(() => document.getElementById('escalationSearchInput')?.focus(), 0);
+  if (!expectedAttendees.length && !expectedLoading) {
+    const openedAt = doormanEscalationState.scannedAt;
+    console.log('[scan] refreshing expected list after modal open');
+    refreshExpectedAttendees()
+      .then(() => {
+        if (doormanEscalationState?.scannedAt === openedAt) renderEscalationExpectedList();
+      })
+      .catch(err => {
+        console.warn('[scan] expected list refresh failed after modal open', err);
+        if (doormanEscalationState?.scannedAt === openedAt) {
+          setEscalationStatus('Expected list refresh failed; Add at the door remains available.', 'error');
+        }
+      });
+  }
 }
 function closeEscalationModal() {
   document.getElementById('doormanEscalationDialog')?.classList.add('hidden');
@@ -4813,8 +4837,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     const file = event.target.files && event.target.files[0];
     setStaffHelloDialogStatus(file ? `Selected ${file.name}. Click Decode image.` : '');
   });
-  document.getElementById('dashboardScanDecodeBtn')?.addEventListener('click', decodeDashboardScanImage);
-  document.getElementById('dashboardScanSubmitBtn')?.addEventListener('click', processDashboardScan);
+  document.getElementById('dashboardScanDecodeBtn')?.addEventListener('click', () => {
+    console.log('[scan] Decode image clicked');
+    decodeDashboardScanImage();
+  });
+  document.getElementById('dashboardScanSubmitBtn')?.addEventListener('click', () => {
+    const text = (document.getElementById('dashboardScanPayloadInput')?.value || '').trim();
+    const hasFile = !!document.getElementById('dashboardScanImageInput')?.files?.[0];
+    console.log('[scan] Process scan clicked', { source: text ? 'textarea' : hasFile ? 'decoded-image-required' : 'empty', has_textarea: !!text, has_file: hasFile });
+    processDashboardScan();
+  });
   document.getElementById('dashboardScanImageInput')?.addEventListener('change', (event) => {
     const file = event.target.files && event.target.files[0];
     setDashboardScanStatus(file ? `Selected ${file.name}. Click Decode image.` : '');
