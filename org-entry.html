@@ -535,13 +535,18 @@
   const returnTo = (params.get("returnTo") || "").trim();
   const API_BASE = "https://irlid-api-test.irlid-bunhead.workers.dev";
 
-	function defaultReturnTarget() {
+  function defaultReturnTarget() {
 	  if (returnTo) return returnTo;
 	  if (location.protocol === "file:") {
 		return "https://bunhead.github.io/IRLid-TestEnvironment/scan.html";
 	  }
 	  return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
 	}
+
+  function scanUrlBase() {
+    if (location.protocol === "file:") return "https://bunhead.github.io/IRLid-TestEnvironment/scan.html";
+    return new URL("scan.html", window.location.href).href;
+  }
 
   function returnTargetFor(state) {
     if (isDoormanContext && (state.status === "review" || state.status === "deny")) return defaultReturnTarget();
@@ -933,13 +938,16 @@
   }
 
   async function signedDeviceKeyEnvelope(pub, fp) {
+    const nonceBytes = new Uint8Array(16);
+    crypto.getRandomValues(nonceBytes);
     const payload = {
       v: 3,
       type: "device_key",
       pub_fp: fp,
       pub_jwk: pub,
       ts: Math.floor(Date.now() / 1000),
-      org_code: orgParam
+      org_code: orgParam,
+      nonce: Array.from(nonceBytes, b => b.toString(16).padStart(2, "0")).join("")
     };
     const hash = await hashPayloadToB64url(payload, 3);
     const sig = await signHashB64url(hash);
@@ -954,11 +962,18 @@
     return "H:" + b64;
   }
 
+  async function buildOrangeScanUrl(envelope) {
+    const url = new URL(scanUrlBase());
+    url.searchParams.set("type", "device_key");
+    url.searchParams.set("payload", await encodeEnvelopeQr(envelope));
+    return url.href;
+  }
+
   async function refreshOrangeQr() {
     const box = document.getElementById("helloQrBox");
     if (!box || !orangeState.pub || !orangeState.fp) return;
     const envelope = await signedDeviceKeyEnvelope(orangeState.pub, orangeState.fp);
-    helloQrData = await encodeEnvelopeQr(envelope);
+    helloQrData = await buildOrangeScanUrl(envelope);
     localStorage.setItem("irlid_last_device_key_b64", irlidEncodeJsonToB64url(envelope));
     box.innerHTML = "";
     if (typeof QRCode === "function") {
