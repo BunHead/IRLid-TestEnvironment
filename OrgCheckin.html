@@ -189,6 +189,9 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .dashboard-scan-status { min-height: 18px; font-size: 12px; color: var(--muted); }
 .dashboard-scan-status.error { color: var(--red); }
 .dashboard-scan-status.ok { color: var(--green); }
+.dashboard-staff-scan-card { margin-bottom: 14px; }
+.dashboard-staff-scan-card .staff-auth-panel { margin-bottom: 12px; }
+.dashboard-staff-scan-card .dashboard-scan-box { margin-top: 0; }
 .escalation-backdrop { position: fixed; inset: 0; z-index: 1001; display: grid; place-items: center; padding: 18px; background: rgba(1,4,9,0.72); backdrop-filter: blur(10px); }
 .escalation-backdrop.hidden { display: none; }
 .escalation-modal { width: min(880px, 100%); max-height: min(88dvh, 760px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 24px 90px rgba(0,0,0,0.52); }
@@ -3493,6 +3496,9 @@ function canUseSettings() {
 function canClearTestAttendance() {
   return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.developer;
 }
+function canScanAttendeeQr() {
+  return effectiveRoleRank() >= PROTOTYPE_ROLE_RANK.manager;
+}
 function applyRoleGatedVisibility() {
   const rank = effectiveRoleRank();
   document.querySelectorAll('[data-min-role]').forEach(el => {
@@ -3981,11 +3987,12 @@ async function decodeDashboardScanImage() {
 async function processDashboardScan() {
   const input = document.getElementById('dashboardScanPayloadInput');
   if (!currentOrg) return setDashboardScanStatus('Load an organisation first.', 'error');
+  if (!canScanAttendeeQr()) return setDashboardScanStatus('Manager role required to scan attendee QRs.', 'error');
   try {
     setDashboardScanStatus('Processing scan...');
     const env = await decodeDashboardQrPayload(input?.value || '');
     if (env.type === 'device_key') {
-      openEscalationModal(env);
+      await openEscalationModal(env);
       setDashboardScanStatus('Device-key QR opened escalation.', 'ok');
     } else {
       await runDoormanCheckin(env);
@@ -4667,12 +4674,29 @@ function applyCheckinPrototypeLayout() {
   const expectedPanel = document.getElementById('expectedSharedPanel');
   const dashboard = document.getElementById('panel-dashboard');
   const attendanceCard = dashboard?.querySelector('.card');
-  if (!expectedPanel || !dashboard || expectedPanel.closest('#panel-dashboard')) return;
-  const dock = document.createElement('div');
-  dock.className = 'dashboard-expected-dock';
-  dock.appendChild(expectedPanel);
-  if (attendanceCard?.nextSibling) dashboard.insertBefore(dock, attendanceCard.nextSibling);
-  else dashboard.appendChild(dock);
+  if (!dashboard) return;
+  if (expectedPanel && !expectedPanel.closest('#panel-dashboard')) {
+    const dock = document.createElement('div');
+    dock.className = 'dashboard-expected-dock';
+    dock.appendChild(expectedPanel);
+    if (attendanceCard?.nextSibling) dashboard.insertBefore(dock, attendanceCard.nextSibling);
+    else dashboard.appendChild(dock);
+  }
+  const staffAuthPanel = document.getElementById('staffAuthPanel');
+  const scanBox = document.getElementById('dashboardScanBox');
+  if ((staffAuthPanel || scanBox) && !document.getElementById('dashboardStaffScanCard')) {
+    const scanCard = document.createElement('div');
+    scanCard.className = 'card dashboard-staff-scan-card';
+    scanCard.id = 'dashboardStaffScanCard';
+    scanCard.dataset.minRole = 'manager';
+    scanCard.innerHTML = '<div class="card-header"><div class="card-title">Staff scan</div><div style="font-size:11px;color:#8b949e;">Scan attendee HELLO or orange device-key QRs</div></div>';
+    const body = document.createElement('div');
+    body.className = 'card-body';
+    if (staffAuthPanel) body.appendChild(staffAuthPanel);
+    if (scanBox) body.appendChild(scanBox);
+    scanCard.appendChild(body);
+    dashboard.insertBefore(scanCard, attendanceCard || dashboard.firstChild);
+  }
   const roleToolbar = document.querySelector('.prototype-role-toolbar');
   const roleDetail = document.getElementById('prototypeRoleDetail');
   if (roleToolbar && roleDetail && !roleToolbar.closest('.prototype-role-dock')) {
