@@ -2856,7 +2856,8 @@ async function saveSettings() {
     requireDoormanConfirmation: !!document.getElementById('requireDoormanConfirmation')?.checked,
     requireAdditionalProof: !!document.getElementById('requireAdditionalProof')?.checked,
     allowProofRecording: !!document.getElementById('allowProofRecording')?.checked,
-    enableIdPhotoCapture: !!document.getElementById('enableIdPhotoCapture')?.checked
+    enableIdPhotoCapture: !!document.getElementById('enableIdPhotoCapture')?.checked,
+    theme: normalizeThemeForSave(typeof activeTheme !== 'undefined' ? activeTheme : null)
   };
 
   // Mirror DOM into in-memory settings + portalState + localStorage.
@@ -2878,6 +2879,7 @@ async function saveSettings() {
     return;
   }
 
+  setThemeSaveStatus('Saving...', '');
   console.log('[settings save] POST payload:', payload, 'org:', currentOrg.name, 'api_key:', currentOrg.api_key);
   let resp;
   try {
@@ -2885,6 +2887,7 @@ async function saveSettings() {
     console.log('[settings save] Worker response:', resp);
   } catch (err) {
     console.error('[settings save] POST failed:', err);
+    setThemeSaveStatus('Save failed: ' + (err.message || 'unknown'), 'err');
     showToast('Save failed: ' + (err.message || 'unknown error'), true);
     return;
   }
@@ -2897,6 +2900,7 @@ async function saveSettings() {
     console.log('[settings save] Readback:', readback);
   } catch (rbErr) {
     console.warn('[settings save] Readback failed:', rbErr);
+    setThemeSaveStatus('Saved, but readback failed.', 'err');
     showToast('Saved, but readback failed (network)', true);
     return;
   }
@@ -2909,19 +2913,26 @@ async function saveSettings() {
   if (!eq(payload.redirectUrl, r.redirectUrl)) lost.push('redirectUrl');
   if (!eq(payload.welcomeMessage, r.welcomeMessage)) lost.push('welcomeMessage');
   if (payload.minScore !== r.minScore) lost.push('minScore');
+  lost.push(...themeRoundTripMismatches(payload.theme, r.theme));
 
   if (lost.length) {
     console.error('[settings save] Round-trip mismatch:', { sent: payload, received: r, mismatched: lost });
+    setThemeSaveStatus('Saved but did not round-trip: ' + lost.join(', '), 'err');
     showToast('⚠ Saved but didn\'t round-trip: ' + lost.join(', '), true);
     return;
   }
 
   // Update portalState from the readback so the UI state matches the Worker.
   applyServerSettingsToLocalState(r);
+  activeTheme = normalizeThemeForSave(r.theme);
+  writeThemeToUI();
+  applyThemeVars(activeTheme);
   updateChromeLogo();
   renderPortalAll();
   setPortalFieldValues();
 
+  setThemeSaveStatus('Saved and verified.', 'ok');
+  setTimeout(function () { setThemeSaveStatus('', ''); }, 3000);
   showToast('✓ Settings saved and verified');
 }
 function resetSettingsToDefaults() {
@@ -4425,6 +4436,51 @@ const PAGE_VIBRANT_RATIO = 0.78;        // 78% palette / 22% base — saturated 
 let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette], bgPalette: [...THEME_DEFAULTS.bgPalette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
+function normalizeThemeForSave(theme) {
+  const t = theme || {};
+  let bgMode = t.bgMode;
+  if (!bgMode) bgMode = (t.bgAnimEnabled === false) ? 'off' : THEME_DEFAULTS.bgMode;
+  if (['off','page','glow','pattern'].indexOf(bgMode) === -1) bgMode = THEME_DEFAULTS.bgMode;
+  let bgIntensity = t.bgIntensity;
+  if (!bgIntensity && (t.bgPalette === 'muted' || t.bgPalette === 'vibrant')) bgIntensity = t.bgPalette;
+  if (bgIntensity !== 'muted' && bgIntensity !== 'vibrant') bgIntensity = THEME_DEFAULTS.bgIntensity;
+  let cycleMode = t.cycleMode;
+  if (!cycleMode) cycleMode = (t.acceptCycleEnabled === false) ? 'off' : THEME_DEFAULTS.cycleMode;
+  if (['off','page','glow','pattern'].indexOf(cycleMode) === -1) cycleMode = THEME_DEFAULTS.cycleMode;
+  return {
+    primary: t.primary || THEME_DEFAULTS.primary,
+    accent:  t.accent  || THEME_DEFAULTS.accent,
+    qrFg:    t.qrFg    || THEME_DEFAULTS.qrFg,
+    palette: Array.isArray(t.palette) && t.palette.length ? t.palette.slice(0, 7) : THEME_DEFAULTS.palette.slice(),
+    bgPalette: Array.isArray(t.bgPalette) && t.bgPalette.length ? t.bgPalette.slice(0, 7) : THEME_DEFAULTS.bgPalette.slice(),
+    darkMode: t.darkMode === undefined ? THEME_DEFAULTS.darkMode : t.darkMode,
+    bgMode: bgMode,
+    bgIntensity: bgIntensity,
+    bgPattern: typeof t.bgPattern === 'string' && t.bgPattern ? t.bgPattern : THEME_DEFAULTS.bgPattern,
+    bgImageUrl: typeof t.bgImageUrl === 'string' && t.bgImageUrl ? t.bgImageUrl : null,
+    cycleMode: cycleMode,
+    bgAnimDuration: typeof t.bgAnimDuration === 'number' ? t.bgAnimDuration : THEME_DEFAULTS.bgAnimDuration,
+    cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
+  };
+}
+
+function themeRoundTripMismatches(sent, received) {
+  const a = normalizeThemeForSave(sent);
+  const b = normalizeThemeForSave(received);
+  const lost = [];
+  Object.keys(a).forEach(function (key) {
+    if (JSON.stringify(a[key]) !== JSON.stringify(b[key])) lost.push('theme.' + key);
+  });
+  return lost;
+}
+
+function setThemeSaveStatus(message, klass) {
+  const status = document.getElementById('themeSaveStatus');
+  if (!status) return;
+  status.textContent = message || '';
+  status.className = 'theme-save-status' + (klass ? ' ' + klass : '');
+}
+
 function _themeRelLuminance(hex) {
   const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || ''); if (!m) return 0;
   const v = parseInt(m[1], 16);
@@ -4752,33 +4808,7 @@ async function loadThemeFromServer() {
     //   • Legacy bgPalette (string 'muted'|'vibrant', 6.5d only) → bgIntensity.
     //   • Old shape may not have bgPalette as array yet — fall back to defaults.
     //   • Legacy acceptCycleEnabled (boolean, pre-6.5f) → cycleMode = 'off' or 'glow'.
-    let bgMode = t.bgMode;
-    if (!bgMode) bgMode = (t.bgAnimEnabled === false) ? 'off' : THEME_DEFAULTS.bgMode;
-    if (['off','page','glow','pattern'].indexOf(bgMode) === -1) bgMode = THEME_DEFAULTS.bgMode;
-    let bgIntensity = t.bgIntensity;
-    if (!bgIntensity && (t.bgPalette === 'muted' || t.bgPalette === 'vibrant')) bgIntensity = t.bgPalette;
-    if (bgIntensity !== 'muted' && bgIntensity !== 'vibrant') bgIntensity = THEME_DEFAULTS.bgIntensity;
-    const bgPaletteArr = Array.isArray(t.bgPalette) && t.bgPalette.length
-      ? t.bgPalette.slice(0, 7)
-      : THEME_DEFAULTS.bgPalette.slice();
-    let cycleMode = t.cycleMode;
-    if (!cycleMode) cycleMode = (t.acceptCycleEnabled === false) ? 'off' : THEME_DEFAULTS.cycleMode;
-    if (['off','page','glow','pattern'].indexOf(cycleMode) === -1) cycleMode = THEME_DEFAULTS.cycleMode;
-    activeTheme = {
-      primary: t.primary || THEME_DEFAULTS.primary,
-      accent:  t.accent  || THEME_DEFAULTS.accent,
-      qrFg:    t.qrFg    || THEME_DEFAULTS.qrFg,
-      palette: Array.isArray(t.palette) && t.palette.length ? t.palette.slice(0, 7) : THEME_DEFAULTS.palette.slice(),
-      bgPalette: bgPaletteArr,
-      darkMode: t.darkMode === undefined ? THEME_DEFAULTS.darkMode : t.darkMode,
-      bgMode: bgMode,
-      bgIntensity: bgIntensity,
-      bgPattern: typeof t.bgPattern === 'string' && t.bgPattern ? t.bgPattern : THEME_DEFAULTS.bgPattern,
-      bgImageUrl: typeof t.bgImageUrl === 'string' && t.bgImageUrl ? t.bgImageUrl : null,
-      cycleMode: cycleMode,
-      bgAnimDuration:    typeof t.bgAnimDuration    === 'number' ? t.bgAnimDuration    : THEME_DEFAULTS.bgAnimDuration,
-      cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
-    };
+    activeTheme = normalizeThemeForSave(t);
     writeThemeToUI();
     applyThemeVars(activeTheme);
   } catch (err) {
@@ -4787,19 +4817,7 @@ async function loadThemeFromServer() {
 }
 
 async function saveThemeToServer() {
-  const status = document.getElementById('themeSaveStatus');
-  if (typeof currentOrg === 'undefined' || !currentOrg || !currentOrg.api_key) {
-    if (status) { status.textContent = 'Not signed in to org — theme stays local only.'; status.className = 'theme-save-status err'; }
-    return;
-  }
-  if (status) { status.textContent = 'Saving…'; status.className = 'theme-save-status'; }
-  try {
-    await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, { theme: activeTheme });
-    if (status) { status.textContent = 'Saved.'; status.className = 'theme-save-status ok'; }
-    setTimeout(function () { if (status) status.textContent = ''; }, 3000);
-  } catch (err) {
-    if (status) { status.textContent = 'Save failed: ' + (err.message || 'unknown'); status.className = 'theme-save-status err'; }
-  }
+  return saveSettings();
 }
 
 function writeThemeToUI() {
@@ -4960,7 +4978,7 @@ function wireThemePanel() {
   if (previewBtn) previewBtn.addEventListener('click', previewAcceptCycle);
 
   const saveBtn = document.getElementById('themeSaveBtn');
-  if (saveBtn) saveBtn.addEventListener('click', saveThemeToServer);
+  if (saveBtn) saveBtn.addEventListener('click', saveSettings);
 
   if (window.matchMedia) {
     try {
