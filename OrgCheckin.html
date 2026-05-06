@@ -4955,17 +4955,16 @@ function applyCheckinPrototypeLayout() {
   const staffAuthPanel = document.getElementById('staffAuthPanel');
   const scanBox = document.getElementById('dashboardScanBox');
   if ((staffAuthPanel || scanBox) && !document.getElementById('dashboardStaffScanCard')) {
-    // v5.7.0g — Process attendee scan is now a <details> expander matching
-    // the other dashboard collapsibles (Developer diagnostics, Expected
-    // attendee management). Default OPEN: this is the active staff-workflow
-    // widget, not occasional admin — closing it by default would add a click
-    // before every scan during real events. Other expanders are closed by
-    // default because they surface admin/diagnostic work.
+    // v5.7.0g — Process attendee scan is a <details> expander matching the
+    // other dashboard collapsibles (Developer diagnostics, Expected attendee
+    // management). v5.7.0i: default CLOSED for visual consistency with the
+    // other expanders — Captain's call. Staff click to open when scanning;
+    // the camera scanner inside auto-stops on first decode anyway, so an
+    // open-after-use widget would just sit empty until the next scan.
     const scanCard = document.createElement('details');
     scanCard.className = 'dashboard-collapsible dashboard-staff-scan-card';
     scanCard.id = 'dashboardStaffScanCard';
     scanCard.dataset.minRole = 'manager';
-    scanCard.open = true;
     const summary = document.createElement('summary');
     summary.textContent = 'Process attendee scan';
     scanCard.appendChild(summary);
