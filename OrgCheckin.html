@@ -4213,14 +4213,21 @@ async function startDashboardCameraScan() {
     setDashboardScanStatus('No camera available. Use Decode image or paste the payload instead.', 'error');
     return;
   }
-  // v5.7.0k — Belt-and-braces reveal: remove the hidden attribute AND set
-  // an explicit inline display so any cascading [hidden] style is overridden.
-  // html5-qrcode needs a visible, sized target to inject its video into.
-  wrap.removeAttribute('hidden');
-  wrap.style.display = 'block';
   if (startBtn) startBtn.disabled = true;
 
+  // v5.7.0m — CRITICAL ORDER: clean up any prior scanner instance FIRST
+  // (which hides the wrap), THEN reveal the wrap, THEN start the new
+  // scanner. The previous order revealed the wrap, then the stop call
+  // re-hid it, and html5-qrcode initialised against a display:none
+  // parent — the stream was live but the video was rendered at 0x0.
+  // Diagnostic-confirmed root cause of v5.7.0h..k camera-not-visible.
   try { await stopDashboardCameraScan(/*silent*/ true); } catch (_) {}
+  // Reveal the wrap AFTER cleanup so the next start() targets a visible
+  // element. Belt-and-braces — both attribute AND inline display so any
+  // cascading [hidden] style is overridden.
+  wrap.removeAttribute('hidden');
+  wrap.style.display = 'block';
+
   try {
     dashboardCameraScanner = new Html5Qrcode('dashboardScanCameraView');
     await dashboardCameraScanner.start(
