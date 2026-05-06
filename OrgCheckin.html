@@ -4245,17 +4245,31 @@ async function startDashboardCameraScan() {
 
   try {
     dashboardCameraScanner = new Html5Qrcode('dashboardScanCameraView');
+    // v5.7.0p — Add qrbox to give html5-qrcode an explicit scan region.
+    // Without it, some 2.3.8 instances run the camera but skip decode.
+    // Scan region is derived from viewport size so it stays proportionate
+    // regardless of camera aspect (handler picks the smaller dimension).
     const config = {
       fps: 15,
       disableFlip: false,
+      qrbox: function (vw, vh) {
+        const minSide = Math.min(vw, vh);
+        const size = Math.max(160, Math.floor(minSide * 0.7));
+        return { width: size, height: size };
+      },
       experimentalFeatures: {
         useBarCodeDetectorIfSupported: true
       }
     };
+    // Expose the scanner instance for live diagnostics.
+    window.dashboardCameraScanner = dashboardCameraScanner;
     await dashboardCameraScanner.start(
       { deviceId: { exact: camId } },
       config,
       async (decodedText) => {
+        // v5.7.0p — Log every decode callback invocation so we can see
+        // in DevTools whether the library is reaching this code path.
+        console.log('[scan] camera decode callback fired', { length: decodedText?.length, preview: String(decodedText || '').slice(0, 40) });
         // First successful decode wins. Stop the camera, populate the
         // textarea, and chain straight into Process scan so staff see the
         // escalation modal / runDoormanCheckin result immediately.
