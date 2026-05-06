@@ -178,6 +178,44 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .staff-hello-status.error { color: var(--red); }
 .staff-hello-status.ok { color: var(--green); }
 .staff-hello-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.dashboard-scan-box { margin-top: 14px; border: 1px solid var(--line); background: rgba(13,17,23,0.58); border-radius: 8px; padding: 12px; display: grid; gap: 10px; }
+.dashboard-scan-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.dashboard-scan-sub { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.dashboard-scan-grid { display: grid; gap: 8px; }
+.dashboard-scan-grid textarea { width: 100%; min-height: 82px; resize: vertical; background: #0a0f15; border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 9px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.dashboard-scan-grid input[type=file] { width: 100%; background: #0a0f15; border: 1px solid var(--line); border-radius: 6px; color: var(--text); padding: 8px; }
+.dashboard-scan-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.dashboard-scan-status { min-height: 18px; font-size: 12px; color: var(--muted); }
+.dashboard-scan-status.error { color: var(--red); }
+.dashboard-scan-status.ok { color: var(--green); }
+.escalation-backdrop { position: fixed; inset: 0; z-index: 1001; display: grid; place-items: center; padding: 18px; background: rgba(1,4,9,0.72); backdrop-filter: blur(10px); }
+.escalation-backdrop.hidden { display: none; }
+.escalation-modal { width: min(880px, 100%); max-height: min(88dvh, 760px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 24px 90px rgba(0,0,0,0.52); }
+.escalation-head { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.escalation-head h3 { margin: 0 0 6px; font-size: 17px; color: var(--text); }
+.escalation-meta { display: flex; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.escalation-meta code { color: var(--orange); background: rgba(255,149,0,0.11); border: 1px solid rgba(255,149,0,0.25); border-radius: 6px; padding: 2px 6px; }
+.escalation-close { width: 34px; height: 34px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); cursor: pointer; font-size: 20px; line-height: 1; }
+.escalation-body { padding: 18px; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr); gap: 16px; }
+.escalation-section { border: 1px solid var(--line); background: rgba(13,17,23,0.52); border-radius: 8px; padding: 14px; min-width: 0; }
+.escalation-section h4 { margin: 0 0 4px; color: var(--text); font-size: 14px; }
+.escalation-section p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.escalation-search { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #0a0f15; color: var(--text); padding: 9px 10px; margin-bottom: 10px; }
+.escalation-list { display: grid; gap: 8px; max-height: 310px; overflow: auto; }
+.escalation-row { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--text); padding: 10px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.escalation-row:hover { border-color: rgba(255,149,0,0.52); }
+.escalation-row span { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.escalation-empty { color: var(--muted); font-size: 12px; padding: 10px; border: 1px dashed var(--line); border-radius: 7px; }
+.escalation-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.escalation-tab { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); padding: 6px 10px; cursor: pointer; font-size: 12px; }
+.escalation-tab.active { border-color: rgba(255,149,0,0.7); background: rgba(255,149,0,0.13); color: var(--text); }
+.escalation-add-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.escalation-add-fields label { color: var(--muted); font-size: 12px; display: grid; gap: 5px; }
+.escalation-add-fields input { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #0a0f15; color: var(--text); padding: 9px 10px; }
+.escalation-footer { padding: 0 18px 18px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
+.escalation-status { min-height: 18px; color: var(--muted); font-size: 12px; }
+.escalation-status.error { color: var(--red); }
+.escalation-status.ok { color: var(--green); }
 .checkin-lower-grid { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
 .expected-admin-panel { background: #151b23; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
 .expected-admin-panel h5 { font-size: 13px; margin-bottom: 12px; }
@@ -549,6 +587,31 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 }
 :root[data-theme="light"] .staff-hello-grid input[type=file],
 :root[data-theme="light"] .staff-hello-grid textarea {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .dashboard-scan-box,
+:root[data-theme="light"] .escalation-section {
+  background: #f3f5f8;
+  border-color: var(--line);
+  color: var(--text);
+}
+:root[data-theme="light"] .dashboard-scan-grid input[type=file],
+:root[data-theme="light"] .dashboard-scan-grid textarea,
+:root[data-theme="light"] .escalation-search,
+:root[data-theme="light"] .escalation-add-fields input {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .escalation-modal {
+  background: #ffffff;
+  border-color: var(--line);
+  color: var(--text);
+}
+:root[data-theme="light"] .escalation-row,
+:root[data-theme="light"] .escalation-close {
   background: #ffffff;
   color: var(--text);
   border-color: var(--line);
@@ -1356,6 +1419,7 @@ body #venueQRWrap.cycle-burst-pattern {
   .prototype-checkin #panel-checkin .qr-box canvas,
   .prototype-checkin #panel-checkin .qr-box img { width: calc(100% - 24px) !important; height: calc(100% - 24px) !important; }
   .checkin-lower-grid, .expected-admin-fields { grid-template-columns: 1fr; }
+  .escalation-body, .escalation-add-fields { grid-template-columns: 1fr; }
   .expected-admin-actions { flex-direction: column; }
   .settings-grid-2, .settings-grid-3, .switch-grid { grid-template-columns: 1fr; }
   .qr-fullscreen-overlay { align-items: flex-start; }
@@ -1634,6 +1698,22 @@ body #venueQRWrap.cycle-burst-pattern {
                     </div>
                     <button class="btn btn-primary" id="manualCheckinBtn" style="width:100%;" onclick="manualCheckin()">Record Check-in</button>
                     <div class="checkin-result" id="manualCheckinResult"></div>
+                    <div class="dashboard-scan-box" id="dashboardScanBox">
+                      <div>
+                        <div class="dashboard-scan-title">Scan attendee QR</div>
+                        <div class="dashboard-scan-sub">Paste or upload a scanned HELLO/device-key QR. Device-key QRs open the doorman escalation flow.</div>
+                      </div>
+                      <div class="dashboard-scan-grid">
+                        <textarea id="dashboardScanPayloadInput" placeholder="Paste H: / HZ: payload or raw JSON"></textarea>
+                        <input type="file" id="dashboardScanImageInput" accept="image/*">
+                      </div>
+                      <div class="dashboard-scan-actions">
+                        <button class="btn btn-secondary btn-sm" type="button" id="dashboardScanDecodeBtn">Decode image</button>
+                        <button class="btn btn-primary btn-sm" type="button" id="dashboardScanSubmitBtn">Process scan</button>
+                      </div>
+                      <div class="dashboard-scan-status" id="dashboardScanStatus"></div>
+                      <canvas id="dashboardScanDecodeCanvas" hidden></canvas>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2021,6 +2101,44 @@ body #venueQRWrap.cycle-burst-pattern {
     </div>
   </div>
 </div>
+<div class="escalation-backdrop hidden" id="doormanEscalationDialog" role="dialog" aria-modal="true" aria-labelledby="doormanEscalationTitle">
+  <div class="escalation-modal">
+    <div class="escalation-head">
+      <div>
+        <h3 id="doormanEscalationTitle">Escalation: unrecognised attendee</h3>
+        <div class="escalation-meta">
+          <span>Device <code id="escalationFpShort">unknown</code></span>
+          <span id="escalationScannedAt">Scanned just now</span>
+        </div>
+      </div>
+      <button class="escalation-close" type="button" id="escalationCloseBtn" aria-label="Close escalation">&times;</button>
+    </div>
+    <div class="escalation-body">
+      <section class="escalation-section">
+        <h4>Choose from List</h4>
+        <p>Bind this device to an existing unclaimed Expected entry.</p>
+        <input class="escalation-search" id="escalationSearchInput" type="search" placeholder="Search expected attendees">
+        <div class="escalation-list" id="escalationExpectedList"></div>
+      </section>
+      <section class="escalation-section">
+        <h4>Add at the door</h4>
+        <p>Create a new entry with this device already bound.</p>
+        <div class="escalation-tabs" id="escalationRoleTabs"></div>
+        <div class="escalation-add-fields">
+          <label>First name<input id="escalationFirstName" type="text" autocomplete="given-name"></label>
+          <label>Surname<input id="escalationSurname" type="text" autocomplete="family-name"></label>
+        </div>
+        <div class="dashboard-scan-actions" style="margin-top:12px;">
+          <button class="btn btn-primary btn-sm" type="button" id="escalationAddBtn">Add Attendee</button>
+        </div>
+      </section>
+    </div>
+    <div class="escalation-footer">
+      <div class="escalation-status" id="escalationStatus"></div>
+      <button class="btn btn-secondary" type="button" id="escalationCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
 <input type="file" id="csvFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" style="display:none">
 
 <script>
@@ -2114,6 +2232,8 @@ let staffAuthSession = null;
 let staffAuthExpiryTimer = null;
 let staffAuthExpiredMessage = '';
 let manualCheckinLoading = false;
+let doormanEscalationState = null;
+let doormanEscalationRole = 'attendee';
 
 function loadJson(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJson(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
@@ -3705,6 +3825,306 @@ async function requireFreshStaffProof(actionLabel) {
   renderStaffAuthPanel(`Staff proof accepted for ${actionLabel}.`);
   return session;
 }
+function setDashboardScanStatus(message, kind='') {
+  const el = document.getElementById('dashboardScanStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = 'dashboard-scan-status' + (kind ? ' ' + kind : '');
+}
+function setEscalationStatus(message, kind='') {
+  const el = document.getElementById('escalationStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = 'escalation-status' + (kind ? ' ' + kind : '');
+}
+function shortFingerprint(fp) {
+  const value = String(fp || '').trim();
+  if (!value) return 'unknown';
+  if (value.length <= 16) return value;
+  return value.slice(0, 8) + '...' + value.slice(-8);
+}
+function doormanB64urlDecode(str) {
+  let s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s);
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+function doormanDecodeB64urlJson(b64) {
+  return JSON.parse(new TextDecoder().decode(doormanB64urlDecode(b64)));
+}
+async function doormanDecompressB64urlJson(b64) {
+  if (typeof DecompressionStream !== 'function') throw new Error('Compressed QR requires a browser with DecompressionStream support.');
+  const ds = new DecompressionStream('deflate-raw');
+  const writer = ds.writable.getWriter();
+  await writer.write(doormanB64urlDecode(b64));
+  await writer.close();
+  const ab = await new Response(ds.readable).arrayBuffer();
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(ab)));
+}
+function doormanCanonical(val) {
+  if (val === null || typeof val !== 'object') return JSON.stringify(val);
+  if (Array.isArray(val)) return '[' + val.map(doormanCanonical).join(',') + ']';
+  return '{' + Object.keys(val).sort().map(k => JSON.stringify(k) + ':' + doormanCanonical(val[k])).join(',') + '}';
+}
+function doormanB64urlEncode(bytes) {
+  let bin = '';
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+async function doormanHashPayload(payload) {
+  const v = payload?.v == null ? 3 : Number(payload.v);
+  const text = v >= 3 ? doormanCanonical(payload) : JSON.stringify(payload);
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return doormanB64urlEncode(new Uint8Array(hash));
+}
+async function doormanVerifyDeviceEnvelope(env) {
+  if (!env || env.type !== 'device_key') return env;
+  if (!env.pub_jwk || !env.pub_fp) throw new Error('Device-key QR missing pub_jwk or pub_fp.');
+  if (!env.hash || !env.sig) throw new Error('Device-key QR missing signature.');
+  if (!window.crypto?.subtle) throw new Error('Secure crypto unavailable for QR verification.');
+  const payload = { ...env };
+  delete payload.hash;
+  delete payload.sig;
+  const computed = await doormanHashPayload(payload);
+  if (computed !== env.hash) throw new Error('Device-key QR hash mismatch.');
+  const key = await crypto.subtle.importKey('jwk', env.pub_jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+  const ok = await crypto.subtle.verify(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    doormanB64urlDecode(env.sig),
+    doormanB64urlDecode(env.hash)
+  );
+  if (!ok) throw new Error('Device-key QR signature invalid.');
+  return env;
+}
+async function decodeDashboardQrPayload(raw) {
+  const text = String(raw || '').trim();
+  if (!text) throw new Error('Paste or decode a QR payload first.');
+  let env;
+  if (text.startsWith('HZ:')) env = await doormanDecompressB64urlJson(text.slice(3));
+  else if (text.startsWith('H:')) env = doormanDecodeB64urlJson(text.slice(2));
+  else if (/^\s*\{/.test(text)) env = JSON.parse(text);
+  else env = doormanDecodeB64urlJson(text);
+  return doormanVerifyDeviceEnvelope(env);
+}
+async function decodeDashboardScanImage() {
+  const file = document.getElementById('dashboardScanImageInput')?.files?.[0];
+  const payloadInput = document.getElementById('dashboardScanPayloadInput');
+  const canvas = document.getElementById('dashboardScanDecodeCanvas');
+  if (!file) return setDashboardScanStatus('Choose a QR image first.', 'error');
+  if (!window.jsQR) return setDashboardScanStatus('QR decoder unavailable.', 'error');
+  setDashboardScanStatus('Decoding image...');
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read image file.'));
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('Could not load image.'));
+      image.src = dataUrl;
+    });
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const decoded = window.jsQR(pixels.data, pixels.width, pixels.height);
+    if (!decoded?.data) return setDashboardScanStatus('Could not decode QR - try a clearer image.', 'error');
+    if (payloadInput) payloadInput.value = decoded.data;
+    setDashboardScanStatus('QR decoded. Click Process scan.', 'ok');
+  } catch (err) {
+    setDashboardScanStatus(err.message || 'Could not decode QR.', 'error');
+  }
+}
+async function processDashboardScan() {
+  const input = document.getElementById('dashboardScanPayloadInput');
+  if (!currentOrg) return setDashboardScanStatus('Load an organisation first.', 'error');
+  try {
+    setDashboardScanStatus('Processing scan...');
+    const env = await decodeDashboardQrPayload(input?.value || '');
+    if (env.type === 'device_key') {
+      openEscalationModal(env);
+      setDashboardScanStatus('Device-key QR opened escalation.', 'ok');
+    } else {
+      await runDoormanCheckin(env);
+      setDashboardScanStatus('HELLO scan processed.', 'ok');
+    }
+  } catch (err) {
+    setDashboardScanStatus(err.message || 'Could not process scan.', 'error');
+  }
+}
+function escalationRolesForActor() {
+  const rank = effectiveRoleRank();
+  const roles = ['attendee'];
+  if (rank >= PROTOTYPE_ROLE_RANK.manager) roles.push('staff');
+  if (rank >= PROTOTYPE_ROLE_RANK.lead_admin) roles.push('manager', 'lead_admin');
+  return roles;
+}
+function renderEscalationRoleTabs() {
+  const root = document.getElementById('escalationRoleTabs');
+  const addBtn = document.getElementById('escalationAddBtn');
+  if (!root) return;
+  const roles = escalationRolesForActor();
+  if (!roles.includes(doormanEscalationRole)) doormanEscalationRole = roles[0];
+  root.innerHTML = roles.map(role => `<button class="escalation-tab ${role === doormanEscalationRole ? 'active' : ''}" type="button" data-escalation-role="${escapeHtml(role)}">${escapeHtml(roleLabelFor(role))}</button>`).join('');
+  if (addBtn) addBtn.textContent = 'Add ' + roleLabelFor(doormanEscalationRole);
+}
+function unclaimedExpectedRows() {
+  return expectedAttendees.filter(row => {
+    const fps = Array.isArray(row.device_key_fps) ? row.device_key_fps : [];
+    return !row.device_key_fp && !fps.length;
+  });
+}
+function renderEscalationExpectedList() {
+  const root = document.getElementById('escalationExpectedList');
+  if (!root) return;
+  const q = (document.getElementById('escalationSearchInput')?.value || '').trim().toLowerCase();
+  const rows = unclaimedExpectedRows().filter(row => expectedDisplayName(row).toLowerCase().includes(q));
+  if (!rows.length) {
+    root.innerHTML = '<div class="escalation-empty">No unclaimed Expected entries match.</div>';
+    return;
+  }
+  root.innerHTML = rows.map(row => {
+    const name = expectedDisplayName(row);
+    const meta = [roleLabelFor(row.prototype_role || 'attendee'), row.status || 'assist'].join(' · ');
+    return `<button class="escalation-row" type="button" data-bind-expected-id="${escapeHtml(row.id)}"><div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(meta)}</span></div><span>Bind</span></button>`;
+  }).join('');
+}
+async function openEscalationModal(env) {
+  doormanEscalationState = { env, scannedAt: Date.now() };
+  doormanEscalationRole = escalationRolesForActor()[0] || 'attendee';
+  document.getElementById('escalationFpShort').textContent = shortFingerprint(env.pub_fp);
+  document.getElementById('escalationScannedAt').textContent = 'Scanned at ' + new Date(doormanEscalationState.scannedAt).toLocaleTimeString(displayLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  document.getElementById('escalationFirstName').value = '';
+  document.getElementById('escalationSurname').value = '';
+  document.getElementById('escalationSearchInput').value = '';
+  setEscalationStatus('');
+  if (!expectedAttendees.length && !expectedLoading) await refreshExpectedAttendees();
+  renderEscalationRoleTabs();
+  renderEscalationExpectedList();
+  document.getElementById('doormanEscalationDialog')?.classList.remove('hidden');
+  setTimeout(() => document.getElementById('escalationSearchInput')?.focus(), 0);
+}
+function closeEscalationModal() {
+  document.getElementById('doormanEscalationDialog')?.classList.add('hidden');
+  doormanEscalationState = null;
+  setEscalationStatus('');
+}
+function escalationBodyBase() {
+  const env = doormanEscalationState?.env;
+  if (!env?.pub_jwk || !env?.pub_fp) throw new Error('No device-key QR is active.');
+  return { pub_jwk: env.pub_jwk, pub_fp: env.pub_fp, device_pub_jwk: env.pub_jwk, device_pub_fp: env.pub_fp };
+}
+function currentStaffSessionToken() {
+  loadStaffAuthSession();
+  return staffSessionIsActive() ? staffAuthSession.staff_session : '';
+}
+async function bindEscalationExpected(id) {
+  const row = expectedAttendees.find(item => String(item.id) === String(id));
+  if (!row) return setEscalationStatus('Expected entry not found.', 'error');
+  if (!confirm('Bind this device to ' + expectedDisplayName(row) + '?')) return;
+  try {
+    setEscalationStatus('Binding device...');
+    const body = escalationBodyBase();
+    if (!developerBearerSessionIsActive()) {
+      let token = currentStaffSessionToken();
+      if (!token) {
+        const session = await requestStaffHelloSession('bind device to Expected entry');
+        if (!session) return setEscalationStatus('Staff HELLO proof cancelled.', 'error');
+        token = session.staff_session;
+      }
+      body.staff_session = token;
+    }
+    const result = await window.IRLidOrgApi.bindAdditionalKey(
+      currentOrg.api_key,
+      id,
+      body,
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
+    if (result.expected) {
+      expectedAttendees = expectedAttendees.map(item => String(item.id) === String(id) ? result.expected : item);
+    }
+    await refreshExpectedAttendees();
+    await refreshAttendance();
+    closeEscalationModal();
+    showToast('Bound to ' + expectedDisplayName(row) + ' - check-in proceeding');
+  } catch (err) {
+    if (err.status === 401) clearStaffAuthSession(err.message || 'Staff authentication required.');
+    setEscalationStatus(err.message || 'Could not bind device.', 'error');
+  }
+}
+async function addEscalationAtDoor() {
+  const firstName = (document.getElementById('escalationFirstName')?.value || '').trim();
+  const surname = (document.getElementById('escalationSurname')?.value || '').trim();
+  if (!firstName || !surname) return setEscalationStatus('Enter first name and surname.', 'error');
+  const role = doormanEscalationRole || 'attendee';
+  const body = { ...escalationBodyBase(), first_name: firstName, surname, prototype_role: role };
+  async function submit() {
+    const token = currentStaffSessionToken();
+    if (!developerBearerSessionIsActive() && token) body.staff_session = token;
+    else delete body.staff_session;
+    return window.IRLidOrgApi.createAndBindExpected(
+      currentOrg.api_key,
+      body,
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
+  }
+  try {
+    setEscalationStatus('Adding ' + roleLabelFor(role) + '...');
+    let result;
+    try {
+      result = await submit();
+    } catch (err) {
+      if (err.status !== 401 || err.message !== 'stale_staff_proof') throw err;
+      clearStaffAuthSession('Fresh Staff HELLO required for Add at the door.');
+      const session = await requestStaffHelloSession('add ' + roleLabelFor(role) + ' at the door');
+      if (!session) return setEscalationStatus('Staff HELLO proof cancelled.', 'error');
+      body.staff_session = session.staff_session;
+      result = await submit();
+    }
+    if (result.expected) expectedAttendees.unshift(result.expected);
+    await refreshExpectedAttendees();
+    await refreshAttendance();
+    closeEscalationModal();
+    showToast('Added ' + firstName + ' ' + surname + ' as ' + roleLabelFor(role) + ' - check-in proceeding');
+  } catch (err) {
+    setEscalationStatus(err.message || 'Could not add at the door.', 'error');
+  }
+}
+async function runDoormanCheckin(env) {
+  const developerBypass = developerBearerSessionIsActive();
+  const body = {
+    mode: 'doorman_scan',
+    helloPayload: env,
+    helloHash: env.hash || await doormanHashPayload(env),
+    attendeeLabel: '',
+    name: '',
+    score: settings.minScore || 50,
+    bioVerified: !!settings.bioRequired
+  };
+  if (!developerBypass) {
+    let token = currentStaffSessionToken();
+    if (!token) {
+      const session = await requestStaffHelloSession('record doorman scan');
+      if (!session) throw new Error('Staff HELLO proof cancelled.');
+      token = session.staff_session;
+    }
+    body.staff_session = token;
+  }
+  const result = await window.IRLidOrgApi.createCheckin(
+    currentOrg.api_key,
+    body,
+    developerBypass ? qrLoginSession.session_token : undefined
+  );
+  await refreshAttendance();
+  await refreshExpectedAttendees();
+  flashDoormanPanel(result.linked ? 'success' : 'walkin');
+  showToast(result.linked ? 'Recognised attendee checked in' : 'Doorman scan recorded');
+}
 function refreshStaffAuthPanel() {
   loadStaffAuthSession();
   const message = staffAuthExpiredMessage;
@@ -4320,6 +4740,29 @@ window.addEventListener('DOMContentLoaded', async () => {
     const file = event.target.files && event.target.files[0];
     setStaffHelloDialogStatus(file ? `Selected ${file.name}. Click Decode image.` : '');
   });
+  document.getElementById('dashboardScanDecodeBtn')?.addEventListener('click', decodeDashboardScanImage);
+  document.getElementById('dashboardScanSubmitBtn')?.addEventListener('click', processDashboardScan);
+  document.getElementById('dashboardScanImageInput')?.addEventListener('change', (event) => {
+    const file = event.target.files && event.target.files[0];
+    setDashboardScanStatus(file ? `Selected ${file.name}. Click Decode image.` : '');
+  });
+  document.getElementById('escalationSearchInput')?.addEventListener('input', renderEscalationExpectedList);
+  document.getElementById('escalationExpectedList')?.addEventListener('click', (event) => {
+    const row = event.target.closest('[data-bind-expected-id]');
+    if (row) bindEscalationExpected(row.dataset.bindExpectedId);
+  });
+  document.getElementById('escalationRoleTabs')?.addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-escalation-role]');
+    if (!tab) return;
+    doormanEscalationRole = tab.dataset.escalationRole || 'attendee';
+    renderEscalationRoleTabs();
+  });
+  document.getElementById('escalationAddBtn')?.addEventListener('click', addEscalationAtDoor);
+  document.getElementById('escalationCloseBtn')?.addEventListener('click', closeEscalationModal);
+  document.getElementById('escalationCancelBtn')?.addEventListener('click', closeEscalationModal);
+  document.getElementById('doormanEscalationDialog')?.addEventListener('click', (event) => {
+    if (event.target.id === 'doormanEscalationDialog') closeEscalationModal();
+  });
   document.getElementById('staffHelloDialog')?.addEventListener('click', (event) => {
     if (event.target.id === 'staffHelloDialog') cancelStaffHelloDialog();
   });
@@ -4337,6 +4780,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !document.getElementById('staffHelloDialog')?.classList.contains('hidden')) cancelStaffHelloDialog();
+    else if (event.key === 'Escape' && !document.getElementById('doormanEscalationDialog')?.classList.contains('hidden')) closeEscalationModal();
     else if (event.key === 'Escape' && expectedDeleteMode) setExpectedDeleteMode(false);
     else if (event.key === 'Escape' && expectedEditId) cancelExpectedEdit();
     else if (event.key === 'Escape' && checkoutConfirmId) cancelCheckout();
