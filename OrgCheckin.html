@@ -2141,6 +2141,44 @@ function orgFromUrl() {
 function ensureExpectedAttendees() { let stored = loadJson(STORAGE_KEY_EXPECTED, null); if (!stored || !Array.isArray(stored) || !stored.length) { stored = defaultExpectedAttendees(); saveJson(STORAGE_KEY_EXPECTED, stored); } return stored; }
 function loadPortalState() { try { const raw = localStorage.getItem(STORAGE_KEY_PORTAL); return { ...PORTAL_DEFAULTS, ...(raw ? JSON.parse(raw) : {}) }; } catch (e) { return { ...PORTAL_DEFAULTS }; } }
 function savePortalState() { localStorage.setItem(STORAGE_KEY_PORTAL, JSON.stringify(portalState)); }
+function dashboardOrgKey(org) {
+  const nested = org?.org || {};
+  return org?.api_key || org?.apiKey || org?.org_key || org?.orgKey || org?.key ||
+    nested.api_key || nested.apiKey || nested.org_key || nested.orgKey || nested.key || '';
+}
+function normalizeDashboardOrg(org) {
+  if (!org) return null;
+  const nested = org.org || {};
+  const apiKey = dashboardOrgKey(org);
+  return {
+    name: org.name || nested.name || 'IRLid Test Organisation',
+    api_key: apiKey,
+    id: org.id || nested.id,
+    slug: org.slug || nested.slug,
+    role: org.role || org.membership?.role || 'member',
+    implicit_membership: !!org.implicit_membership,
+    settings: org.settings || nested.settings || null
+  };
+}
+function applyServerSettingsToLocalState(s) {
+  const src = s || {};
+  if (typeof src.minScore === 'number') portalState.minimumTrustScore = src.minScore;
+  if (typeof src.bioRequired === 'boolean') portalState.biometricRequired = src.bioRequired;
+  if (typeof src.privacyMode === 'boolean') portalState.privacyMode = src.privacyMode;
+  if (typeof src.anonymousMode === 'boolean') portalState.anonymousMode = src.anonymousMode;
+  if (typeof src.checkoutEnabled === 'boolean') portalState.checkoutRequired = src.checkoutEnabled;
+  if (typeof src.returnAllowed === 'boolean') portalState.returnAllowed = src.returnAllowed;
+  if (typeof src.logoUrl === 'string') portalState.logoUrl = src.logoUrl;
+  if (typeof src.welcomeMessage === 'string') portalState.welcomeMessage = src.welcomeMessage;
+  if (typeof src.redirectUrl === 'string') portalState.redirectUrl = src.redirectUrl;
+  if (typeof src.allowSelfSelection === 'boolean') portalState.allowSelfSelection = src.allowSelfSelection;
+  if (typeof src.requireDoormanConfirmation === 'boolean') portalState.requireDoormanConfirmation = src.requireDoormanConfirmation;
+  if (typeof src.requireAdditionalProof === 'boolean') portalState.requireAdditionalProof = src.requireAdditionalProof;
+  if (typeof src.allowProofRecording === 'boolean') portalState.allowProofRecording = src.allowProofRecording;
+  if (typeof src.enableIdPhotoCapture === 'boolean') portalState.enableIdPhotoCapture = src.enableIdPhotoCapture;
+  syncLegacyFromPortal();
+  savePortalState();
+}
 
 function showPanel(name, el) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
@@ -2204,7 +2242,7 @@ async function signedInSwitchOrg() {
   if (serviceAccount) serviceAccount.style.display = 'none';
   try {
     const r = await window.IRLidOrgApi.listMyOrgs(qrLoginSession.session_token);
-    const myOrgs = Array.isArray(r.orgs) ? r.orgs : [];
+    const myOrgs = (Array.isArray(r.orgs) ? r.orgs : []).map(normalizeDashboardOrg).filter(Boolean);
     renderOrgPicker(myOrgs, qrLoginSession.display_name || 'developer', !!qrLoginSession.is_developer);
   } catch (err) {
     showToast('Could not load orgs: ' + (err.message || 'unknown error'), true);
@@ -2493,7 +2531,8 @@ async function handleQrLoginSuccess(data) {
   let myOrgs = [];
   try {
     const r = await window.IRLidOrgApi.listMyOrgs(qrLoginSession.session_token);
-    myOrgs = Array.isArray(r.orgs) ? r.orgs : [];
+    myOrgs = (Array.isArray(r.orgs) ? r.orgs : []).map(normalizeDashboardOrg).filter(Boolean);
+    console.log("[v5.5.5] /user/orgs returned:", myOrgs);
   } catch (err) {
     status.textContent = 'Could not load your org list: ' + (err.message || 'unknown error');
     status.style.color = '#f85149';
@@ -2546,7 +2585,10 @@ function renderOrgPicker(myOrgs, displayName, isDeveloper) {
         '<div class="org-picker-meta">slug: ' + escapeHtml(org.slug || '—') + '</div>' +
       '</div>' +
       '<span class="org-picker-role ' + roleClass + '">' + escapeHtml(roleLabel) + '</span>';
-    card.addEventListener('click', function () { loadDashboardForOrg(org); });
+    card.addEventListener('click', function () {
+      console.log("[v5.5.5] picker selected org:", org);
+      loadDashboardForOrg(org);
+    });
     list.appendChild(card);
   });
 
@@ -2570,6 +2612,20 @@ function renderOrgPicker(myOrgs, displayName, isDeveloper) {
   panel.style.display = 'block';
 }
 
+async function freshOrgFromSession(savedOrg) {
+  if (!qrLoginSession?.session_token) return null;
+  const r = await window.IRLidOrgApi.listMyOrgs(qrLoginSession.session_token);
+  const orgs = (Array.isArray(r.orgs) ? r.orgs : []).map(normalizeDashboardOrg).filter(Boolean);
+  console.log("[v5.5.5] /user/orgs returned:", orgs);
+  if (!savedOrg) return orgs[0] || null;
+  return orgs.find(o =>
+    (savedOrg.id && o.id === savedOrg.id) ||
+    (savedOrg.slug && o.slug === savedOrg.slug) ||
+    (savedOrg.api_key && o.api_key === savedOrg.api_key) ||
+    (savedOrg.name && o.name === savedOrg.name)
+  ) || null;
+}
+
 // Batch C — populate currentOrg from a /user/orgs row (which carries api_key) and
 // hand control over to the existing dashboard loader. The X-Org-Key auth path still
 // works during the v5.5 transition; v6+ will move dashboard ops onto Bearer auth.
@@ -2583,18 +2639,21 @@ function renderOrgPicker(myOrgs, displayName, isDeveloper) {
 // Batch C sign-in: created "Captians Venue Test" pointing at irlid.co.uk, but the
 // Settings page rendered Imbue's wixstatic logo + "Welcome to Imbue" copy.
 async function loadDashboardForOrg(org) {
-  if (!org || !org.api_key) {
+  const dashboardOrg = normalizeDashboardOrg(org);
+  if (!dashboardOrg || !dashboardOrg.api_key) {
+    console.warn('[v5.5.5] Org row missing api_key:', org);
     showToast('Org missing api_key — cannot load dashboard', true);
     return;
   }
   currentOrg = {
-    name: org.name,
-    api_key: org.api_key,
-    id: org.id,
-    slug: org.slug,
-    role: org.role,
+    name: dashboardOrg.name,
+    api_key: dashboardOrg.api_key,
+    id: dashboardOrg.id,
+    slug: dashboardOrg.slug,
+    role: dashboardOrg.role,
     mode: 'irlid-api-test'
   };
+  console.log("[v5.5.5] currentOrg now:", currentOrg);
   saveJson(STORAGE_KEY_ORG, currentOrg);
 
   // Reset local UI state to defaults BEFORE applying anything org-specific.
@@ -2607,34 +2666,24 @@ async function loadDashboardForOrg(org) {
     allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true,
     allowProofRecording: true, allowIdPhotoCapture: false
   };
+  saveJson(STORAGE_KEY_PORTAL, portalState);
+  saveJson(STORAGE_KEY_SETTINGS, settings);
+  setPortalFieldValues();
+  applySettingsToUI();
+  if (dashboardOrg.settings) {
+    applyServerSettingsToLocalState(dashboardOrg.settings);
+    setPortalFieldValues();
+  }
 
   // Try to fetch the new org's actual settings_json from the Worker. If the
   // org has any server-side branding/policy, surface it. If the call fails or
   // the org is brand new, the defaults above remain.
   try {
     if (window.IRLidOrgApi && typeof window.IRLidOrgApi.getOrgSettings === 'function') {
+      console.log("[v5.5.5] /org/settings sending key:", currentOrg && currentOrg.api_key);
       const res = await window.IRLidOrgApi.getOrgSettings(currentOrg.api_key);
       const s = (res && res.settings) || {};
-      // Map server-side settings into local portalState shape.
-      if (typeof s.minScore === 'number')        portalState.minimumTrustScore     = s.minScore;
-      if (typeof s.bioRequired === 'boolean')    portalState.biometricRequired      = s.bioRequired;
-      if (typeof s.privacyMode === 'boolean')    portalState.privacyMode            = s.privacyMode;
-      if (typeof s.anonymousMode === 'boolean')  portalState.anonymousMode          = s.anonymousMode;
-      if (typeof s.checkoutEnabled === 'boolean')portalState.checkoutRequired       = s.checkoutEnabled;
-      if (typeof s.returnAllowed === 'boolean')  portalState.returnAllowed          = s.returnAllowed;
-      if (typeof s.logoUrl === 'string')         portalState.logoUrl                = s.logoUrl;
-      if (typeof s.welcomeMessage === 'string')  portalState.welcomeMessage         = s.welcomeMessage;
-      if (typeof s.redirectUrl === 'string')     portalState.redirectUrl            = s.redirectUrl;
-      // Mirror into settings legacy object.
-      settings.minScore         = portalState.minimumTrustScore;
-      settings.bioRequired      = portalState.biometricRequired;
-      settings.privacyMode      = portalState.privacyMode;
-      settings.anonymousMode    = portalState.anonymousMode;
-      settings.checkoutEnabled  = portalState.checkoutRequired;
-      settings.returnAllowed    = portalState.returnAllowed;
-      settings.logoUrl          = portalState.logoUrl;
-      settings.welcomeMessage   = portalState.welcomeMessage;
-      settings.redirectUrl      = portalState.redirectUrl;
+      applyServerSettingsToLocalState(s);
     }
   } catch (e) {
     console.warn('Could not load org settings from worker — defaults remain', e);
@@ -2663,7 +2712,8 @@ async function loadDashboardForOrg(org) {
   showPanel('dashboard');
   generateVenueQR();
   renderPortalAll();
-  showToast('Signed in to ' + currentOrg.name + ' as ' + (org.role || 'member'));
+  setPortalFieldValues();
+  showToast('Signed in to ' + currentOrg.name + ' as ' + (currentOrg.role || 'member'));
 }
 
 async function submitCreateOrg() {
@@ -2867,13 +2917,10 @@ async function saveSettings() {
   }
 
   // Update portalState from the readback so the UI state matches the Worker.
-  if (typeof r.logoUrl === 'string') { portalState.logoUrl = r.logoUrl; settings.logoUrl = r.logoUrl; }
-  if (typeof r.redirectUrl === 'string') { portalState.redirectUrl = r.redirectUrl; settings.redirectUrl = r.redirectUrl; }
-  if (typeof r.welcomeMessage === 'string') { portalState.welcomeMessage = r.welcomeMessage; settings.welcomeMessage = r.welcomeMessage; }
-  saveJson(STORAGE_KEY_PORTAL, portalState);
-  saveJson(STORAGE_KEY_SETTINGS, settings);
+  applyServerSettingsToLocalState(r);
   updateChromeLogo();
   renderPortalAll();
+  setPortalFieldValues();
 
   showToast('✓ Settings saved and verified');
 }
@@ -4327,11 +4374,14 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     }
     try {
-      await loadDashboardForOrg(savedOrg);
+      const freshOrg = await freshOrgFromSession(savedOrg);
+      if (!freshOrg) throw new Error('Saved org is no longer available in /user/orgs');
+      await loadDashboardForOrg(freshOrg);
       return; // skip sign-in UI fallthrough below
     } catch (err) {
       // Dashboard load failed — clear stale session and fall through to sign-in.
       try { localStorage.removeItem('irlid_login_session'); } catch (_) {}
+      try { localStorage.removeItem(STORAGE_KEY_ORG); } catch (_) {}
       qrLoginSession = null;
     }
   }
