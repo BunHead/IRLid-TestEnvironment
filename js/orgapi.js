@@ -166,8 +166,11 @@
     // Use only when the attendee row has moved past the "expected" state
     // (e.g. checked in/out, conflict, invalid) and the regular
     // deleteExpected button is no longer visible.
-    deleteExpectedFull(orgKey, id, sessionToken) {
-      return request(`/org/expected/${encodeURIComponent(id)}/full`, {
+    // v5.7.0j — `force=true` bypasses the Worker's "active checkin must
+    // check out first" guard. Caller passes this when deleting an IN row.
+    deleteExpectedFull(orgKey, id, sessionToken, force) {
+      const path = `/org/expected/${encodeURIComponent(id)}/full${force ? '?force=true' : ''}`;
+      return request(path, {
         method: "DELETE",
         orgKey,
         sessionToken

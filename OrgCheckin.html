@@ -226,17 +226,26 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   border-bottom-left-radius: 0; border-bottom-right-radius: 0;
   border-bottom-color: transparent;
 }
-/* v5.7.0h — Live webcam scanner inside the Process scan widget. */
+/* v5.7.0h — Live webcam scanner inside the Process scan widget.
+   v5.7.0j — CSS overrides ported from live scan.html so html5-qrcode's
+   injected wrapper div + video render visibly. The library wraps the
+   target with its own <div> that needs max-width override; the video
+   inside needs explicit display:block + width:100% + height:auto. The
+   #qr-shaded-region overlay the library injects defaults to a heavy
+   shade that we don't need on the dashboard widget. */
 .dashboard-scan-camera { margin: 10px 0; }
 .dashboard-scan-camera-view {
   width: 100%; max-width: 480px; margin: 0 auto;
-  aspect-ratio: 4 / 3; background: #0d1117;
+  background: #0d1117;
   border: 1px solid var(--line); border-radius: 8px;
   overflow: hidden; position: relative;
+  min-height: 240px;
 }
+.dashboard-scan-camera-view > div { max-width: 100% !important; }
 .dashboard-scan-camera-view video {
-  width: 100% !important; height: 100% !important; object-fit: cover;
+  width: 100% !important; height: auto !important; display: block !important;
 }
+.dashboard-scan-camera-view #qr-shaded-region { display: none !important; }
 .dashboard-scan-camera-controls {
   display: flex; gap: 8px; align-items: center;
   margin-top: 8px; flex-wrap: wrap;
@@ -3535,13 +3544,15 @@ function expectedRoleBadge(role) {
   return `<span class="role-mini ${escapeHtml(normalized)}" title="${escapeHtml(label)}">${short}</span>`;
 }
 function buildDeleteRecordButton(row) {
-  // v5.7.0g — Lead Admin+ secondary action on settled rows (OUT / Done /
-  // conflict / invalid). Cascades to remove the org_checkins history and
-  // the org_expected row in one call. Active IN rows skip this button
-  // (must check out first; the Worker also enforces this guard).
+  // v5.7.0g — Lead Admin+ secondary action that cascades to remove the
+  // org_checkins history AND the org_expected row in one call.
+  // v5.7.0j — Available on ANY row with expected_id, including active IN.
+  // For IN rows the delete passes force=true so the Worker's
+  // "check them out first" guard is bypassed (lead_admin+ can override).
   const expectedId = String(row.expected_id || '').trim();
   if (!expectedId || !canDeleteAttendeeRecord()) return '';
-  return `<button class="btn btn-danger btn-sm record-row-delete" type="button" onclick="deleteAttendeeRecordFromAttendance('${escapeHtml(expectedId)}')" title="Delete attendee record (lead admin+)">Delete record</button>`;
+  const force = row.active_checkin_id ? 'true' : 'false';
+  return `<button class="btn btn-danger btn-sm record-row-delete" type="button" onclick="deleteAttendeeRecordFromAttendance('${escapeHtml(expectedId)}', ${force})" title="Delete attendee record (lead admin+)">Delete record</button>`;
 }
 function buildCheckoutAction(row) {
   if (row.status === 'conflict' && row.conflict_id) {
@@ -3559,9 +3570,12 @@ function buildCheckoutAction(row) {
   if (checkoutConfirmId === checkinId) {
     return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="cancelCheckout()">Cancel</button><div class="checkout-qr-panel"><div class="checkout-qr-box" id="checkoutQr_${safeId}"></div><div class="checkout-qr-help">Attendee scans this on the same IRLid phone to sign check-out.</div></div>${error}</div>`;
   }
-  return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Initiate check-out</button>${error}</div>`;
+  // v5.7.0j — also surface Delete record on active IN rows for lead_admin+.
+  // Captain's call: "delete from expected table still not available" — the
+  // button is now always available for lead_admin+ regardless of status.
+  return `<div class="checkout-actions"><button class="btn btn-secondary btn-sm" type="button" onclick="requestCheckout('${safeId}')">Initiate check-out</button>${buildDeleteRecordButton(row)}${error}</div>`;
 }
-async function deleteAttendeeRecordFromAttendance(expectedId) {
+async function deleteAttendeeRecordFromAttendance(expectedId, force) {
   if (!canDeleteAttendeeRecord()) return showToast('Lead Admin role required to delete attendee records', true);
   if (!currentOrg?.api_key) return showToast('No organisation loaded', true);
   // Find a display name from current attendance / expected lists for the
@@ -3570,13 +3584,15 @@ async function deleteAttendeeRecordFromAttendance(expectedId) {
   const att = (window.lastAttendanceRows || []).find(r => String(r.expected_id) === String(expectedId));
   const exp = expectedAttendees.find(r => String(r.id) === String(expectedId));
   const name = (att && (att.display_name || att.name)) || (exp && `${exp.first_name || ''} ${exp.surname || ''}`.trim()) || 'this attendee';
-  const ok = window.confirm(`Delete the full attendee record for ${name}?\n\nThis cascades to remove all check-in / check-out history rows AND the Expected entry. Cannot be undone.`);
+  const liveWarning = force ? '\n\nNOTE: This attendee is currently checked in. Deleting will also remove the active check-in.' : '';
+  const ok = window.confirm(`Delete the full attendee record for ${name}?\n\nThis cascades to remove all check-in / check-out history rows AND the Expected entry. Cannot be undone.${liveWarning}`);
   if (!ok) return;
   try {
     await window.IRLidOrgApi.deleteExpectedFull(
       currentOrg.api_key,
       expectedId,
-      qrLoginSession?.session_token
+      qrLoginSession?.session_token,
+      !!force
     );
     showToast(`Deleted record for ${name}`);
     await refreshAttendance();
