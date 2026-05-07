@@ -356,11 +356,17 @@ body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
    form a clean column whether the row has a primary action beside them
    (Initiate check-out + Delete record) or just the delete on its own
    (Delete expected). margin-left:auto pushes the delete to the right edge;
-   margin-right:18px gives consistent gutter from the cell border. */
+   margin-right:18px gives consistent gutter from the cell border.
+   v5.7.0q — Equal min-width on both delete classes so their LEFT edges
+   align across rows (text widths differ: "Delete record" vs "Delete
+   expected"). Without this, right-aligned buttons of different widths
+   form a ragged left edge across the column. */
 .att-action-cell .expected-row-delete,
 .att-action-cell .record-row-delete {
   margin-left: auto;
   margin-right: 18px;
+  min-width: 110px;
+  text-align: center;
 }
 .att-action-passive { min-height: 28px; color: #8b949e; font-size: 11px; display: inline-flex; align-items: center; white-space: nowrap; }
 .role-mini { min-width: 22px; height: 22px; display: inline-grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; color: #dbe6ff; background: #0b1220; font-size: 10px; font-weight: 700; }
@@ -705,6 +711,62 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   background: #ffffff;
   color: var(--text);
   border-color: var(--line);
+}
+
+/* v5.7.0q — Light-mode overrides for the dashboard collapsibles, role
+   badges, and Expected status pills. Defaults are tuned for dark mode
+   (near-black backgrounds) which become heavy bars / unreadable badges
+   on a light page. */
+:root[data-theme="light"] .dashboard-collapsible > summary {
+  background: #f3f5f8;
+  color: var(--muted);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .dashboard-collapsible > summary:hover {
+  background: #e9edf2;
+  border-color: var(--blue);
+  color: var(--text);
+}
+:root[data-theme="light"] .dashboard-collapsible[open] > summary {
+  color: var(--text);
+}
+:root[data-theme="light"] .dashboard-collapsible[open] > summary::before {
+  color: var(--blue);
+}
+/* Role badges — light backgrounds, role-tinted borders + text. */
+:root[data-theme="light"] .role-mini {
+  background: #ffffff;
+  color: var(--muted);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .role-mini.attendee { color: var(--muted); }
+:root[data-theme="light"] .role-mini.staff       { border-color: var(--blue);  color: var(--blue); }
+:root[data-theme="light"] .role-mini.manager     { border-color: var(--orange); color: var(--orange); }
+:root[data-theme="light"] .role-mini.lead_admin,
+:root[data-theme="light"] .role-mini.developer   { border-color: var(--green); color: var(--green); }
+/* Expected status pills — light surfaces matching the role badges. */
+:root[data-theme="light"] .expected-pill {
+  background: #ffffff;
+  color: var(--muted);
+  border-color: var(--line);
+}
+:root[data-theme="light"] .expected-pill.ok {
+  background: #d9f2e6;
+  border-color: var(--green);
+  color: var(--green);
+}
+:root[data-theme="light"] .expected-pill.warn {
+  background: #fff8c5;
+  border-color: var(--orange);
+  color: var(--orange);
+}
+/* Camera viewport border in light mode (dark-on-light reads better). */
+:root[data-theme="light"] .dashboard-scan-camera-view {
+  background: #f3f5f8;
+  border-color: var(--line);
+}
+:root[data-theme="light"] .dashboard-scan-camera-placeholder {
+  color: var(--muted);
 }
 :root[data-theme="light"] .escalation-modal {
   background: #ffffff;
