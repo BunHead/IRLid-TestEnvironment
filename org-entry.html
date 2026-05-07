@@ -488,9 +488,12 @@
         <div class="identity-error" id="identityError"></div>
       </div>
       <div class="hello-panel" id="helloPanel">
-        <div class="hello-actions">
-          <button class="hello-btn" id="showHelloBtn" type="button">Show my check-in QR</button>
-        </div>
+        <!-- v5.7.0x — "Show my check-in QR" button removed. Was unreliable
+             (silent fail when geolocation or sign.js helpers unavailable)
+             and unnecessary now that the orange device-key QR is the
+             canonical attendee-side identity surface. The .hello-qr box
+             below remains because the orange screen renders the
+             device-key QR into it. -->
         <div class="hello-qr" id="helloQrBox" aria-label="Attendee HELLO QR"></div>
         <div class="orange-scan-instruction" id="orangeScanInstruction">Hold your phone up so staff can scan it. You don't need to hand it over.</div>
         <div class="hello-status" id="helloStatus"></div>
@@ -583,7 +586,12 @@
   })();
 
   let logoUrl = (params.get("logo") || "").trim();
-  const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "2800", 10) || 2800);
+  // v5.7.0x — Default raised 2800 → 7000ms. This is the duration the
+  // post-action result screen (Welcome / Checked out / Identity linked /
+  // Denied) stays before auto-redirect. Captain consistently flagged the
+  // old 2800ms as too short; 7000ms gives enough time to read the message
+  // before the page leaves. Override via ?timeout= URL param if needed.
+  const timeoutMs = Math.max(1200, parseInt(params.get("timeout") || "7000", 10) || 7000);
   const returnAllowed = !["0", "false", "no", "off"].includes((params.get("returnAllowed") || "1").trim().toLowerCase());
   const context = (params.get("ctx") || params.get("from") || "").trim().toLowerCase();
   const isDoormanContext = type === "doorman" && context === "doorman";
