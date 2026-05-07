@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>IRLid Entry</title>
-<!-- v5.7.0s — favicon link kills the GET /favicon.ico 404 from console. -->
+<!-- v5.7.0s — favicon link kills the GET /favicon.ico 404 from console.
+     v5.7.0t — viewport hardening + web-app-capable meta tags. user-scalable=no
+     prevents accidental pinch-zoom that drifts the orange QR off-centre.
+     mobile-web-app-capable lets Chrome hide its chrome when the page is
+     added to home screen (proper URL-bar hide ships with v5.5.12 PWA). -->
 <link rel="icon" href="favicon.ico" type="image/x-icon">
 <style>
   :root{
@@ -19,7 +26,11 @@
 
   * { box-sizing: border-box; }
 
-  html, body { height: 100%; }
+  /* v5.7.0t — Hard horizontal overflow guard. Captain reported being able
+     to "slide the page around" on the orange screen — a child element
+     pushing wider than the viewport. overflow-x:hidden on both html and
+     body kills any horizontal scroll regardless of which child overflows. */
+  html, body { height: 100%; max-width: 100vw; overflow-x: hidden; }
 
   body{
     margin:0;
@@ -360,6 +371,14 @@
   body.status-orange .title{
     font-size:clamp(96px, 24vw, 188px);
     line-height:0.86;
+    /* v5.7.0t — Defensive centring: parent .card has text-align:center,
+       but explicit on the title element guarantees the "?" stays centred
+       even if a stylesheet override sneaks in later. max-width prevents
+       the giant "?" from contributing to horizontal overflow. */
+    text-align:center;
+    max-width:100%;
+    margin-left:auto;
+    margin-right:auto;
   }
   body.status-orange .hello-panel{
     display:block;
@@ -1044,7 +1063,7 @@
         // screen. Update the status text during the hold so they know
         // something is happening.
         setOrangeStatus("Identity confirmed - preparing check-in...");
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 5000));
         render({
           status: "review",
           title: "Identity linked",
@@ -1059,7 +1078,7 @@
         // v5.7.0s — Same 3s hold for the rejection path so the attendee
         // sees the orange-to-deny transition rather than a jarring jump.
         setOrangeStatus("Decision received...");
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 5000));
         render({
           status: "deny",
           title: "Check-in rejected",
