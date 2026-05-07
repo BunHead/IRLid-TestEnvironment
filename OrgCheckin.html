@@ -1666,7 +1666,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.0v</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.0w</span></div>
   </div>
 </div>
 
@@ -1859,18 +1859,30 @@ body #venueQRWrap.cycle-burst-pattern {
               <div style="font-size:11px;color:#8b949e;">Public attendee screen</div>
             </div>
             <div class="card-body">
-              <div class="mode-selector">
+              <!-- v5.7.0w — DEPRECATED: Doorman mode toggle retired.
+                   The unified Check-in design (`prototype-checkin` body class)
+                   makes the venue-scan-attendee path the single check-in surface.
+                   Doorman-flow ingress now lives on the Dashboard via
+                   `Process attendee scan`. This `mode-selector` block is hidden
+                   via CSS (line ~566) and kept as legacy only because removing
+                   the inner `dashboardScanBox` / `staffAuthPanel` containers
+                   would break `applyCheckinPrototypeLayout()` — those elements
+                   get relocated to the Dashboard panel via DOM move at init.
+                   When the unified design is the only design, this whole block
+                   collapses to just the `dashboardScanBox` + `staffAuthPanel`
+                   shells with no mode-card wrappers. -->
+              <div class="mode-selector" aria-hidden="true">
                 <div class="mode-card selected" id="modeAttendee" onclick="selectMode('attendee_scan')">
                   <div class="mode-icon">📱</div>
                   <div class="mode-title">Attendee Scans Venue QR</div>
                   <div class="mode-desc">Display a large QR at the entrance. Attendees scan it to self-check-in.</div>
                   <div class="mode-badge on">✓ Active at door</div>
                 </div>
-                <div class="mode-card" id="modeDoorman" onclick="selectMode('doorman_scan')">
+                <div class="mode-card" id="modeDoorman" onclick="selectMode('doorman_scan')" style="display:none;" aria-hidden="true" tabindex="-1">
                   <div class="mode-icon">🚪</div>
                   <div class="mode-title">Doorman Scans Attendee</div>
-                  <div class="mode-desc">Staff scan each attendee HELLO code or record them manually.</div>
-                  <div class="mode-badge off">Switch to this</div>
+                  <div class="mode-desc">[Retired] Doorman flow now lives on the Dashboard via Process attendee scan.</div>
+                  <div class="mode-badge off">Retired</div>
                 </div>
               </div>
 
@@ -4685,21 +4697,40 @@ function refreshStaffAuthPanel() {
   return message;
 }
 function selectMode(mode) {
+  // v5.7.0w — Doorman mode officially retired. The unified Check-in design
+  // permits only attendee_scan as a check-in path; the doorman flow lives
+  // on the Dashboard's Process attendee scan widget. selectMode is kept
+  // for legacy callsites and made defensive against missing DOM (so a
+  // future cleanup that removes the legacy mode-card shells doesn't
+  // throw). Doorman_scan requests are silently coerced to attendee_scan.
+  if (mode === 'doorman_scan') mode = 'attendee_scan';
   currentMode = mode;
-  document.getElementById('modeAttendee').classList.toggle('selected', mode === 'attendee_scan');
-  document.getElementById('modeDoorman').classList.toggle('selected', mode === 'doorman_scan');
-  document.querySelector('#modeAttendee .mode-badge').className = 'mode-badge ' + (mode === 'attendee_scan' ? 'on' : 'off');
-  document.querySelector('#modeAttendee .mode-badge').textContent = mode === 'attendee_scan' ? '✓ Active at door' : 'Switch to this';
-  document.querySelector('#modeDoorman .mode-badge').className = 'mode-badge ' + (mode === 'doorman_scan' ? 'on' : 'off');
-  document.querySelector('#modeDoorman .mode-badge').textContent = mode === 'doorman_scan' ? '✓ Active at door' : 'Switch to this';
+  const modeAttendeeEl = document.getElementById('modeAttendee');
+  const modeDoormanEl = document.getElementById('modeDoorman');
+  if (modeAttendeeEl) modeAttendeeEl.classList.toggle('selected', mode === 'attendee_scan');
+  if (modeDoormanEl) modeDoormanEl.classList.toggle('selected', mode === 'doorman_scan');
+  const attBadge = document.querySelector('#modeAttendee .mode-badge');
+  if (attBadge) {
+    attBadge.className = 'mode-badge ' + (mode === 'attendee_scan' ? 'on' : 'off');
+    attBadge.textContent = mode === 'attendee_scan' ? '✓ Active at door' : 'Switch to this';
+  }
+  const dorBadge = document.querySelector('#modeDoorman .mode-badge');
+  if (dorBadge) {
+    dorBadge.className = 'mode-badge ' + (mode === 'doorman_scan' ? 'on' : 'off');
+    dorBadge.textContent = mode === 'doorman_scan' ? '✓ Active at door' : 'Retired';
+  }
   const venueWrap = document.getElementById('venueQRWrap');
   const doormanWrap = document.getElementById('doormanWrap');
   const venueInactive = mode !== 'attendee_scan';
   const doormanInactive = mode !== 'doorman_scan';
-  venueWrap.classList.toggle('mode-inactive', venueInactive);
-  doormanWrap.classList.toggle('mode-inactive', doormanInactive);
-  venueWrap.setAttribute('aria-hidden', String(venueInactive));
-  doormanWrap.setAttribute('aria-hidden', String(doormanInactive));
+  if (venueWrap) {
+    venueWrap.classList.toggle('mode-inactive', venueInactive);
+    venueWrap.setAttribute('aria-hidden', String(venueInactive));
+  }
+  if (doormanWrap) {
+    doormanWrap.classList.toggle('mode-inactive', doormanInactive);
+    doormanWrap.setAttribute('aria-hidden', String(doormanInactive));
+  }
   generateVenueQR();
   refreshStaffAuthPanel();
 }
