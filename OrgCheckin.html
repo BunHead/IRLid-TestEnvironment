@@ -9,6 +9,17 @@
      (bunhead.github.io/IRLid-TestEnvironment/favicon.ico) instead of
      the wrong root path (bunhead.github.io/favicon.ico). -->
 <link rel="icon" href="favicon.ico" type="image/x-icon">
+<!-- v5.7.1a — PWA shell (Tier 1 of PROTOCOL.md §16). manifest.json gives
+     installable-app metadata; theme-color tints the browser chrome on
+     supported platforms. Service Worker registration is in the script
+     block below the body. After first visit the dashboard loads cold
+     even with zero connectivity. -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="IRLid Org">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
 <script src="js/vendor/jsqr.min.js"></script>
@@ -1674,7 +1685,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.0z</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1a</span></div>
   </div>
 </div>
 
@@ -5344,6 +5355,18 @@ function sessionDefaultDashboardRole() {
 }
 function syncPrototypeRoleFromSession() {
   setPrototypeRole(sessionDefaultDashboardRole());
+}
+
+// v5.7.1a — Register Service Worker for PWA shell (Tier 1 of §16).
+// Silent install. Subsequent visits load instantly from cache; offline
+// visits also load (zero connectivity) provided the page has been
+// visited at least once. Registration failures are non-fatal.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then((reg) => console.log('[sw] registered scope:', reg.scope))
+      .catch((err) => console.warn('[sw] registration failed:', err));
+  });
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
