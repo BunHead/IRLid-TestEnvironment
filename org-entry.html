@@ -615,11 +615,17 @@
   const API_BASE = "https://irlid-api-test.irlid-bunhead.workers.dev";
 
   function defaultReturnTarget() {
+	  // v5.7.0y — Default fallback was hardcoded scan.html, dating from
+	  // when scan.html was the legacy entry point. After check-out (or any
+	  // result screen) with no `redirect=` param and no `staff_redirect=`
+	  // role match, users were silently routed to scan.html which makes no
+	  // semantic sense. Returning empty string makes scheduleReturn no-op
+	  // (it already early-returns on falsy target), so the result screen
+	  // stays visible until the user navigates away or the page is closed.
+	  // Explicit returnTo override still wins. The `?return=scan` URL param
+	  // can opt back into the old behaviour if needed.
 	  if (returnTo) return returnTo;
-	  if (location.protocol === "file:") {
-		return "https://bunhead.github.io/IRLid-TestEnvironment/scan.html";
-	  }
-	  return window.location.href.replace(/org-entry\.html.*$/i, "scan.html");
+	  return "";
 	}
 
   function scanUrlBase() {
