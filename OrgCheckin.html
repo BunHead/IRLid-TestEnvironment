@@ -352,21 +352,17 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .att-table td:nth-child(7) { overflow: visible; }
 body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
 .att-action-cell { min-height: 32px; display: flex; align-items: center; gap: 8px; }
-/* v5.7.0l — Right-align every delete button in the action cell so they
-   form a clean column whether the row has a primary action beside them
-   (Initiate check-out + Delete record) or just the delete on its own
-   (Delete expected). margin-left:auto pushes the delete to the right edge;
-   margin-right:18px gives consistent gutter from the cell border.
-   v5.7.0q — Equal min-width on both delete classes so their LEFT edges
-   align across rows (text widths differ: "Delete record" vs "Delete
-   expected"). Without this, right-aligned buttons of different widths
-   form a ragged left edge across the column. */
+/* v5.7.0l — Right-align every delete button in the action cell.
+   v5.7.0q — Equal min-width to align left edges across rows.
+   v5.7.0r — min-width wasn't winning; switching to flex-basis so the
+   buttons get an exact 120px footprint regardless of text width.
+   "Delete record" (12 chars) and "Delete expected" (15 chars) now occupy
+   identical horizontal space, so their left edges line up cleanly. */
 .att-action-cell .expected-row-delete,
 .att-action-cell .record-row-delete {
+  flex: 0 0 120px;
   margin-left: auto;
   margin-right: 18px;
-  min-width: 110px;
-  text-align: center;
 }
 .att-action-passive { min-height: 28px; color: #8b949e; font-size: 11px; display: inline-flex; align-items: center; white-space: nowrap; }
 .role-mini { min-width: 22px; height: 22px; display: inline-grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; color: #dbe6ff; background: #0b1220; font-size: 10px; font-weight: 700; }
@@ -767,6 +763,49 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
 }
 :root[data-theme="light"] .dashboard-scan-camera-placeholder {
   color: var(--muted);
+}
+/* v5.7.0r — Camera-select dropdown was dark in light mode (the "dark bar"
+   Captain spotted at the bottom of the scan box). */
+:root[data-theme="light"] .dashboard-scan-camera-select {
+  background: #ffffff;
+  color: var(--text);
+  border-color: var(--line);
+}
+/* v5.7.0r — Cohesive expander panels. Developer diagnostics looks unified
+   because its content has no nested card. Process attendee scan and
+   Expected attendee management both wrap their content in further
+   `.dashboard-scan-box` / `.expected-admin-panel` cards with their own
+   borders + radii + backgrounds, which floats the inner content visually
+   detached from the summary. When the parent collapsible is OPEN, strip
+   those nested decorations so the whole `<details>` reads as one panel. */
+.dashboard-collapsible[open] {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #151b23;
+}
+.dashboard-collapsible[open] > summary {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+.dashboard-collapsible[open] > .card-body,
+.dashboard-collapsible[open] > .checkin-lower-grid,
+.dashboard-collapsible[open] > .debug-maintenance {
+  padding: 14px;
+}
+/* Strip nested card decoration when inside an open collapsible. */
+.dashboard-collapsible[open] .dashboard-scan-box,
+.dashboard-collapsible[open] .expected-admin-panel,
+.dashboard-collapsible[open] .debug-maintenance {
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+}
+:root[data-theme="light"] .dashboard-collapsible[open] {
+  background: #f3f5f8;
 }
 :root[data-theme="light"] .escalation-modal {
   background: #ffffff;
