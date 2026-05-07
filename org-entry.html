@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IRLid Entry</title>
+<!-- v5.7.0s — favicon link kills the GET /favicon.ico 404 from console. -->
+<link rel="icon" href="favicon.ico" type="image/x-icon">
 <style>
   :root{
     --bg:#000000;
@@ -380,6 +382,13 @@
   }
   body.status-orange .hello-qr canvas,
   body.status-orange .hello-qr img{ width:100% !important; height:100% !important; max-width:100%; max-height:100%; }
+  /* v5.7.0s — Force horizontal centring on portrait viewports. The
+     `.hello-qr` had `margin: 14px auto 0` in its base rule but the
+     `body.status-orange` override reset margin without restoring auto
+     side margins, so on narrow portrait screens the QR could drift
+     off-centre when the parent `.hello-panel` wasn't centred either. */
+  body.status-orange .hello-panel{ margin-left:auto; margin-right:auto; }
+  body.status-orange .hello-qr{ margin-left:auto; margin-right:auto; }
   .orange-scan-instruction{ display:none; margin:10px auto 0; color:rgba(255,255,255,0.92); font-size:13px; line-height:1.35; font-weight:800; text-align:center; max-width:34ch; }
   body.status-orange .orange-scan-instruction{ display:block; }
   body.status-orange .hello-status{ color:rgba(255,255,255,0.86); font-weight:700; }
@@ -1029,6 +1038,13 @@
         const name = resolvedExpectedName(result);
         if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
         stopOrangePolling();
+        // v5.7.0s — Hold the orange screen visible for 3s after staff
+        // resolves the doorman flow, so the attendee sees confirmation of
+        // the resolution before transitioning to the review/checking-in
+        // screen. Update the status text during the hold so they know
+        // something is happening.
+        setOrangeStatus("Identity confirmed - preparing check-in...");
+        await new Promise(r => setTimeout(r, 3000));
         render({
           status: "review",
           title: "Identity linked",
@@ -1040,6 +1056,10 @@
       }
       if (status === "rejected") {
         stopOrangePolling();
+        // v5.7.0s — Same 3s hold for the rejection path so the attendee
+        // sees the orange-to-deny transition rather than a jarring jump.
+        setOrangeStatus("Decision received...");
+        await new Promise(r => setTimeout(r, 3000));
         render({
           status: "deny",
           title: "Check-in rejected",

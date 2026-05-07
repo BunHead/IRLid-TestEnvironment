@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IRLid - Organisation Check-in Prototype</title>
+<!-- v5.7.0s — favicon link kills the GET /favicon.ico 404 from console.
+     Browser fetches favicon.ico from the same directory as this page
+     (bunhead.github.io/IRLid-TestEnvironment/favicon.ico) instead of
+     the wrong root path (bunhead.github.io/favicon.ico). -->
+<link rel="icon" href="favicon.ico" type="image/x-icon">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
 <script src="js/vendor/jsqr.min.js"></script>
@@ -4234,16 +4239,38 @@ async function doormanVerifyDeviceEnvelope(env) {
 async function decodeDashboardQrPayload(raw) {
   let text = String(raw || '').trim();
   if (!text) throw new Error('Paste or decode a QR payload first.');
-  try {
-    const url = new URL(text);
+  // v5.7.0s — Friendlier diagnostics. The previous version let atob()
+  // throw "string to be decoded is not correctly encoded" on URLs that
+  // weren't actually QR payloads (e.g. venue check-in URLs Captain kept
+  // accidentally pasting). Detect URL-shaped input first and emit a
+  // useful message instead of letting the b64 decoder choke.
+  let url = null;
+  try { url = new URL(text); } catch (_) { /* not a URL — fall through */ }
+  if (url) {
     const wrapped = url.searchParams.get('payload') || url.searchParams.get('qr') || url.searchParams.get('irlid');
-    if (wrapped) text = wrapped.trim();
-  } catch {}
+    if (wrapped) {
+      text = wrapped.trim();
+    } else {
+      const t = url.searchParams.get('type');
+      if (t === 'checkin') {
+        throw new Error('That looks like a venue check-in QR. Process scan expects an attendee QR (HELLO or orange device-key) from a phone — not the venue URL itself. Try the orange QR on the attendee\'s phone instead.');
+      }
+      throw new Error('That URL has no recognised QR payload. The orange device-key QR has the form: scan.html?type=device_key&payload=H:...');
+    }
+  }
   let env;
-  if (text.startsWith('HZ:')) env = await doormanDecompressB64urlJson(text.slice(3));
-  else if (text.startsWith('H:')) env = doormanDecodeB64urlJson(text.slice(2));
-  else if (/^\s*\{/.test(text)) env = JSON.parse(text);
-  else env = doormanDecodeB64urlJson(text);
+  try {
+    if (text.startsWith('HZ:')) env = await doormanDecompressB64urlJson(text.slice(3));
+    else if (text.startsWith('H:')) env = doormanDecodeB64urlJson(text.slice(2));
+    else if (/^\s*\{/.test(text)) env = JSON.parse(text);
+    else env = doormanDecodeB64urlJson(text);
+  } catch (e) {
+    const msg = e?.message || String(e);
+    if (msg.includes('atob') || msg.includes('not correctly encoded') || msg.includes('Unexpected token')) {
+      throw new Error('Could not decode the payload. Expected an H:/HZ: prefix, raw JSON, or a URL containing payload=...');
+    }
+    throw e;
+  }
   return doormanVerifyDeviceEnvelope(env);
 }
 async function decodeDashboardScanImage() {
