@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -366,6 +366,19 @@
   .hello-qr.show{ display:grid; place-items:center; }
   .hello-qr canvas,.hello-qr img{ max-width:220px; max-height:220px; }
   .hello-status{ min-height:17px; margin-top:10px; color:rgba(255,255,255,0.72); font-size:12px; line-height:1.35; text-align:center; }
+  /* v5.7.0v — Hard-lock the orange body to the viewport. position:fixed
+     + inset:0 + overflow:hidden prevents any child element from creating
+     a scrollable area regardless of width. touch-action:none kills the
+     pinch/pan gestures Captain reported being able to use to slide the
+     page around. */
+  body.status-orange{
+    position:fixed !important;
+    inset:0 !important;
+    overflow:hidden !important;
+    touch-action:none !important;
+    width:100vw !important;
+    max-width:100vw !important;
+  }
   body.status-orange .card{ transform:translateY(0); }
   body.status-orange .icon-shell{ display:none; }
   body.status-orange .title{
@@ -504,6 +517,19 @@
   let eventName = (params.get("event") || "IRLid Event").trim();
   const welcomeMessage = (params.get("welcome") || "").trim();
   const redirectUrl = (params.get("redirect") || "").trim();
+  // v5.7.0v — Optional staff-specific post-accept redirect. Set in
+  // OrgCheckin.html settings ("Staff post-accept redirect URL"). Used at
+  // the orange→linked transition when the resolved Expected entry has a
+  // role of staff/manager/lead_admin/developer; falls back to the
+  // standard redirectUrl otherwise.
+  const staffRedirectUrl = (params.get("staff_redirect") || "").trim();
+  // Holds the resolved role from lookupExpectedByFingerprint so
+  // returnTargetFor / continueVenueWalkin can pick the right redirect.
+  let resolvedRole = "attendee";
+  function isStaffRole(role) {
+    const r = String(role || "").toLowerCase();
+    return r === "staff" || r === "manager" || r === "lead_admin" || r === "developer";
+  }
   // ============================================================
   //  THEME APPLICATION — Batch 6.5, 3 May 2026
   //  Reads theme overrides from URL params (set by OrgCheckin.html when
@@ -594,6 +620,9 @@
 
   function returnTargetFor(state) {
     if (isDoormanContext && (state.status === "review" || state.status === "deny")) return defaultReturnTarget();
+    // v5.7.0v — Staff role gets staff_redirect when present; everyone else
+    // gets the standard redirect. Both fall back to defaultReturnTarget.
+    if (isStaffRole(resolvedRole) && staffRedirectUrl) return staffRedirectUrl;
     return redirectUrl || defaultReturnTarget();
   }
 
@@ -1056,14 +1085,17 @@
       if (status === "linked") {
         const name = resolvedExpectedName(result);
         if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
+        // v5.7.0v — Capture the resolved role from the expected entry so
+        // returnTargetFor can choose between the regular and staff
+        // post-accept redirect URLs.
+        const expectedRow = result?.expected || {};
+        resolvedRole = expectedRow.prototype_role || expectedRow.role || "attendee";
         stopOrangePolling();
-        // v5.7.0s — Hold the orange screen visible for 3s after staff
-        // resolves the doorman flow, so the attendee sees confirmation of
-        // the resolution before transitioning to the review/checking-in
-        // screen. Update the status text during the hold so they know
-        // something is happening.
+        // v5.7.0v — Hold the orange screen visible for 7s (was 5s) after
+        // staff resolves the doorman flow, so the attendee has time to
+        // register the confirmation before the transition.
         setOrangeStatus("Identity confirmed - preparing check-in...");
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 7000));
         render({
           status: "review",
           title: "Identity linked",
@@ -1075,10 +1107,9 @@
       }
       if (status === "rejected") {
         stopOrangePolling();
-        // v5.7.0s — Same 3s hold for the rejection path so the attendee
-        // sees the orange-to-deny transition rather than a jarring jump.
+        // v5.7.0v — 7s hold for rejected path (was 5s).
         setOrangeStatus("Decision received...");
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 7000));
         render({
           status: "deny",
           title: "Check-in rejected",
@@ -1269,6 +1300,9 @@
       const chosen = identityState.expected.find((row) => String(row.id) === String(expectedId));
       const name = expectedDisplayName(chosen || {});
       if (name) localStorage.setItem(`irlid_org_name_${orgParam}`, name);
+      // v5.7.0v — capture role for staff redirect routing on the manual
+      // "Choose from List" path too.
+      resolvedRole = (chosen && (chosen.prototype_role || chosen.role)) || "attendee";
       render({
         status: "review",
         title: "Identity linked",
