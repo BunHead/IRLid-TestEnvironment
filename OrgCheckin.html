@@ -365,9 +365,15 @@ body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
    identical horizontal space, so their left edges line up cleanly. */
 .att-action-cell .expected-row-delete,
 .att-action-cell .record-row-delete {
-  flex: 0 0 120px;
-  margin-left: auto;
-  margin-right: 18px;
+  /* v5.7.0u — !important to win against any caches / older specificity
+     surprises. flex-basis fixes the button width; min-width/max-width
+     belt-and-braces in case a flex-basis override slips through. */
+  flex: 0 0 120px !important;
+  width: 120px !important;
+  min-width: 120px !important;
+  max-width: 120px !important;
+  margin-left: auto !important;
+  margin-right: 18px !important;
 }
 .att-action-passive { min-height: 28px; color: #8b949e; font-size: 11px; display: inline-flex; align-items: center; white-space: nowrap; }
 .role-mini { min-width: 22px; height: 22px; display: inline-grid; place-items: center; border: 1px solid var(--line); border-radius: 999px; color: #dbe6ff; background: #0b1220; font-size: 10px; font-weight: 700; }
@@ -1660,7 +1666,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe</div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.0u</span></div>
   </div>
 </div>
 
