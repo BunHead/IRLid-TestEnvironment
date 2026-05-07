@@ -264,8 +264,16 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   height: auto !important;
   display: block !important;
 }
-.dashboard-scan-camera-view #qr-shaded-region,
-#qr-shaded-region { display: none !important; }
+/* v5.7.0z — Re-enable html5-qrcode's viewfinder overlay (`#qr-shaded-region`).
+   This is the dim-frame-with-clear-square effect that shows users WHERE
+   to aim the QR within the camera preview. Was hidden in v5.7.0o because
+   we mistakenly thought it was the cause of the "Scanner paused" status
+   text bleeding through (that turned out to be a separate `<div>`).
+   Restoring helps non-power-users (including chimps) align QRs in frame. */
+.dashboard-scan-camera-view #qr-shaded-region {
+  /* Subtler dim than the library default so the camera feed stays legible. */
+  background: rgba(0, 0, 0, 0.35) !important;
+}
 .dashboard-scan-camera-controls {
   display: flex; gap: 8px; align-items: center;
   margin-top: 8px; flex-wrap: wrap;
@@ -1666,7 +1674,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.0y</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.0z</span></div>
   </div>
 </div>
 
