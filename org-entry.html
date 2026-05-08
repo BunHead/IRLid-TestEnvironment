@@ -533,6 +533,42 @@
     const r = String(role || "").toLowerCase();
     return r === "staff" || r === "manager" || r === "lead_admin" || r === "developer";
   }
+
+  // v5.7.1f — Auto staff sign-in helpers.
+  function hasActiveSession() {
+    try {
+      const s = JSON.parse(localStorage.getItem('irlid_login_session') || 'null');
+      return !!(s && s.session_token);
+    } catch (_) { return false; }
+  }
+
+  // Kicks off the Org Portal auth flow from org-entry. Staff scans the
+  // venue check-in QR like any attendee; if the resolved role is staff
+  // (and no session is already active), this fires after the green
+  // check-in confirmation: gets a fresh login nonce, stashes it in
+  // localStorage so the dashboard can poll for it on return, redirects
+  // the same tab to org-login.html for direct WebAuthn. After successful
+  // claim, org-login bounces back to OrgCheckin.html which polls the
+  // pending nonce and restores the session. Net flow: one scan + one
+  // biometric → checked in AND signed in as staff.
+  async function kickoffStaffSignIn() {
+    const initResp = await fetch(API_BASE + "/org/login/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    if (!initResp.ok) throw new Error("Login init failed: " + initResp.status);
+    const initData = await initResp.json();
+    const nonce = initData && initData.nonce;
+    if (!nonce) throw new Error("No nonce returned from /org/login/init");
+    try { localStorage.setItem('irlid_pending_login_nonce', nonce); } catch (_) {}
+    try { localStorage.setItem('irlid_pending_login_worker', API_BASE); } catch (_) {}
+    const dashboardReturn = "https://bunhead.github.io/IRLid-TestEnvironment/OrgCheckin.html?dev=0";
+    const orgLoginUrl = "https://irlid.co.uk/org-login.html"
+      + "?nonce=" + encodeURIComponent(nonce)
+      + "&worker=" + encodeURIComponent(API_BASE)
+      + "&return=" + encodeURIComponent(dashboardReturn);
+    window.location.href = orgLoginUrl;
+  }
   // ============================================================
   //  THEME APPLICATION — Batch 6.5, 3 May 2026
   //  Reads theme overrides from URL params (set by OrgCheckin.html when
@@ -1110,6 +1146,28 @@
         // register the confirmation before the transition.
         setOrangeStatus("Identity confirmed - preparing check-in...");
         await new Promise(r => setTimeout(r, 7000));
+        // v5.7.1f — Auto staff sign-in. If the resolved role is staff
+        // (or higher) AND no session is currently active, route to the
+        // Org Portal auth NOW rather than to the regular post-accept
+        // redirect. Staff walk in working, attendees walk in as guests.
+        // Captain's directive: only trigger if matched in the Expected
+        // list with a staff role — bystanders attending the same event
+        // as guests don't get auto-elevated.
+        if (isStaffRole(resolvedRole) && !hasActiveSession()) {
+          render({
+            status: "review",
+            title: "Staff role detected",
+            subtitle: "Signing you in to start your shift...",
+            meta: name || "This phone is ready"
+          });
+          try {
+            await kickoffStaffSignIn();
+            return; // kickoffStaffSignIn redirects, so we shouldn't reach here
+          } catch (err) {
+            console.warn("Staff auto-sign-in failed, falling through to standard flow:", err);
+            // Fall through to the normal green check-in below.
+          }
+        }
         render({
           status: "review",
           title: "Identity linked",
@@ -1317,6 +1375,23 @@
       // v5.7.0v — capture role for staff redirect routing on the manual
       // "Choose from List" path too.
       resolvedRole = (chosen && (chosen.prototype_role || chosen.role)) || "attendee";
+      // v5.7.1f — Same auto staff sign-in trigger on the manual claim
+      // path. Staff who picked themselves from the list still get
+      // auto-routed to Org Portal auth before the post-accept redirect.
+      if (isStaffRole(resolvedRole) && !hasActiveSession()) {
+        render({
+          status: "review",
+          title: "Staff role detected",
+          subtitle: "Signing you in to start your shift...",
+          meta: name || "This phone is ready"
+        });
+        try {
+          await kickoffStaffSignIn();
+          return;
+        } catch (err) {
+          console.warn("Staff auto-sign-in failed, falling through to standard flow:", err);
+        }
+      }
       render({
         status: "review",
         title: "Identity linked",

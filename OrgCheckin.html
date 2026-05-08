@@ -1685,7 +1685,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1e</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1f</span></div>
   </div>
 </div>
 
@@ -5433,9 +5433,11 @@ let __staffScanPending = null;
 const STAFF_SCAN_PENDING_NONCE_KEY = 'irlid_pending_login_nonce';
 const STAFF_SCAN_PENDING_WORKER_KEY = 'irlid_pending_login_worker';
 const ORG_LOGIN_URL_BASE = 'https://irlid.co.uk/org-login.html';
+// v5.7.1f — also handles return-from-org-login when triggered by org-entry's
+// auto staff sign-in (no staff_scan hash, but pending nonce exists in
+// localStorage). The function now runs unconditionally and exits cleanly
+// when there is nothing to do.
 async function tryStaffScanRedirectOrPoll() {
-  if (!__staffScanPending) return;
-
   // If we already have an active session, the normal handleQrLoginSuccess /
   // saved-session restore path will load the dashboard and trigger the
   // staff_scan auto-process via tryProcessStaffScanIfPending. Nothing to do here.
@@ -5444,27 +5446,26 @@ async function tryStaffScanRedirectOrPoll() {
     catch (_) { return null; }
   })();
   if (savedSession && savedSession.session_token) {
-    console.log('[staff_scan] active session detected, deferring to normal restore path');
+    if (__staffScanPending) console.log('[staff_scan] active session detected, deferring to normal restore path');
     return;
   }
 
   // Returning from org-login.html? Look for stored nonce + worker URL.
+  // (May be present with OR without a staff_scan hash — v5.7.1f introduces
+  // the "auto staff sign-in on venue arrival" path which has no hash.)
   const pendingNonce = (() => {
     try { return localStorage.getItem(STAFF_SCAN_PENDING_NONCE_KEY); }
-    catch (_) { return null; }
-  })();
-  const pendingWorker = (() => {
-    try { return localStorage.getItem(STAFF_SCAN_PENDING_WORKER_KEY); }
     catch (_) { return null; }
   })();
 
   if (pendingNonce) {
     // Return path: poll the Worker once with the stored nonce.
-    console.log('[staff_scan] returning from org-login, polling for session with nonce', pendingNonce.slice(0, 8) + '...');
+    const ctx = __staffScanPending ? '[staff_scan]' : '[staff_signin]';
+    console.log(ctx, 'returning from org-login, polling for session with nonce', pendingNonce.slice(0, 8) + '...');
     try {
       const data = await window.IRLidOrgApi.loginPoll(pendingNonce);
       if (data && data.status === 'claimed') {
-        console.log('[staff_scan] session claimed, restoring as authenticated');
+        console.log(ctx, 'session claimed, restoring as authenticated');
         // Clear the pending markers — session is now in hand.
         try { localStorage.removeItem(STAFF_SCAN_PENDING_NONCE_KEY); } catch (_) {}
         try { localStorage.removeItem(STAFF_SCAN_PENDING_WORKER_KEY); } catch (_) {}
@@ -5473,12 +5474,12 @@ async function tryStaffScanRedirectOrPoll() {
         await handleQrLoginSuccess(data);
         return;
       }
-      console.warn('[staff_scan] login poll returned status:', data && data.status);
+      console.warn(ctx, 'login poll returned status:', data && data.status);
       // Not claimed yet — clear stale nonce and fall through to normal sign-in.
       try { localStorage.removeItem(STAFF_SCAN_PENDING_NONCE_KEY); } catch (_) {}
       try { localStorage.removeItem(STAFF_SCAN_PENDING_WORKER_KEY); } catch (_) {}
     } catch (err) {
-      console.warn('[staff_scan] login poll failed:', err);
+      console.warn(ctx, 'login poll failed:', err);
       // 410 = expired, anything else = transient. Either way, clear stale state
       // and let the user sign in normally.
       try { localStorage.removeItem(STAFF_SCAN_PENDING_NONCE_KEY); } catch (_) {}
@@ -5486,6 +5487,13 @@ async function tryStaffScanRedirectOrPoll() {
     }
     return;
   }
+
+  // From here on, we're in the fresh-redirect path. Only fire if there's a
+  // staff_scan hash to act on — otherwise return cleanly so the standard
+  // sign-in screen renders (the v5.7.1f flow is initiated FROM org-entry,
+  // not from here, so a fresh dashboard load with no hash and no nonce is
+  // just a normal user opening the page).
+  if (!__staffScanPending) return;
 
   // Fresh staff_scan with no session: init login and redirect to org-login.html.
   try {
