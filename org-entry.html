@@ -379,6 +379,19 @@
     width:100vw !important;
     max-width:100vw !important;
   }
+  /* v5.7.1g — Widen .wrap on the orange screen so the QR can fill the
+     phone screen properly. Default .wrap caps at min(92vw, 920px) with
+     40px of horizontal padding — fine for the standard cards but it
+     forces the orange "show staff" QR ~50px narrower than it needs to be.
+     The orange screen is a single-purpose dramatic full-bleed view, so
+     stretch it edge-to-edge with minimal padding. Captain's "all the
+     gateway screens have shrunk" was the symptom of my over-conservative
+     prior fix here. */
+  body.status-orange .wrap{
+    width:100vw !important;
+    max-width:100vw !important;
+    padding:16px 10px !important;
+  }
   body.status-orange .card{ transform:translateY(0); }
   body.status-orange .icon-shell{ display:none; }
   body.status-orange .title{
