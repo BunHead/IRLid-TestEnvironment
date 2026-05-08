@@ -1685,7 +1685,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1b</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1c</span></div>
   </div>
 </div>
 
@@ -5402,6 +5402,94 @@ let __staffScanPending = null;
   }
 })();
 
+// v5.7.1c — Same-device staff_scan auth flow.
+// On page load, if we have a pending staff_scan AND no session AND no
+// pending login nonce → redirect to org-login.html for direct WebAuthn.
+// On return, if pending nonce is present → poll once for the claimed
+// session, restore as authenticated, then continue. If still pending
+// (claim hasn't happened) → fall through to the normal sign-in screen.
+const STAFF_SCAN_PENDING_NONCE_KEY = 'irlid_pending_login_nonce';
+const STAFF_SCAN_PENDING_WORKER_KEY = 'irlid_pending_login_worker';
+const ORG_LOGIN_URL_BASE = 'https://irlid.co.uk/org-login.html';
+async function tryStaffScanRedirectOrPoll() {
+  if (!__staffScanPending) return;
+
+  // If we already have an active session, the normal handleQrLoginSuccess /
+  // saved-session restore path will load the dashboard and trigger the
+  // staff_scan auto-process via tryProcessStaffScanIfPending. Nothing to do here.
+  const savedSession = (() => {
+    try { return JSON.parse(localStorage.getItem('irlid_login_session') || 'null'); }
+    catch (_) { return null; }
+  })();
+  if (savedSession && savedSession.session_token) {
+    console.log('[staff_scan] active session detected, deferring to normal restore path');
+    return;
+  }
+
+  // Returning from org-login.html? Look for stored nonce + worker URL.
+  const pendingNonce = (() => {
+    try { return localStorage.getItem(STAFF_SCAN_PENDING_NONCE_KEY); }
+    catch (_) { return null; }
+  })();
+  const pendingWorker = (() => {
+    try { return localStorage.getItem(STAFF_SCAN_PENDING_WORKER_KEY); }
+    catch (_) { return null; }
+  })();
+
+  if (pendingNonce) {
+    // Return path: poll the Worker once with the stored nonce.
+    console.log('[staff_scan] returning from org-login, polling for session with nonce', pendingNonce.slice(0, 8) + '...');
+    try {
+      const data = await window.IRLidOrgApi.loginPoll(pendingNonce);
+      if (data && data.status === 'claimed') {
+        console.log('[staff_scan] session claimed, restoring as authenticated');
+        // Clear the pending markers — session is now in hand.
+        try { localStorage.removeItem(STAFF_SCAN_PENDING_NONCE_KEY); } catch (_) {}
+        try { localStorage.removeItem(STAFF_SCAN_PENDING_WORKER_KEY); } catch (_) {}
+        // Hand off to the existing success handler (writes session to
+        // localStorage, sets qrLoginSession, fetches /user/orgs, loads dashboard).
+        await handleQrLoginSuccess(data);
+        return;
+      }
+      console.warn('[staff_scan] login poll returned status:', data && data.status);
+      // Not claimed yet — clear stale nonce and fall through to normal sign-in.
+      try { localStorage.removeItem(STAFF_SCAN_PENDING_NONCE_KEY); } catch (_) {}
+      try { localStorage.removeItem(STAFF_SCAN_PENDING_WORKER_KEY); } catch (_) {}
+    } catch (err) {
+      console.warn('[staff_scan] login poll failed:', err);
+      // 410 = expired, anything else = transient. Either way, clear stale state
+      // and let the user sign in normally.
+      try { localStorage.removeItem(STAFF_SCAN_PENDING_NONCE_KEY); } catch (_) {}
+      try { localStorage.removeItem(STAFF_SCAN_PENDING_WORKER_KEY); } catch (_) {}
+    }
+    return;
+  }
+
+  // Fresh staff_scan with no session: init login and redirect to org-login.html.
+  try {
+    const initResp = await window.IRLidOrgApi.loginInit();
+    const nonce = initResp && initResp.nonce;
+    if (!nonce) throw new Error('No nonce returned from login init');
+    const workerBase = (typeof window.IRLidOrgApi.workerBaseUrl === 'function')
+      ? window.IRLidOrgApi.workerBaseUrl()
+      : 'https://irlid-api-test.irlid-bunhead.workers.dev';
+    try { localStorage.setItem(STAFF_SCAN_PENDING_NONCE_KEY, nonce); } catch (_) {}
+    try { localStorage.setItem(STAFF_SCAN_PENDING_WORKER_KEY, workerBase); } catch (_) {}
+    // Re-encode the staff_scan into the return URL so we come back to the
+    // exact same page state (the hash was already consumed by captureStaff…).
+    const dashboardUrl = window.location.origin + window.location.pathname + window.location.search + '#staff_scan=' + encodeURIComponent(__staffScanPending);
+    const orgLoginUrl = ORG_LOGIN_URL_BASE
+      + '?nonce=' + encodeURIComponent(nonce)
+      + '&worker=' + encodeURIComponent(workerBase)
+      + '&return=' + encodeURIComponent(dashboardUrl);
+    console.log('[staff_scan] redirecting to org-login.html for direct WebAuthn sign-in');
+    window.location.href = orgLoginUrl;
+  } catch (err) {
+    console.warn('[staff_scan] could not init login for redirect:', err);
+    // Fall through to normal sign-in screen so the user can scan the QR manually.
+  }
+}
+
 async function tryProcessStaffScanIfPending() {
   if (!__staffScanPending) return false;
   // Need at minimum a currentOrg with api_key to process. Bearer session
@@ -5595,6 +5683,16 @@ window.addEventListener('DOMContentLoaded', async () => {
       qrLoginSession = null;
     }
   }
+
+  // v5.7.1c — Same-device staff_scan auto-auth: if we arrived from
+  // scan.html with #staff_scan=… AND have no active session, redirect
+  // straight to org-login.html for direct WebAuthn sign-in (single
+  // device, no QR-scan dance). After org-login successfully claims, it
+  // redirects back here; we detect the stored pending nonce and poll
+  // /org/login/poll once to pick up the session, then process the
+  // staff scan as normal. If we ARE returning from org-login, the
+  // pending nonce in localStorage triggers the poll path instead.
+  try { await tryStaffScanRedirectOrPoll(); } catch (err) { console.warn('[staff_scan] redirect-or-poll failed:', err); }
 
   setSignedInUI(false); syncLegacyFromPortal(); ensureExpectedAttendees(); renderExpectedAttendees(); renderPortalAll(); showPanel('setup', document.getElementById('navOrganisation'));
   const stored = loadJson(STORAGE_KEY_ORG, null);
