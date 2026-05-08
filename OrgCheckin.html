@@ -23,6 +23,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
 <script src="js/sign.js"></script>
+<script src="js/offline-queue.js"></script>
 <script src="js/vendor/jsqr.min.js"></script>
 <!-- v5.7.0h — html5-qrcode for live webcam scanning in the Process attendee scan
      widget. Same library used by live repo scan.html for receipt scanning. -->
@@ -68,6 +69,41 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .topbar { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .topbar-title { font-size: 16px; font-weight: 600; }
 .topbar-actions { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.offline-indicator {
+  position: fixed; top: 16px; right: 16px;
+  display: flex; align-items: center; gap: 8px;
+  z-index: 100; pointer-events: auto;
+}
+.offline-indicator .dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #C62828;
+  animation: offline-pulse 1.4s ease-in-out infinite;
+}
+@keyframes offline-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .55; }
+}
+.offline-indicator .label {
+  font: 600 12px/1 system-ui, sans-serif;
+  color: #C62828; letter-spacing: .04em;
+}
+.offline-indicator.with-count .badge {
+  background: #C62828; color: #fff;
+  border-radius: 10px; padding: 2px 7px;
+  font: 700 11px/1 system-ui, sans-serif;
+}
+.offline-indicator.synced .dot {
+  background: #2E7D32;
+  animation: none;
+}
+.offline-indicator.synced .label {
+  color: #2E7D32;
+}
+.offline-indicator.synced .label::before {
+  content: "✓ ";
+}
+.offline-indicator[hidden],
+.offline-indicator .badge[hidden] { display: none !important; }
 .content { min-width: 0; min-height: 0; height: 100%; padding: 20px 20px 18px; overflow-y: auto; overscroll-behavior: contain; flex: 1; }
 .panel { display: none; }
 .panel.active { display: block; }
@@ -160,6 +196,13 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .expected-pill { font-size: 10px; border-radius: 999px; padding: 2px 8px; border: 1px solid var(--line); color: var(--muted); }
 .expected-pill.ok { border-color: #238636; color: var(--green); background: #1a4731; }
 .expected-pill.warn { border-color: var(--orange); color: var(--orange); background: #2d2a0f; }
+.pending-sync-pill {
+  display: inline-block; margin-left: 6px;
+  background: rgba(198, 40, 40, 0.18);
+  color: #C62828; border: 1px solid rgba(198, 40, 40, 0.35);
+  border-radius: 999px; padding: 1px 7px;
+  font: 600 10px/1.2 system-ui, sans-serif; letter-spacing: .04em;
+}
 .expected-state { padding: 14px 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .expected-state.error { color: var(--red); }
 .expected-state .btn { margin-top: 8px; }
@@ -1798,6 +1841,11 @@ body #venueQRWrap.cycle-burst-pattern {
 </div>
 
 <div class="main">
+  <div class="offline-indicator" id="offlineIndicator" hidden role="status" aria-live="polite" aria-label="Working offline - changes will sync when reconnected.">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="label">OFFLINE</span>
+    <span class="badge" id="offlineQueueBadge" hidden>0</span>
+  </div>
   <div class="topbar">
     <div class="topbar-title" id="topbarTitle">Organisation</div>
     <div class="topbar-actions">
@@ -3458,6 +3506,12 @@ async function saveSettings() {
     showToast('Save failed: ' + (err.message || 'unknown error'), true);
     return;
   }
+  if (resp && resp.queued) {
+    setThemeSaveStatus('Queued offline; will sync when reconnected.', 'ok');
+    showToast('Settings queued offline - will sync when reconnected.');
+    updateOfflineIndicator();
+    return;
+  }
 
   // Mandatory post-save readback. If the Worker accepted but the next GET
   // doesn't show our values, the bug is in the merge layer and we need to know.
@@ -3518,6 +3572,20 @@ function renderExpectedAttendees() {
 }
 function expectedDisplayName(row) {
   return `${row.first_name || ''} ${row.surname || ''}`.trim() || row.name || 'Unnamed attendee';
+}
+function queueExpectedRow(body, queuedResult) {
+  const pendingId = 'pending-expected-' + (queuedResult.queued_id || queuedResult.idempotency_key || Date.now());
+  const row = {
+    id: pendingId,
+    first_name: body.first_name || '',
+    surname: body.surname || '',
+    prototype_role: body.prototype_role || 'attendee',
+    status: 'pending_sync',
+    created_at: new Date().toISOString(),
+    pending_sync: true
+  };
+  expectedAttendees.unshift(row);
+  return row;
 }
 function renderExpectedAttendeesApiState() {
   const root = document.getElementById('expectedAttendeeList'); if (!root) return;
@@ -3593,11 +3661,23 @@ async function addExpectedAttendee() {
   const proof = await requireFreshStaffProof(`add ${roleLabelFor(requestedRole)}`);
   if (!proof) return;
   try {
+    const body = { first_name: firstName, surname, prototype_role: requestedRole };
     const payload = await window.IRLidOrgApi.createExpected(
       currentOrg.api_key,
-      { first_name: firstName, surname, prototype_role: requestedRole },
+      body,
       developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
     );
+    if (payload && payload.queued) {
+      queueExpectedRow(body, payload);
+      if (firstInput) firstInput.value = '';
+      if (surnameInput) surnameInput.value = '';
+      setExpectedValidation('');
+      renderExpectedAttendees();
+      renderTable(attendanceData);
+      updateOfflineIndicator();
+      showToast(`${roleLabelFor(requestedRole)} queued offline - will sync when reconnected.`);
+      return;
+    }
     if (payload.expected) {
       payload.expected.prototype_role = requestedRole;
       expectedAttendees.unshift(payload.expected);
@@ -3890,6 +3970,7 @@ function renderTable(rows) {
       scan_count: 0,
       status: row.status === 'linked' ? 'expected_linked' : 'expected',
       expected_only: true,
+      pending_sync: !!row.pending_sync,
       prototype_role: row.prototype_role || 'attendee'
     }));
   const displayRows = rows.concat(expectedRows);
@@ -3898,6 +3979,7 @@ function renderTable(rows) {
   const liveTbody = document.getElementById('attendanceRows');
   liveTbody.innerHTML = displayRows.map(r => {
     const displayLabel = r.name || r.id || 'Unknown attendee';
+    const pendingPill = r.pending_sync ? '<span class="pending-sync-pill">PENDING SYNC</span>' : '';
     const checkinId = r.active_checkin_id || '';
     const methodBadge = r.checkout_method === 'signed'
       ? '<span class="checkout-signed-badge">lock signed</span>'
@@ -3912,7 +3994,7 @@ function renderTable(rows) {
     // verbs (Initiate check-out / Delete record / Delete expected / etc.).
     const actionHtml = r.expected_only ? buildExpectedRowAction(r) : buildCheckoutAction(r);
     const roleHtml = expectedRoleBadge(r.prototype_role);
-    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td class="att-role-col">${roleHtml}</td><td><div class="att-action-cell">${actionHtml}</div></td></tr>`;
+    return `<tr${rowClass}><td>${escapeHtml(displayLabel)}${pendingPill}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td class="att-role-col">${roleHtml}</td><td><div class="att-action-cell">${actionHtml}</div></td></tr>`;
   }).join('');
 }
 function expectedRoleBadge(role) {
@@ -4097,6 +4179,12 @@ async function renderCheckoutQr(checkinId, forceRefresh=false) {
     if (typeof QRCode === 'undefined') throw new Error('Local QR renderer unavailable');
 
     const tokenPayload = await window.IRLidOrgApi.createCheckoutToken(currentOrg.api_key, checkinId);
+    if (tokenPayload && tokenPayload.queued) {
+      target.textContent = 'Queued offline';
+      checkoutErrors[checkinId] = 'Check-out token queued offline; it will sync when reconnected.';
+      updateOfflineIndicator();
+      return;
+    }
     const url = buildShortCheckoutUrl(tokenPayload.token);
     checkoutQrTokens[checkinId] = tokenPayload;
 
@@ -4982,6 +5070,33 @@ async function addEscalationAtDoor() {
     setEscalationStatus(err.message || 'Could not add at the door.', 'error');
   }
 }
+function addQueuedCheckinRow(body, queuedResult) {
+  const nowIso = new Date().toISOString();
+  const pendingId = 'pending-' + (queuedResult.queued_id || queuedResult.idempotency_key || Date.now());
+  const row = {
+    id: pendingId,
+    active_checkin_id: pendingId,
+    pending_sync: true,
+    name: body.name || body.attendeeLabel || 'Pending attendee',
+    first_seen: nowIso,
+    last_seen: nowIso,
+    scan_count: 1,
+    status: 'pending_sync',
+    prototype_role: body.prototype_role || 'attendee',
+    server_received_at: null
+  };
+  attendanceData.unshift(row);
+  window.lastAttendanceRows = attendanceData;
+  renderStats(attendanceData, {
+    currently_in: attendanceData.filter(r => r.active_checkin_id).length,
+    checked_out: attendanceData.filter(r => !r.active_checkin_id).length,
+    avg_score: 0,
+    bio_verified: attendanceData.filter(r => r.bioVerified || r.bio_verified).length
+  });
+  renderTable(attendanceData);
+  updateOfflineIndicator();
+  return row;
+}
 async function runDoormanCheckin(env) {
   const developerBypass = developerBearerSessionIsActive();
   const body = {
@@ -5007,6 +5122,12 @@ async function runDoormanCheckin(env) {
     body,
     developerBypass ? qrLoginSession.session_token : undefined
   );
+  if (result && result.queued) {
+    addQueuedCheckinRow(body, result);
+    flashDoormanPanel('walkin');
+    showToast('Queued offline - will sync when reconnected.');
+    return;
+  }
   await refreshAttendance();
   await refreshExpectedAttendees();
   flashDoormanPanel(result.linked ? 'success' : 'walkin');
@@ -5124,6 +5245,13 @@ async function manualCheckin() {
       developerBypass ? qrLoginSession.session_token : undefined
     );
     document.getElementById('manualLabel').value = '';
+    if (result && result.queued) {
+      addQueuedCheckinRow(checkinPayload, result);
+      flashDoormanPanel('walkin');
+      showManualCheckinResult('Queued offline - will sync when reconnected.', 'info', true);
+      showToast('Queued offline - will sync when reconnected.');
+      return;
+    }
     await refreshAttendance();
     await refreshExpectedAttendees();
     if (label) {
@@ -5832,6 +5960,49 @@ async function tryProcessStaffScanIfPending() {
   }
   return true;
 }
+
+// v5.5.12 - Offline indicator state machine.
+// §16.5 directive: blinking red dot when offline; numeric badge if
+// pending_ops is non-empty; brief green check on full drain; hide otherwise.
+function updateOfflineIndicator() {
+  const indicator = document.getElementById('offlineIndicator');
+  const badge = document.getElementById('offlineQueueBadge');
+  if (!indicator || !badge) return;
+  const offline = !navigator.onLine;
+  Promise.resolve(window.IRLidOfflineQueue ? window.IRLidOfflineQueue.count() : 0).then(n => {
+    if (offline || n > 0) {
+      indicator.hidden = false;
+      indicator.classList.remove('synced');
+      indicator.classList.toggle('with-count', n > 0);
+      indicator.querySelector('.label').textContent = offline ? 'OFFLINE' : 'SYNCING';
+      indicator.setAttribute('aria-label', offline
+        ? 'Working offline - changes will sync when reconnected.'
+        : 'Syncing queued changes.');
+      if (n > 0) {
+        badge.hidden = false;
+        badge.textContent = String(n);
+      } else {
+        badge.hidden = true;
+      }
+    } else {
+      if (!indicator.hidden) {
+        indicator.classList.add('synced');
+        indicator.classList.remove('with-count');
+        indicator.querySelector('.label').textContent = 'SYNCED';
+        indicator.setAttribute('aria-label', 'Queued changes synced.');
+        badge.hidden = true;
+        setTimeout(() => {
+          indicator.hidden = true;
+          indicator.classList.remove('synced');
+        }, 1500);
+      }
+    }
+  }).catch(err => console.warn('[offline-indicator] count failed', err));
+}
+window.addEventListener('online', updateOfflineIndicator);
+window.addEventListener('offline', updateOfflineIndicator);
+window.addEventListener('irlid:queue-changed', updateOfflineIndicator);
+document.addEventListener('DOMContentLoaded', updateOfflineIndicator);
 
 window.addEventListener('DOMContentLoaded', async () => {
   settings = loadJson(STORAGE_KEY_SETTINGS, settings);

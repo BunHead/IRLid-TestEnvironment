@@ -6,8 +6,36 @@
     return (window.IRLID_ORG_API_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
   }
 
+  const QUEUE_ELIGIBLE_PATHS = [
+    "/org/checkin",
+    "/org/checkout",
+    "/org/checkout-token",
+    "/org/expected/create-and-bind",
+    "/org/expected",
+    "/org/conflicts",
+    "/org/settings"
+  ];
+
+  function isQueueEligible(path, method) {
+    if (String(method || "GET").toUpperCase() === "GET") return false;
+    return QUEUE_ELIGIBLE_PATHS.some(p => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"));
+  }
+
+  async function enqueueOfflineRequest(url, method, headers, body) {
+    if (!window.IRLidOfflineQueue) return null;
+    const queued = await window.IRLidOfflineQueue.enqueue({ url, method, headers, body });
+    window.dispatchEvent(new CustomEvent("irlid:queue-changed"));
+    return {
+      queued: true,
+      queued_id: queued && queued.id,
+      idempotency_key: queued && queued.idempotency_key,
+      queued_at: queued && queued.queued_at
+    };
+  }
+
   async function request(path, options) {
     const opts = options || {};
+    const method = (opts.method || "GET").toUpperCase();
     const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
     if (opts.orgKey) headers["X-Org-Key"] = opts.orgKey;
     // Batch C — Bearer session token for user-level endpoints (/user/*). The api_key
@@ -15,11 +43,26 @@
     // Bearer for user-identity ops. Send whichever the caller has supplied.
     if (opts.sessionToken) headers["Authorization"] = "Bearer " + opts.sessionToken;
 
-    const response = await fetch(getBaseUrl() + path, {
-      method: opts.method || "GET",
-      headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    });
+    const url = getBaseUrl() + path;
+    const body = opts.body ? JSON.stringify(opts.body) : undefined;
+    const eligible = isQueueEligible(path, method);
+
+    // v5.5.12 - offline queue interception. If we know we are offline, skip
+    // the network attempt entirely; otherwise let fetch fail and fall back to
+    // the queue for whitelisted mutating Worker calls.
+    if (eligible && navigator.onLine === false && window.IRLidOfflineQueue) {
+      return enqueueOfflineRequest(url, method, headers, body);
+    }
+
+    let response;
+    try {
+      response = await fetch(url, { method, headers, body });
+    } catch (err) {
+      if (eligible && window.IRLidOfflineQueue) {
+        return enqueueOfflineRequest(url, method, headers, body);
+      }
+      throw err;
+    }
 
     let data = null;
     try { data = await response.json(); } catch {}
