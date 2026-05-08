@@ -1685,7 +1685,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1d</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1e</span></div>
   </div>
 </div>
 
@@ -2735,6 +2735,16 @@ function signOutOrg() {
   qrLoginSession = null;
   try { localStorage.removeItem('irlid_login_session'); } catch (_) {}
   try { localStorage.removeItem(STORAGE_KEY_ORG); } catch (_) {}
+  // v5.7.1e — Captain reported that signing out then refreshing dropped
+  // the user straight back into the Check-in tab as though they hadn't
+  // signed out. Cause: DEV_AUTO_LOGIN is true by default and runs on
+  // every page load, recreating the dev org via ensureDevOrg() and
+  // signing the user in again. We now set an explicit "signed out"
+  // flag in localStorage. DEV_AUTO_LOGIN respects this flag and skips
+  // the auto-sign-in until the user explicitly authenticates again.
+  // Successful sign-in (handleQrLoginSuccess / loadDashboardForOrg)
+  // clears the flag.
+  try { localStorage.setItem('irlid_signed_out', '1'); } catch (_) {}
   // Restore the sign-in card's child panels (the switch-org / create-org
   // flows hide them; we want them back for a fresh sign-in).
   ['qrLoginPanel','serviceAccountWrap'].forEach(function (id) {
@@ -2861,6 +2871,12 @@ async function handleQrLoginSuccess(data) {
     is_developer: !!data.is_developer
   };
   try { localStorage.setItem('irlid_login_session', JSON.stringify(qrLoginSession)); } catch (_) {}
+  // v5.7.1e — Successful authentication clears the explicit sign-out
+  // flag set by signOutOrg. The user is back in; DEV_AUTO_LOGIN is fine
+  // to re-engage on subsequent refreshes. (Note: the saved-session
+  // restore path doesn't run handleQrLoginSuccess; it inlines the
+  // restore — a similar clear lives there too.)
+  try { localStorage.removeItem('irlid_signed_out'); } catch (_) {}
 
   // Batch C tidy 2 — reveal developer-only UI elements (currently the "Debug"
   // pill in the top-right). Lead Admins, managers, staff, and attendees don't
@@ -5637,7 +5653,12 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
 
   const bootOrg = orgFromUrl() || ensureDevOrg();
-  if (DEV_AUTO_LOGIN && bootOrg) {
+  // v5.7.1e — Respect the explicit sign-out flag (set by signOutOrg). If
+  // the user just signed out and then refreshed, don't silently re-sign
+  // them in via DEV_AUTO_LOGIN. They have to authenticate again.
+  let __recentlySignedOut = false;
+  try { __recentlySignedOut = localStorage.getItem('irlid_signed_out') === '1'; } catch (_) {}
+  if (DEV_AUTO_LOGIN && bootOrg && !__recentlySignedOut) {
     currentOrg = bootOrg; ensureExpectedAttendees();
     saveJson(STORAGE_KEY_ORG, currentOrg);
     document.getElementById('orgNameInput').value = currentOrg.name || '';
@@ -5663,6 +5684,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   const savedOrg = loadJson(STORAGE_KEY_ORG, null);
   if (savedSession && savedSession.session_token && savedOrg && savedOrg.api_key) {
     qrLoginSession = savedSession;
+    // v5.7.1e — A valid restored session clears any lingering "signed out"
+    // flag (set by signOutOrg). The user is logged in via persisted state.
+    try { localStorage.removeItem('irlid_signed_out'); } catch (_) {}
     document.querySelectorAll('[data-developer-only="true"]').forEach(function (el) {
       el.style.display = savedSession.is_developer ? '' : 'none';
     });

@@ -7,7 +7,12 @@
 // implementation phasing — Tier 1 only. Write-queue (Tier 2), cached org
 // snapshot (Tier 3), and multi-device mesh (Tier 4) are forward work.
 
-const CACHE_VERSION = 'irlid-shell-v1';
+// v5.7.1e — Bumped to v2 so the new SW activates and purges the v1 cache
+// that was serving stale v5.7.1b OrgCheckin.html. Going forward, bump
+// this any time HTML/JS changes need to be guaranteed-fresh on phones.
+// Also: switched HTML strategy to network-first below so this manual
+// bump is the *backstop*, not the only path to a fresh shell.
+const CACHE_VERSION = 'irlid-shell-v2';
 
 // Static shell assets — pre-cached on first install. Same-origin only.
 const SHELL_ASSETS = [
@@ -72,16 +77,20 @@ self.addEventListener('fetch', (event) => {
   // Non-GETs: pass through. (POSTs for settings save etc. bypass cache.)
   if (req.method !== 'GET') return;
 
-  // Same-origin requests: cache-first, fall back to network, fall back to
-  // cached OrgCheckin.html shell on hard offline (so the navigation request
-  // doesn't show Chrome's "you are offline" page).
+  // Same-origin requests:
+  // v5.7.1e — HTML / navigation requests use NETWORK-FIRST so updates
+  // propagate the moment the user reloads. Asset requests (.js, .css,
+  // .png, .ico, .json) use cache-first for speed. Hard offline still
+  // serves cached shell for navigation. This avoids the v5.7.1a-era
+  // "stuck on stale shell" trap where Captain's phone was serving a
+  // cached v5.7.1b OrgCheckin.html days after v5.7.1c+ deploys.
   if (url.origin === self.location.origin) {
-    event.respondWith(
-      caches.match(req).then((cached) => {
-        if (cached) return cached;
-        return fetch(req)
+    const isHtmlOrNav = req.mode === 'navigate' || /\.html(\?|$)/.test(url.pathname) || url.pathname.endsWith('/');
+    if (isHtmlOrNav) {
+      // Network-first
+      event.respondWith(
+        fetch(req)
           .then((response) => {
-            // Cache successful basic responses for next time.
             if (response && response.ok && response.type === 'basic') {
               const responseClone = response.clone();
               caches.open(CACHE_VERSION).then((cache) => cache.put(req, responseClone));
@@ -89,15 +98,25 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(() => {
-            // Hard offline. For navigation requests, serve the cached
-            // OrgCheckin.html shell so the dashboard loads. For asset
-            // requests we don't have a fallback, the browser will see
-            // a network error like normal.
-            if (req.mode === 'navigate') {
-              return caches.match('./OrgCheckin.html');
+            // Network failed (offline). Serve cached shell.
+            return caches.match(req).then((cached) => cached || caches.match('./OrgCheckin.html'));
+          })
+      );
+      return;
+    }
+    // Static assets: cache-first.
+    event.respondWith(
+      caches.match(req).then((cached) => {
+        if (cached) return cached;
+        return fetch(req)
+          .then((response) => {
+            if (response && response.ok && response.type === 'basic') {
+              const responseClone = response.clone();
+              caches.open(CACHE_VERSION).then((cache) => cache.put(req, responseClone));
             }
-            throw new Error('offline');
-          });
+            return response;
+          })
+          .catch(() => { throw new Error('offline'); });
       })
     );
     return;
