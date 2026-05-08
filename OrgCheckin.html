@@ -316,6 +316,10 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
 .escalation-row { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-2); color: var(--text); padding: 10px; cursor: pointer; display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .escalation-row:hover { border-color: rgba(255,149,0,0.52); }
 .escalation-row span { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.escalation-row.escalation-row-claimed { background: rgba(13,17,23,0.32); border-style: dashed; }
+.escalation-row.escalation-row-claimed:hover { border-color: rgba(120,200,120,0.55); background: rgba(13,17,23,0.55); }
+.escalation-row.escalation-row-claimed strong { opacity: 0.9; }
+.escalation-row.escalation-row-claimed span { color: var(--muted); font-style: italic; }
 .escalation-empty { color: var(--muted); font-size: 12px; padding: 10px; border: 1px dashed var(--line); border-radius: 7px; }
 .escalation-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .escalation-tab { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); padding: 6px 10px; cursor: pointer; font-size: 12px; }
@@ -943,6 +947,14 @@ body[data-active-panel="checkin"] .content { padding-top: 14px; padding-bottom: 
   background: #ffffff;
   color: var(--text);
   border-color: var(--line);
+}
+:root[data-theme="light"] .escalation-row.escalation-row-claimed {
+  background: #f3f5f8;
+  border-style: dashed;
+}
+:root[data-theme="light"] .escalation-row.escalation-row-claimed:hover {
+  background: #eef3ee;
+  border-color: rgba(35,134,54,0.45);
 }
 :root[data-theme="light"] .mode-card {
   background: #ffffff;
@@ -4671,24 +4683,40 @@ function renderEscalationRoleTabs() {
   root.innerHTML = roles.map(role => `<button class="escalation-tab ${role === doormanEscalationRole ? 'active' : ''}" type="button" data-escalation-role="${escapeHtml(role)}">${escapeHtml(roleLabelFor(role))}</button>`).join('');
   if (addBtn) addBtn.textContent = 'Add ' + roleLabelFor(doormanEscalationRole);
 }
-function unclaimedExpectedRows() {
-  return expectedAttendees.filter(row => {
+function escalationFpShort(fp) {
+  return String(fp || '').trim().slice(0, 8) || 'unknown';
+}
+function escalationCandidateRows() {
+  return expectedAttendees.map(row => {
     const fps = Array.isArray(row.device_key_fps) ? row.device_key_fps : [];
-    return !row.device_key_fp && !fps.length;
+    const primaryFp = row.device_key_fp || (fps.length ? fps[0] : null);
+    const allFps = row.device_key_fp ? [row.device_key_fp, ...fps] : fps;
+    return {
+      row,
+      claimed: !!primaryFp,
+      primaryFp,
+      allFps
+    };
   });
 }
 function renderEscalationExpectedList() {
   const root = document.getElementById('escalationExpectedList');
   if (!root) return;
   const q = (document.getElementById('escalationSearchInput')?.value || '').trim().toLowerCase();
-  const rows = unclaimedExpectedRows().filter(row => expectedDisplayName(row).toLowerCase().includes(q));
-  if (!rows.length) {
-    root.innerHTML = '<div class="escalation-empty">No unclaimed Expected entries match.</div>';
+  const candidates = escalationCandidateRows().filter(c => expectedDisplayName(c.row).toLowerCase().includes(q));
+  if (!candidates.length) {
+    root.innerHTML = '<div class="escalation-empty">No Expected entries match.</div>';
     return;
   }
-  root.innerHTML = rows.map(row => {
+  root.innerHTML = candidates.map(c => {
+    const row = c.row;
     const name = expectedDisplayName(row);
-    const meta = [roleLabelFor(row.prototype_role || 'attendee'), row.status || 'assist'].join(' · ');
+    const role = roleLabelFor(row.prototype_role || 'attendee');
+    if (c.claimed) {
+      const meta = [role, 'already bound to ' + escalationFpShort(c.primaryFp)].join(' · ');
+      return `<button class="escalation-row escalation-row-claimed" type="button" data-bind-additional-id="${escapeHtml(row.id)}"><div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(meta)}</span></div><span>Add device</span></button>`;
+    }
+    const meta = [role, row.status || 'assist'].join(' · ');
     return `<button class="escalation-row" type="button" data-bind-expected-id="${escapeHtml(row.id)}"><div><strong>${escapeHtml(name)}</strong><span>${escapeHtml(meta)}</span></div><span>Bind</span></button>`;
   }).join('');
 }
@@ -4877,6 +4905,41 @@ async function bindEscalationExpected(id) {
   } catch (err) {
     if (err.status === 401) clearStaffAuthSession(err.message || 'Staff authentication required.');
     setEscalationStatus(err.message || 'Could not bind device.', 'error');
+  }
+}
+async function bindAdditionalEscalationExpected(id) {
+  const row = expectedAttendees.find(item => String(item.id) === String(id));
+  if (!row) return setEscalationStatus('Expected entry not found.', 'error');
+  if (!confirm('Bind this device as an additional key for ' + expectedDisplayName(row) + '?')) return;
+  try {
+    setEscalationStatus('Binding additional device...');
+    const body = escalationBodyBase();
+    if (!developerBearerSessionIsActive()) {
+      let token = currentStaffSessionToken();
+      if (!token) {
+        const session = await requestStaffHelloSession('bind additional device key');
+        if (!session) return setEscalationStatus('Staff HELLO proof cancelled.', 'error');
+        token = session.staff_session;
+      }
+      body.staff_session = token;
+    }
+    const result = await window.IRLidOrgApi.bindAdditionalKey(
+      currentOrg.api_key,
+      id,
+      body,
+      developerBearerSessionIsActive() ? qrLoginSession.session_token : undefined
+    );
+    if (result.expected) {
+      expectedAttendees = expectedAttendees.map(item => String(item.id) === String(id) ? result.expected : item);
+    }
+    await refreshExpectedAttendees();
+    await refreshAttendance();
+    closeEscalationModal();
+    showPostResolutionToast(expectedDisplayName(row));
+  } catch (err) {
+    console.warn('[escalation] bindAdditionalKey failed', err);
+    if (err.status === 401) clearStaffAuthSession(err.message || 'Staff authentication required.');
+    setEscalationStatus(err.message || 'Bind failed.', 'error');
   }
 }
 async function addEscalationAtDoor() {
@@ -5837,8 +5900,16 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('escalationSearchInput')?.addEventListener('input', renderEscalationExpectedList);
   document.getElementById('escalationExpectedList')?.addEventListener('click', (event) => {
+    const additionalRow = event.target.closest('[data-bind-additional-id]');
+    if (additionalRow) {
+      bindAdditionalEscalationExpected(additionalRow.dataset.bindAdditionalId);
+      return;
+    }
     const row = event.target.closest('[data-bind-expected-id]');
-    if (row) bindEscalationExpected(row.dataset.bindExpectedId);
+    if (row) {
+      bindEscalationExpected(row.dataset.bindExpectedId);
+      return;
+    }
   });
   document.getElementById('escalationRoleTabs')?.addEventListener('click', (event) => {
     const tab = event.target.closest('[data-escalation-role]');
