@@ -1685,7 +1685,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1a</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1b</span></div>
   </div>
 </div>
 
@@ -3115,6 +3115,11 @@ async function loadDashboardForOrg(org) {
   renderPortalAll();
   setPortalFieldValues();
   showToast('Signed in to ' + currentOrg.name + ' as ' + (currentOrg.role || 'member'));
+  // v5.7.1b — If we arrived from scan.html with #staff_scan=… the QR data
+  // was captured at page load. Now that the dashboard is fully loaded
+  // and we have a Bearer + currentOrg, auto-process it. No-op if the
+  // hash didn't include a staff_scan param.
+  try { await tryProcessStaffScanIfPending(); } catch (_) {}
 }
 
 async function submitCreateOrg() {
@@ -5367,6 +5372,64 @@ if ('serviceWorker' in navigator) {
       .then((reg) => console.log('[sw] registered scope:', reg.scope))
       .catch((err) => console.warn('[sw] registration failed:', err));
   });
+}
+
+// v5.7.1b — Staff-scan hand-off receiver. When scan.html on irlid.co.uk
+// detects a device_key QR and the user clicks "Open in staff dashboard",
+// they're redirected here with `#staff_scan=<encoded-original-url>` in
+// the hash. We capture the QR data, then once the user is authenticated
+// and on the Dashboard panel, auto-populate the Process attendee scan
+// textarea and trigger a scan. Bearer session restore happens normally
+// via the existing localStorage path; if no session, the user signs in
+// via QR-scan login as usual, then the QR auto-processes after.
+//
+// Hash fragment is used (not query string) because hash isn't sent to
+// the server, isn't logged, and isn't preserved in referrers.
+let __staffScanPending = null;
+(function captureStaffScanFromHash() {
+  try {
+    const hash = window.location.hash || '';
+    const m = hash.match(/[#&]staff_scan=([^&]+)/);
+    if (!m) return;
+    __staffScanPending = decodeURIComponent(m[1]);
+    console.log('[staff_scan] captured pending QR from hash, length:', __staffScanPending.length);
+    // Clean the hash from the URL bar so the QR data isn't visible after
+    // first read. Keep any other hash params if present.
+    const cleanedHash = hash.replace(/[#&]staff_scan=[^&]+/, '').replace(/^&/, '#');
+    history.replaceState(null, '', window.location.pathname + window.location.search + (cleanedHash === '#' ? '' : cleanedHash));
+  } catch (err) {
+    console.warn('[staff_scan] hash capture failed:', err);
+  }
+})();
+
+async function tryProcessStaffScanIfPending() {
+  if (!__staffScanPending) return false;
+  // Need at minimum a currentOrg with api_key to process. Bearer session
+  // is required for some role-gated actions but processDashboardScan
+  // surfaces a clear error if so. Stash and bail if no org yet — the
+  // user is probably mid-sign-in.
+  if (!currentOrg?.api_key) return false;
+  // Make sure the dashboard panel is visible so the user sees the result.
+  if (typeof showPanel === 'function') {
+    try { showPanel('dashboard', document.getElementById('navDashboard')); } catch (_) {}
+  }
+  // Open the Process attendee scan expander so the user sees what's happening.
+  const scanCard = document.getElementById('dashboardStaffScanCard');
+  if (scanCard && !scanCard.open) scanCard.open = true;
+  // Populate the textarea with the captured QR data and trigger Process scan.
+  const input = document.getElementById('dashboardScanPayloadInput');
+  if (input) input.value = __staffScanPending;
+  console.log('[staff_scan] auto-processing pending QR');
+  setDashboardScanStatus('Processing staff-scanned QR...');
+  const captured = __staffScanPending;
+  __staffScanPending = null; // consume so we don't re-fire
+  try { await processDashboardScan(); } catch (err) {
+    console.warn('[staff_scan] auto-process failed:', err);
+    setDashboardScanStatus('Could not auto-process the staff scan: ' + (err?.message || err), 'error');
+    // Restore so user can retry manually.
+    __staffScanPending = captured;
+  }
+  return true;
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
