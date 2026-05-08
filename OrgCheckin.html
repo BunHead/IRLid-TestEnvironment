@@ -22,6 +22,7 @@
 <meta name="apple-mobile-web-app-title" content="IRLid Org">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
+<script src="js/sign.js"></script>
 <script src="js/vendor/jsqr.min.js"></script>
 <!-- v5.7.0h — html5-qrcode for live webcam scanning in the Process attendee scan
      widget. Same library used by live repo scan.html for receipt scanning. -->
@@ -4388,56 +4389,7 @@ function shortFingerprint(fp) {
   if (value.length <= 16) return value;
   return value.slice(0, 8) + '...' + value.slice(-8);
 }
-function doormanB64urlDecode(str) {
-  let s = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
-  while (s.length % 4) s += '=';
-  const bin = atob(s);
-  return Uint8Array.from(bin, c => c.charCodeAt(0));
-}
-function doormanDecodeB64urlJson(b64) {
-  return JSON.parse(new TextDecoder().decode(doormanB64urlDecode(b64)));
-}
-async function doormanDecompressB64urlJson(b64) {
-  if (typeof DecompressionStream !== 'function') throw new Error('Compressed QR requires a browser with DecompressionStream support.');
-  // Explicit reader loop — matches js/sign.js irlidDecompressFromB64url.
-  // Avoids Chrome's `new Response(stream).arrayBuffer()` hang when the
-  // decompression stream errors before any chunks are emitted.
-  const compressed = doormanB64urlDecode(b64);
-  const ds = new DecompressionStream('deflate-raw');
-  const writer = ds.writable.getWriter();
-  const reader = ds.readable.getReader();
-  writer.write(compressed).catch(() => {});
-  writer.close().catch(() => {});
-  const chunks = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-  let total = 0;
-  for (const c of chunks) total += c.length;
-  const out = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) { out.set(c, off); off += c.length; }
-  return JSON.parse(new TextDecoder().decode(out));
-}
-function doormanCanonical(val) {
-  if (val === null || typeof val !== 'object') return JSON.stringify(val);
-  if (Array.isArray(val)) return '[' + val.map(doormanCanonical).join(',') + ']';
-  return '{' + Object.keys(val).sort().map(k => JSON.stringify(k) + ':' + doormanCanonical(val[k])).join(',') + '}';
-}
-function doormanB64urlEncode(bytes) {
-  let bin = '';
-  bytes.forEach(b => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-async function doormanHashPayload(payload) {
-  const v = payload?.v == null ? 3 : Number(payload.v);
-  const text = v >= 3 ? doormanCanonical(payload) : JSON.stringify(payload);
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return doormanB64urlEncode(new Uint8Array(hash));
-}
-async function doormanVerifyDeviceEnvelope(env) {
+async function verifyDeviceEnvelope(env) {
   if (!env || env.type !== 'device_key') return env;
   if (!env.pub_jwk || !env.pub_fp) throw new Error('Device-key QR missing pub_jwk or pub_fp.');
   if (!env.hash || !env.sig) throw new Error('Device-key QR missing signature.');
@@ -4445,14 +4397,14 @@ async function doormanVerifyDeviceEnvelope(env) {
   const payload = { ...env };
   delete payload.hash;
   delete payload.sig;
-  const computed = await doormanHashPayload(payload);
+  const computed = await hashPayloadToB64url(payload);
   if (computed !== env.hash) throw new Error('Device-key QR hash mismatch.');
   const key = await crypto.subtle.importKey('jwk', env.pub_jwk, { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
   const ok = await crypto.subtle.verify(
     { name: 'ECDSA', hash: 'SHA-256' },
     key,
-    doormanB64urlDecode(env.sig),
-    doormanB64urlDecode(env.hash)
+    b64urlDecode(env.sig),
+    b64urlDecode(env.hash)
   );
   if (!ok) throw new Error('Device-key QR signature invalid.');
   return env;
@@ -4481,10 +4433,10 @@ async function decodeDashboardQrPayload(raw) {
   }
   let env;
   try {
-    if (text.startsWith('HZ:')) env = await doormanDecompressB64urlJson(text.slice(3));
-    else if (text.startsWith('H:')) env = doormanDecodeB64urlJson(text.slice(2));
+    if (text.startsWith('HZ:')) env = await irlidDecompressFromB64url(text.slice(3));
+    else if (text.startsWith('H:')) env = irlidDecodeB64urlJson(text.slice(2));
     else if (/^\s*\{/.test(text)) env = JSON.parse(text);
-    else env = doormanDecodeB64urlJson(text);
+    else env = irlidDecodeB64urlJson(text);
   } catch (e) {
     const msg = e?.message || String(e);
     if (msg.includes('atob') || msg.includes('not correctly encoded') || msg.includes('Unexpected token')) {
@@ -4492,7 +4444,7 @@ async function decodeDashboardQrPayload(raw) {
     }
     throw e;
   }
-  return doormanVerifyDeviceEnvelope(env);
+  return verifyDeviceEnvelope(env);
 }
 async function decodeDashboardScanImage() {
   const file = document.getElementById('dashboardScanImageInput')?.files?.[0];
@@ -4972,7 +4924,7 @@ async function runDoormanCheckin(env) {
   const body = {
     mode: 'doorman_scan',
     helloPayload: env,
-    helloHash: env.hash || await doormanHashPayload(env),
+    helloHash: env.hash || await hashPayloadToB64url(env),
     attendeeLabel: '',
     name: '',
     score: settings.minScore || 50,
