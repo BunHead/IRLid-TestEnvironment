@@ -72,10 +72,13 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 /* v5.5.12.1 — Indicator moved from top-right (collided with topbar
    Refresh/Audit/CSV/Sign out controls) to bottom-left of sidebar,
    just above the Settings button. Captain's eye-test call after
-   v5.5.12 ship. Padding-left aligns with sidebar nav items;
-   bottom value clears Settings + footer build pill. */
+   v5.5.12 ship.
+   v5.5.12.2 — bottom: 88px overshot and landed *on* the Settings
+   button instead of above it. Italian Job rebuke. Bumped to 140px
+   to clear Settings (~44px tall) plus the footer build pill below
+   it (~64px tall) with a small breathing margin. */
 .offline-indicator {
-  position: fixed; bottom: 88px; left: 16px;
+  position: fixed; bottom: 140px; left: 16px;
   display: flex; align-items: center; gap: 8px;
   z-index: 100; pointer-events: auto;
 }
