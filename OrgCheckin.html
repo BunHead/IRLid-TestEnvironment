@@ -1685,7 +1685,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1c</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1d</span></div>
   </div>
 </div>
 
@@ -5387,16 +5387,22 @@ if ('serviceWorker' in navigator) {
 // the server, isn't logged, and isn't preserved in referrers.
 let __staffScanPending = null;
 (function captureStaffScanFromHash() {
+  // v5.7.1d — Verbose diagnostic. We log the IIFE entry and the raw hash
+  // unconditionally so we can prove the script reaches this point (and
+  // see exactly what window.location.hash returns in the wild).
+  console.log('[staff_scan] IIFE entry, raw hash:', JSON.stringify(window.location.hash));
   try {
     const hash = window.location.hash || '';
     const m = hash.match(/[#&]staff_scan=([^&]+)/);
+    console.log('[staff_scan] regex match result:', m ? ('captured ' + m[1].length + ' chars') : 'no match');
     if (!m) return;
     __staffScanPending = decodeURIComponent(m[1]);
-    console.log('[staff_scan] captured pending QR from hash, length:', __staffScanPending.length);
+    console.log('[staff_scan] captured pending QR from hash, length:', __staffScanPending.length, 'starts with:', __staffScanPending.slice(0, 50));
     // Clean the hash from the URL bar so the QR data isn't visible after
     // first read. Keep any other hash params if present.
     const cleanedHash = hash.replace(/[#&]staff_scan=[^&]+/, '').replace(/^&/, '#');
     history.replaceState(null, '', window.location.pathname + window.location.search + (cleanedHash === '#' ? '' : cleanedHash));
+    console.log('[staff_scan] hash cleaned from URL bar, __staffScanPending now set');
   } catch (err) {
     console.warn('[staff_scan] hash capture failed:', err);
   }
