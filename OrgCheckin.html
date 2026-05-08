@@ -322,6 +322,33 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
 .escalation-add-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .escalation-add-fields label { color: var(--muted); font-size: 12px; display: grid; gap: 5px; }
 .escalation-add-fields input { width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #0a0f15; color: var(--text); padding: 9px 10px; }
+/* v5.7.1g — Mobile-friendly escalation modal. Captain feedback: "old ape eye
+   can't see it too well". On narrow viewports (≤640px portrait), stack the
+   two columns, bump fonts to readable sizes, increase tap targets. */
+@media (max-width: 640px) {
+  .escalation-backdrop { padding: 8px; }
+  .escalation-modal { max-height: 94dvh; }
+  .escalation-head { padding: 14px 14px 12px; }
+  .escalation-head h3 { font-size: 18px; }
+  .escalation-meta { font-size: 13px; }
+  .escalation-meta code { font-size: 12px; padding: 3px 7px; }
+  .escalation-close { width: 40px; height: 40px; font-size: 22px; }
+  .escalation-body { grid-template-columns: 1fr; gap: 12px; padding: 14px; }
+  .escalation-section { padding: 14px; }
+  .escalation-section h4 { font-size: 16px; margin-bottom: 6px; }
+  .escalation-section p { font-size: 13px; margin-bottom: 12px; }
+  .escalation-search { padding: 12px 12px; font-size: 15px; min-height: 44px; }
+  .escalation-list { max-height: 44dvh; }
+  .escalation-row { padding: 14px; min-height: 56px; font-size: 15px; }
+  .escalation-row strong { font-size: 15px; }
+  .escalation-row span { font-size: 12px; margin-top: 4px; }
+  .escalation-tabs { gap: 8px; margin-bottom: 14px; }
+  .escalation-tab { padding: 10px 14px; font-size: 14px; min-height: 40px; }
+  .escalation-add-fields { grid-template-columns: 1fr; gap: 12px; }
+  .escalation-add-fields label { font-size: 13px; }
+  .escalation-add-fields input { padding: 12px 12px; font-size: 15px; min-height: 44px; }
+  .escalation-footer { padding: 0 14px 14px; }
+}
 .escalation-footer { padding: 0 18px 18px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
 .escalation-status { min-height: 18px; color: var(--muted); font-size: 12px; }
 .escalation-status.error { color: var(--red); }
@@ -408,8 +435,19 @@ body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
 .status-out { color: var(--red); font-size: 10px; font-weight: 600; transition: color 220ms ease; }
 .status-conflict { color: var(--orange); font-size: 10px; font-weight: 700; }
 .status-invalid { color: var(--muted); font-size: 10px; font-weight: 600; }
-.conflict-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.checkout-actions { min-height: 32px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.checkout-actions { min-height: 32px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; width: 100%; }
+/* v5.7.1g — wrappers nested inside .att-action-cell (flex container) need
+   flex:1 1 auto so the Delete record button's inner margin-left:auto pushes
+   against the table cell's right edge, not the wrapper's own. Without this,
+   Delete sits flush against "Initiate check-out" / "Confirm new device" on
+   IN rows but right-aligns on Done/Expected rows where the button is a
+   direct child. Filling the wrapper width restores column alignment. */
+.conflict-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; width: 100%; }
+/* v5.7.1g — Refresh button spin while loading, so Captain knows it fired. */
+@keyframes refreshSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+#refreshBtn .refresh-glyph { display: inline-block; }
+#refreshBtn.is-refreshing { opacity: 0.75; pointer-events: none; }
+#refreshBtn.is-refreshing .refresh-glyph { animation: refreshSpin 0.7s linear infinite; }
 .checkout-error { flex-basis: 100%; color: var(--red); font-size: 11px; margin-top: 3px; }
 .checkout-signed-badge { color: var(--green); font-size: 10px; font-weight: 600; margin-left: 4px; }
 .checkout-legacy-badge { color: var(--orange); font-size: 10px; font-weight: 600; margin-left: 4px; }
@@ -1685,7 +1723,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1f</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1g</span></div>
   </div>
 </div>
 
@@ -1694,7 +1732,7 @@ body #venueQRWrap.cycle-burst-pattern {
     <div class="topbar-title" id="topbarTitle">Organisation</div>
     <div class="topbar-actions">
       <span id="liveStatus" data-developer-only="true" style="display:none;"><span class="live-dot"></span>Debug</span>
-      <button class="btn btn-secondary btn-sm" id="refreshBtn" onclick="refreshAttendance()">↻ Refresh</button>
+      <button class="btn btn-secondary btn-sm" id="refreshBtn" onclick="refreshAttendanceFromUI()" title="Refresh attendance + expected list"><span class="refresh-glyph" aria-hidden="true">↻</span> Refresh</button>
       <button class="btn btn-secondary btn-sm" id="csvBtn" onclick="exportCSV()">↓ CSV</button>
       <button class="btn btn-secondary btn-sm" id="csvUploadBtn" onclick="triggerCsvUpload()">↑ CSV</button>
       <button class="btn btn-secondary btn-sm" id="signOutBtn" onclick="signOutOrg()">Sign out</button>
@@ -3669,6 +3707,32 @@ async function refreshAttendance() {
     document.getElementById('lastRefresh').textContent = 'Could not load attendance';
     showToast(err.message || 'Could not load attendance', true);
   }
+}
+// v5.7.1g — UI handler for the topbar Refresh button. Wraps refreshAttendance
+// + refreshExpectedAttendees with a visible spin + completion toast so it's
+// obvious the button fired (Captain reported "does it actually do anything?").
+// Also refreshes the Expected list so adding/removing entries elsewhere is
+// reflected without a full page reload.
+async function refreshAttendanceFromUI() {
+  const btn = document.getElementById('refreshBtn');
+  if (!currentOrg) {
+    showToast('Sign in to an organisation first', true);
+    return;
+  }
+  if (btn) btn.classList.add('is-refreshing');
+  const lastEl = document.getElementById('lastRefresh');
+  if (lastEl) lastEl.textContent = 'Refreshing...';
+  let ok = true;
+  try {
+    await refreshAttendance();
+    try { await refreshExpectedAttendees(); } catch (_) { /* expected refresh is best-effort */ }
+  } catch (err) {
+    ok = false;
+    console.warn('[refresh] failed:', err);
+  } finally {
+    if (btn) btn.classList.remove('is-refreshing');
+  }
+  if (ok) showToast('Attendance refreshed');
 }
 async function clearTestAttendanceDataset() {
   if (!canClearTestAttendance()) return showToast('Developer role required to clear test attendance', true);
