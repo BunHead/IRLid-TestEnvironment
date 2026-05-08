@@ -2727,7 +2727,20 @@ function setSignedInUI(isSignedIn) {
   document.getElementById('signOutBtn').disabled = !isSignedIn;
   if (isSignedIn && currentOrg) {
     document.getElementById('sidebarOrgName').textContent = currentOrg.name;
-    document.getElementById('sidebarOrgPlan').textContent = DEV_AUTO_LOGIN ? 'Signed in locally (DEV auto-login)' : 'Signed in locally';
+    // v5.7.1g — Reflect ACTUAL auth state, not the DEV_AUTO_LOGIN constant.
+    // qrLoginSession truthy → real Org Portal session active (with user identity).
+    // qrLoginSession null + DEV_AUTO_LOGIN → fallback DEV path is what got us in.
+    let planLabel;
+    if (qrLoginSession && qrLoginSession.session_token) {
+      const who = (qrLoginSession.display_name || '').trim();
+      planLabel = who ? ('Signed in as ' + who) : 'Signed in via Org Portal';
+      if (qrLoginSession.is_developer) planLabel += ' (developer)';
+    } else if (DEV_AUTO_LOGIN) {
+      planLabel = 'Signed in locally (DEV auto-login)';
+    } else {
+      planLabel = 'Signed in locally';
+    }
+    document.getElementById('sidebarOrgPlan').textContent = planLabel;
   } else {
     document.getElementById('sidebarOrgName').textContent = 'Not signed in';
     document.getElementById('sidebarOrgPlan').textContent = 'Load or register an organisation';
@@ -5730,7 +5743,19 @@ window.addEventListener('DOMContentLoaded', async () => {
   // them in via DEV_AUTO_LOGIN. They have to authenticate again.
   let __recentlySignedOut = false;
   try { __recentlySignedOut = localStorage.getItem('irlid_signed_out') === '1'; } catch (_) {}
-  if (DEV_AUTO_LOGIN && bootOrg && !__recentlySignedOut) {
+  // v5.7.1g — If a real Org Portal session is in localStorage (user QR-signed-in
+  // to a real org like Imbue Ventures), DEV_AUTO_LOGIN MUST NOT run — otherwise
+  // it would clobber the saved org's api_key with DEV_ORG_KEY on every refresh.
+  // Captain reported "refreshing the whole page seem to lose the api key" and
+  // "invalid API"; this was the cause. The saved-session restore path below
+  // handles real sessions correctly; DEV_AUTO_LOGIN is now a fallback for the
+  // genuinely-not-signed-in case only.
+  let __hasRealSession = false;
+  try {
+    const s = JSON.parse(localStorage.getItem('irlid_login_session') || 'null');
+    __hasRealSession = !!(s && s.session_token);
+  } catch (_) {}
+  if (DEV_AUTO_LOGIN && bootOrg && !__recentlySignedOut && !__hasRealSession) {
     currentOrg = bootOrg; ensureExpectedAttendees();
     saveJson(STORAGE_KEY_ORG, currentOrg);
     document.getElementById('orgNameInput').value = currentOrg.name || '';

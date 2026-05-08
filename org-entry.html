@@ -395,8 +395,16 @@
   }
   body.status-orange .hello-panel{
     display:block;
-    width:min(96vw, 560px);
-    margin-top:14px;
+    /* v5.7.1g — Orange QR centring, third attempt. Previous override used
+       width:min(96vw, 560px) but the panel's grandparent .wrap is only
+       min(92vw, 920px) wide MINUS 40px of horizontal padding. So 96vw
+       overflows the .card container by ~6vw + 40px, margin:auto collapses,
+       and the QR pins to the left. Switching to width:100% with a max-width
+       cap means the panel always fits its parent and margin:auto centres
+       cleanly. */
+    width:100%;
+    max-width:560px;
+    margin:14px auto 0;
     padding:clamp(10px, 3vw, 16px);
     border-color:rgba(255,255,255,0.34);
     background:rgba(0,0,0,0.16);
@@ -405,22 +413,20 @@
   body.status-orange .hello-qr{
     display:grid;
     place-items:center;
-    width:min(86vw, 540px);
-    height:min(86vw, 540px);
+    /* v5.7.1g — same fix as .hello-panel above. width:100% relative to the
+       (now correctly-centred) panel, capped at 540px, aspect-ratio:1 to
+       keep the QR square without pinning to a vw value that overflows. */
+    width:100%;
+    max-width:540px;
+    aspect-ratio:1;
+    height:auto;
     max-height:min(66dvh, 540px);
-    margin-top:0;
+    margin:0 auto;
     padding:clamp(10px, 3vw, 18px);
     border-radius:14px;
   }
   body.status-orange .hello-qr canvas,
   body.status-orange .hello-qr img{ width:100% !important; height:100% !important; max-width:100%; max-height:100%; }
-  /* v5.7.0s — Force horizontal centring on portrait viewports. The
-     `.hello-qr` had `margin: 14px auto 0` in its base rule but the
-     `body.status-orange` override reset margin without restoring auto
-     side margins, so on narrow portrait screens the QR could drift
-     off-centre when the parent `.hello-panel` wasn't centred either. */
-  body.status-orange .hello-panel{ margin-left:auto; margin-right:auto; }
-  body.status-orange .hello-qr{ margin-left:auto; margin-right:auto; }
   .orange-scan-instruction{ display:none; margin:10px auto 0; color:rgba(255,255,255,0.92); font-size:13px; line-height:1.35; font-weight:800; text-align:center; max-width:34ch; }
   body.status-orange .orange-scan-instruction{ display:block; }
   body.status-orange .hello-status{ color:rgba(255,255,255,0.86); font-weight:700; }
