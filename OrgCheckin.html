@@ -448,6 +448,63 @@ body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
 #refreshBtn .refresh-glyph { display: inline-block; }
 #refreshBtn.is-refreshing { opacity: 0.75; pointer-events: none; }
 #refreshBtn.is-refreshing .refresh-glyph { animation: refreshSpin 0.7s linear infinite; }
+
+/* v5.7.1h — Post-resolution toast (Stay-on-dashboard + 3s countdown), and
+   Audit mode (table-only full-screen flight-board view).
+   Captain's vision: a chimp watching attendance scroll in like an airport
+   arrivals board. */
+.post-resolution-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1100; max-width: 92vw; }
+.post-resolution-toast.hidden { display: none; }
+.post-resolution-card { display: flex; align-items: center; gap: 14px; background: rgba(13,17,23,0.94); border: 1px solid var(--green); border-radius: 12px; padding: 14px 18px; box-shadow: 0 18px 60px rgba(0,0,0,0.55); backdrop-filter: blur(8px); }
+.post-resolution-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--green); color: #0a1408; font-weight: 800; font-size: 22px; flex: 0 0 36px; }
+.post-resolution-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.post-resolution-title { font-size: 14px; font-weight: 700; color: var(--text); }
+.post-resolution-subtitle { font-size: 12px; color: var(--muted); }
+#postResolutionStayBtn { white-space: nowrap; }
+@media (max-width: 520px) {
+  .post-resolution-card { flex-wrap: wrap; }
+  .post-resolution-text { flex: 1 1 auto; }
+  #postResolutionStayBtn { flex: 1 1 100%; min-height: 40px; }
+}
+
+/* Audit mode — body class hides everything except the attendance table.
+   The attendance table panel is promoted to fill the viewport, the topbar
+   is collapsed to just the Refresh + Exit affordances, sidebar slides out. */
+.audit-exit-btn { position: fixed; top: 12px; right: 12px; z-index: 1200; display: none; padding: 10px 14px; border: 1px solid var(--green); border-radius: 8px; background: rgba(13,17,23,0.85); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; backdrop-filter: blur(6px); }
+.audit-exit-btn:hover { background: rgba(13,17,23,0.96); }
+body.audit-mode .audit-exit-btn { display: inline-flex; align-items: center; gap: 6px; }
+body.audit-mode .sidebar,
+body.audit-mode .topbar,
+body.audit-mode .panel:not(#panel-dashboard),
+body.audit-mode #panel-dashboard > *:not(#dashboardAttendanceCard),
+body.audit-mode #panel-dashboard #panelDashboardIntro,
+body.audit-mode #panel-dashboard .stats-row,
+body.audit-mode #panel-dashboard #dashboardStaffScanCard,
+body.audit-mode #panel-dashboard details,
+body.audit-mode #panel-dashboard #prototypeRoleSelectorRow,
+body.audit-mode #panel-dashboard #prototypeRoleHelpRow { display: none !important; }
+body.audit-mode .main { margin-left: 0 !important; }
+body.audit-mode .content { padding: 0 !important; max-width: none !important; }
+body.audit-mode #panel-dashboard { display: block !important; padding: 0 !important; }
+body.audit-mode #dashboardAttendanceCard { display: block !important; height: 100dvh; max-height: 100dvh; border-radius: 0; border: none; padding: 24px clamp(16px, 3vw, 32px); box-sizing: border-box; }
+/* Bigger fonts for the airport-board look. Header rises, rows are taller,
+   cells get more breathing room. */
+body.audit-mode .att-table th { font-size: 13px; height: 48px; padding: 12px 16px; letter-spacing: 1px; }
+body.audit-mode .att-table td { font-size: 16px; height: 56px; padding: 14px 16px; }
+body.audit-mode .att-table .status-in { font-size: 14px; font-weight: 800; letter-spacing: 0.5px; }
+body.audit-mode .att-table .status-out { font-size: 14px; font-weight: 800; letter-spacing: 0.5px; }
+body.audit-mode #attendanceBody { max-height: calc(100dvh - 130px); }
+body.audit-mode .panel-card-header { font-size: 18px; }
+body.audit-mode .att-table .att-action-cell { display: none; }
+body.audit-mode .att-table th:nth-child(7), body.audit-mode .att-table td:nth-child(7) { display: none; }
+/* Hide chrome that's not relevant in audit view. The table is the show. */
+body.audit-mode #lastRefresh { font-size: 13px; }
+/* v5.7.1h — Drop the 920px min-width so the table fits on phone-landscape
+   without horizontal scroll. The base min-width is fine for Check-in /
+   normal Dashboard where the sidebar+chrome eat extra horizontal space,
+   but in audit mode the table IS the viewport. */
+body.audit-mode .att-table { min-width: 0 !important; }
+body.audit-mode #attendanceBody { overflow-x: hidden; }
 .checkout-error { flex-basis: 100%; color: var(--red); font-size: 11px; margin-top: 3px; }
 .checkout-signed-badge { color: var(--green); font-size: 10px; font-weight: 600; margin-left: 4px; }
 .checkout-legacy-badge { color: var(--orange); font-size: 10px; font-weight: 600; margin-left: 4px; }
@@ -1723,7 +1780,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1g</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1h</span></div>
   </div>
 </div>
 
@@ -1733,6 +1790,7 @@ body #venueQRWrap.cycle-burst-pattern {
     <div class="topbar-actions">
       <span id="liveStatus" data-developer-only="true" style="display:none;"><span class="live-dot"></span>Debug</span>
       <button class="btn btn-secondary btn-sm" id="refreshBtn" onclick="refreshAttendanceFromUI()" title="Refresh attendance + expected list"><span class="refresh-glyph" aria-hidden="true">↻</span> Refresh</button>
+      <button class="btn btn-secondary btn-sm" id="auditModeBtn" onclick="enterAuditMode()" title="Audit mode — full-screen attendance board (best in landscape)" style="display:none;"><span aria-hidden="true">⛶</span> Audit</button>
       <button class="btn btn-secondary btn-sm" id="csvBtn" onclick="exportCSV()">↓ CSV</button>
       <button class="btn btn-secondary btn-sm" id="csvUploadBtn" onclick="triggerCsvUpload()">↑ CSV</button>
       <button class="btn btn-secondary btn-sm" id="signOutBtn" onclick="signOutOrg()">Sign out</button>
@@ -1870,7 +1928,7 @@ body #venueQRWrap.cycle-burst-pattern {
         <div class="stat-card"><div class="stat-label">Bio-metric Verified</div><div class="stat-value purple" id="statBio">7</div></div>
       </div>
 
-      <div class="card">
+      <div class="card" id="dashboardAttendanceCard">
         <div class="card-header">
           <div class="card-title"><span class="live-dot attendance-live-dot"></span>Attendance — Today</div>
           <div style="font-size:11px;color:#8b949e;" id="lastRefresh">Waiting for data</div>
@@ -2444,6 +2502,24 @@ body #venueQRWrap.cycle-burst-pattern {
     </div>
   </div>
 </div>
+<!-- v5.7.1h — Post-resolution overlay. Shown after the escalation modal
+     successfully binds/adds an attendee. 3s countdown then auto-redirect to
+     scan.html so staff can scan the next chimp. "Stay on dashboard" cancels
+     the redirect AND auto-enters audit mode (table-only fullscreen). -->
+<div class="post-resolution-toast hidden" id="postResolutionToast" role="status" aria-live="polite">
+  <div class="post-resolution-card">
+    <div class="post-resolution-icon" aria-hidden="true">✓</div>
+    <div class="post-resolution-text">
+      <div class="post-resolution-title" id="postResolutionTitle">Linked</div>
+      <div class="post-resolution-subtitle" id="postResolutionSubtitle">Returning to scan in <span id="postResolutionCountdown">3</span>s</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" id="postResolutionStayBtn" type="button">Stay on dashboard</button>
+  </div>
+</div>
+<!-- v5.7.1h — Audit mode exit button. Floating, only visible when body has
+     audit-mode class. Tap to drop fullscreen, release orientation lock, and
+     restore the standard dashboard chrome. -->
+<button class="audit-exit-btn" id="auditExitBtn" type="button" onclick="exitAuditMode()" aria-label="Exit audit mode" title="Exit audit mode">↩ Exit audit</button>
 <input type="file" id="csvFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" style="display:none">
 
 <script>
@@ -2624,6 +2700,8 @@ function showPanel(name, el) {
   // signed-in summary if they're authenticated. Otherwise fall through to the
   // QR-login + service-account form (the legacy behaviour).
   if (name === 'setup') applySetupPanelSignedInState();
+  // v5.7.1h — Audit-mode button is a Dashboard concept; only show it there.
+  try { updateAuditButtonVisibility(name); } catch (_) {}
 }
 
 // Batch C polish 7 — toggles between the signed-in summary card and the
@@ -4695,6 +4773,114 @@ function closeEscalationModal() {
   doormanEscalationState = null;
   setEscalationStatus('');
 }
+// v5.7.1h — Post-resolution flow. After bindEscalationExpected /
+// addEscalationAtDoor succeed, the staff phone is on the dashboard and
+// the natural next action is "scan the next chimp". Show a 3s countdown
+// toast with a Stay-on-dashboard override; default behaviour is to
+// redirect to scan.html so the next QR is one tap away (or zero, if
+// the camera is already running).
+const SCAN_PAGE_URL = 'https://bunhead.github.io/IRLid-TestEnvironment/scan.html';
+const POST_RESOLUTION_HOLD_SECONDS = 3;
+let __postResolutionTimer = null;
+let __postResolutionRemaining = 0;
+let __postResolutionTickHandle = null;
+function clearPostResolutionTimers() {
+  if (__postResolutionTimer) { clearTimeout(__postResolutionTimer); __postResolutionTimer = null; }
+  if (__postResolutionTickHandle) { clearInterval(__postResolutionTickHandle); __postResolutionTickHandle = null; }
+}
+function hidePostResolutionToast() {
+  clearPostResolutionTimers();
+  const toast = document.getElementById('postResolutionToast');
+  if (toast) toast.classList.add('hidden');
+}
+function showPostResolutionToast(displayName, opts) {
+  const toast = document.getElementById('postResolutionToast');
+  if (!toast) return;
+  const titleEl = document.getElementById('postResolutionTitle');
+  const countdownEl = document.getElementById('postResolutionCountdown');
+  if (titleEl) titleEl.textContent = displayName ? ('Linked: ' + displayName) : 'Resolved';
+  __postResolutionRemaining = (opts && opts.seconds) || POST_RESOLUTION_HOLD_SECONDS;
+  if (countdownEl) countdownEl.textContent = String(__postResolutionRemaining);
+  toast.classList.remove('hidden');
+  clearPostResolutionTimers();
+  __postResolutionTickHandle = setInterval(() => {
+    __postResolutionRemaining = Math.max(0, __postResolutionRemaining - 1);
+    if (countdownEl) countdownEl.textContent = String(__postResolutionRemaining);
+  }, 1000);
+  __postResolutionTimer = setTimeout(() => {
+    hidePostResolutionToast();
+    // Auto-redirect: send the staff phone back to scan.html for the next chimp.
+    try { window.location.href = SCAN_PAGE_URL; } catch (_) {}
+  }, __postResolutionRemaining * 1000);
+}
+function onPostResolutionStay() {
+  hidePostResolutionToast();
+  enterAuditMode();
+}
+// v5.7.1h — Audit mode. Full-screen, table-only, landscape-preferred.
+// Captain's "airport arrivals board" view for the door-staff phone.
+// Best-effort: fullscreen + orientation lock. If the browser refuses
+// either (Safari iOS doesn't support orientation lock; non-PWA tabs
+// may not honour fullscreen on first call), the table-only CSS still
+// applies — staff just rotate the device by hand.
+async function enterAuditMode() {
+  try {
+    // Make sure we're on the dashboard panel before stripping chrome.
+    if (typeof showPanel === 'function') {
+      try { showPanel('dashboard', document.getElementById('navDashboard')); } catch (_) {}
+    }
+    document.body.classList.add('audit-mode');
+    // Best-effort fullscreen — needs to be inside a user gesture, which
+    // showPostResolutionToast Stay-button click qualifies as.
+    const root = document.documentElement;
+    if (root.requestFullscreen && !document.fullscreenElement) {
+      try { await root.requestFullscreen({ navigationUI: 'hide' }); } catch (_) {}
+    } else if (root.webkitRequestFullscreen && !document.webkitFullscreenElement) {
+      try { root.webkitRequestFullscreen(); } catch (_) {}
+    }
+    // Orientation lock (Android Chrome / Edge in fullscreen + installed PWA).
+    // Wrapped in try because Safari iOS throws.
+    if (screen.orientation && typeof screen.orientation.lock === 'function') {
+      try { await screen.orientation.lock('landscape'); } catch (_) { /* not supported, no-op */ }
+    }
+  } catch (err) {
+    console.warn('[audit] enter failed:', err);
+  }
+}
+async function exitAuditMode() {
+  try {
+    document.body.classList.remove('audit-mode');
+    if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+      try { screen.orientation.unlock(); } catch (_) {}
+    }
+    if (document.fullscreenElement && document.exitFullscreen) {
+      try { await document.exitFullscreen(); } catch (_) {}
+    } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+      try { document.webkitExitFullscreen(); } catch (_) {}
+    }
+  } catch (err) {
+    console.warn('[audit] exit failed:', err);
+  }
+}
+// If the user presses Escape (which Chrome treats as exit-fullscreen) drop
+// the audit-mode class too so the chrome comes back. Without this hook,
+// staff would end up in audit-styling without fullscreen — the worst of
+// both worlds.
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && document.body.classList.contains('audit-mode')) {
+    document.body.classList.remove('audit-mode');
+    if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+      try { screen.orientation.unlock(); } catch (_) {}
+    }
+  }
+});
+// Toggle the topbar Audit button visibility based on which panel is active.
+// Audit mode is a dashboard concept — pointless on Check-in or Organisation.
+function updateAuditButtonVisibility(panelName) {
+  const btn = document.getElementById('auditModeBtn');
+  if (!btn) return;
+  btn.style.display = (panelName === 'dashboard' && !!currentOrg) ? '' : 'none';
+}
 function escalationBodyBase() {
   const env = doormanEscalationState?.env;
   if (!env?.pub_jwk || !env?.pub_fp) throw new Error('No device-key QR is active.');
@@ -4732,7 +4918,10 @@ async function bindEscalationExpected(id) {
     await refreshExpectedAttendees();
     await refreshAttendance();
     closeEscalationModal();
-    showToast('Bound to ' + expectedDisplayName(row) + ' - check-in proceeding');
+    // v5.7.1h — Don't bury the result in a fleeting toast. Show the
+    // post-resolution overlay with a 3s "Stay on dashboard" override and
+    // default-redirect to scan.html for the next chimp.
+    showPostResolutionToast(expectedDisplayName(row));
   } catch (err) {
     if (err.status === 401) clearStaffAuthSession(err.message || 'Staff authentication required.');
     setEscalationStatus(err.message || 'Could not bind device.', 'error');
@@ -4771,7 +4960,9 @@ async function addEscalationAtDoor() {
     await refreshExpectedAttendees();
     await refreshAttendance();
     closeEscalationModal();
-    showToast('Added ' + firstName + ' ' + surname + ' as ' + roleLabelFor(role) + ' - check-in proceeding');
+    // v5.7.1h — Same post-resolution flow as bind. Add-at-the-door is the
+    // other terminal "this chimp is dealt with" path.
+    showPostResolutionToast(firstName + ' ' + surname + ' (' + roleLabelFor(role) + ')');
   } catch (err) {
     setEscalationStatus(err.message || 'Could not add at the door.', 'error');
   }
@@ -5706,6 +5897,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('escalationAddBtn')?.addEventListener('click', addEscalationAtDoor);
   document.getElementById('escalationCloseBtn')?.addEventListener('click', closeEscalationModal);
   document.getElementById('escalationCancelBtn')?.addEventListener('click', closeEscalationModal);
+  // v5.7.1h — Stay-on-dashboard cancels the auto-redirect and enters audit mode.
+  document.getElementById('postResolutionStayBtn')?.addEventListener('click', onPostResolutionStay);
   document.getElementById('doormanEscalationDialog')?.addEventListener('click', (event) => {
     if (event.target.id === 'doormanEscalationDialog') closeEscalationModal();
   });
