@@ -1864,15 +1864,30 @@ body[data-bg-mode="image"][data-bg-image-position="bottom-right"] #venueQRWrap {
 
    v5.7.1q — Extended to ALL staff/admin surfaces per Captain follow-up:
    "still very blue around the edges" on Check-in tab. The cycling body
-   bg behind the panel cards looked too loud everywhere, not just on
-   Dashboard. Body now flat dark across the whole OrgCheckin.html surface;
-   the inner Check-in PUBLIC QR card retains its own card-level branding
-   (not body-level), so the public attendee QR display keeps its full
-   blue gradient as designed. Captain's directive: "(remembering to not
-   do it to the Check-in panel background :))" — honoured. */
+   bg behind the panel cards looked too loud everywhere. Body now flat
+   across the whole OrgCheckin.html surface; the inner Check-in PUBLIC QR
+   card retains its own card-level branding (not body-level).
+
+   v5.7.1r — Theme-aware fix. v5.7.1q hardcoded var(--page-bg, #0d1117)
+   which always fell to the dark fallback because --page-bg isn't defined
+   in the codebase. Body went dark even in Light mode. Define an explicit
+   --calm-bg variable that switches with :root[data-theme="light"] (and
+   prefers-color-scheme: light when no explicit theme set). Captain's
+   light-mode setting now properly produces a light body. */
+:root {
+  --calm-bg: #0d1117;
+}
+:root[data-theme="light"] {
+  --calm-bg: #f6f8fa;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --calm-bg: #f6f8fa;
+  }
+}
 body {
   background-image: none !important;
-  background-color: var(--page-bg, #0d1117) !important;
+  background-color: var(--calm-bg) !important;
   animation: none !important;
 }
 body::before,
@@ -2066,7 +2081,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1q</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1r</span></div>
   </div>
 </div>
 
