@@ -59,22 +59,24 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
    linked (chromeLogoUrl() falls back to logo.png), apply contrast filter
    so the IRLid mark is readable against the current theme bg. Org-
    uploaded logos render as-is — no filter.
-   v5.7.1t — Direction fix. logo.png is naturally black/dark; original
-   v5.7.1.x inverted in LIGHT mode which was backwards (black-on-light is
-   already visible). Now: invert in DARK mode (black logo → white on dark
-   bg), leave alone in LIGHT mode (black-on-light, no change needed).
-   Captain's screenshot showed logo invisible in Test Venue dark mode;
-   this fix makes it the correct white-on-dark. */
+   v5.7.1u — Reverted v5.7.1t. The IRLid logo.png is actually white-on-
+   transparent (not black as I'd misread from a low-resolution dark-mode
+   screenshot). v5.7.1t flipped the direction wrong and made the logo
+   invisible in LIGHT mode. Restoring v5.7.1.x logic: invert in LIGHT
+   mode (white → black on light bg), no invert in DARK mode (white-on-
+   dark, naturally visible). The "still not animating between black/
+   white when expected" diagnostic deferred — needs us to look at
+   scan.html's exact treatment for reference + verify whether the logo
+   file is truly monochrome or multi-colour (latter would need a
+   different approach like mix-blend-mode or an inline SVG with
+   currentColor). */
 .sidebar-logo img[data-irlid-fallback="true"] {
-  filter: var(--irlid-logo-filter, invert(1));
+  filter: var(--irlid-logo-filter, none);
 }
 @media (prefers-color-scheme: light) {
-  :root { --irlid-logo-filter: none; }
+  :root { --irlid-logo-filter: invert(1); }
 }
 :root[data-theme="light"] .sidebar-logo img[data-irlid-fallback="true"] {
-  filter: none;
-}
-:root[data-theme="dark"] .sidebar-logo img[data-irlid-fallback="true"] {
   filter: invert(1);
 }
 .sidebar-fallback { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
@@ -2125,7 +2127,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1t</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1u</span></div>
   </div>
 </div>
 
