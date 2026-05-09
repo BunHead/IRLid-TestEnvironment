@@ -24,6 +24,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@jaames/iro@5/dist/iro.min.js"></script>
 <script src="js/sign.js"></script>
 <script src="js/offline-queue.js"></script>
+<script src="js/offline-snapshot.js"></script>
 <script src="js/vendor/jsqr.min.js"></script>
 <!-- v5.7.0h — html5-qrcode for live webcam scanning in the Process attendee scan
      widget. Same library used by live repo scan.html for receipt scanning. -->
@@ -109,6 +110,12 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 }
 .offline-indicator.synced .label::before {
   content: "✓ ";
+}
+.offline-indicator .snapshot-freshness {
+  font: 500 11px/1 system-ui, sans-serif;
+  color: #C62828;
+  opacity: 0.85;
+  margin-left: 6px;
 }
 .offline-indicator[hidden],
 .offline-indicator .badge[hidden] { display: none !important; }
@@ -2832,6 +2839,10 @@ function normalizeDashboardOrg(org) {
     settings: org.settings || nested.settings || null
   };
 }
+function snapshotOrgCode(org) {
+  const target = org || currentOrg || {};
+  return target.id || target.slug || target.api_key || target.name || '';
+}
 function applyServerSettingsToLocalState(s) {
   const src = s || {};
   if (typeof src.minScore === 'number') portalState.minimumTrustScore = src.minScore;
@@ -2851,6 +2862,103 @@ function applyServerSettingsToLocalState(s) {
   if (typeof src.enableIdPhotoCapture === 'boolean') portalState.enableIdPhotoCapture = src.enableIdPhotoCapture;
   syncLegacyFromPortal();
   savePortalState();
+}
+
+function currentSnapshotData() {
+  const savedSettings = typeof collectSettingsFromCanonical === 'function'
+    ? collectSettingsFromCanonical()
+    : settings;
+  return {
+    expected: expectedAttendees || [],
+    attendance: attendanceData || [],
+    attendance_stats: attendanceStats || null,
+    settings: savedSettings || settings || null,
+    theme: typeof activeTheme !== 'undefined' && typeof normalizeThemeForSave === 'function'
+      ? normalizeThemeForSave(activeTheme)
+      : null
+  };
+}
+
+async function saveCurrentOrgSnapshot(reason) {
+  if (!window.IRLidOfflineSnapshot || !currentOrg) return null;
+  const orgCode = snapshotOrgCode(currentOrg);
+  if (!orgCode) return null;
+  try {
+    const snap = await window.IRLidOfflineSnapshot.save(orgCode, currentSnapshotData());
+    console.log('[snapshot] saved', reason || 'sync', orgCode);
+    return snap;
+  } catch (err) {
+    console.warn('[snapshot] save failed', err);
+    return null;
+  }
+}
+
+async function loadCurrentOrgSnapshot() {
+  if (!window.IRLidOfflineSnapshot || !currentOrg) return null;
+  try {
+    return await window.IRLidOfflineSnapshot.load(snapshotOrgCode(currentOrg));
+  } catch (err) {
+    console.warn('[snapshot] load failed', err);
+    return null;
+  }
+}
+
+function updateSnapshotFreshnessLabel(syncedAt) {
+  const indicator = document.getElementById('offlineIndicator');
+  if (!indicator) return;
+  let freshness = indicator.querySelector('.snapshot-freshness');
+  if (!freshness) {
+    freshness = document.createElement('span');
+    freshness.className = 'snapshot-freshness';
+    indicator.appendChild(freshness);
+  }
+  if (!syncedAt) {
+    freshness.textContent = '';
+    return;
+  }
+  const time = new Date(syncedAt).toLocaleTimeString(displayLocale(), { hour: '2-digit', minute: '2-digit' });
+  freshness.textContent = `Snapshot ${time}`;
+}
+
+let snapshotRefreshInFlight = false;
+async function refreshSnapshotFromWorker(reason) {
+  if (snapshotRefreshInFlight || !navigator.onLine || !currentOrg?.api_key) return;
+  snapshotRefreshInFlight = true;
+  try {
+    await refreshAttendance();
+    await refreshExpectedAttendees();
+    try { if (typeof loadThemeFromServer === 'function') await loadThemeFromServer(); } catch (_) {}
+    await saveCurrentOrgSnapshot(reason || 'worker-refresh');
+    updateSnapshotFreshnessLabel(null);
+  } catch (err) {
+    console.warn('[snapshot] worker refresh failed', err);
+  } finally {
+    snapshotRefreshInFlight = false;
+  }
+}
+
+function applySnapshotToDashboard(snap) {
+  if (!snap) return false;
+  expectedAttendees = Array.isArray(snap.expected) ? snap.expected : [];
+  attendanceData = Array.isArray(snap.attendance) ? snap.attendance : [];
+  attendanceStats = snap.attendance_stats || null;
+  if (snap.settings) {
+    applyServerSettingsToLocalState(snap.settings);
+    settings = Object.assign({}, settings, snap.settings);
+    saveJson(STORAGE_KEY_SETTINGS, settings);
+  }
+  if (snap.theme && typeof normalizeThemeForSave === 'function') {
+    activeTheme = normalizeThemeForSave(snap.theme);
+    try { writeThemeToUI(); } catch (_) {}
+    try { applyThemeVars(activeTheme); } catch (_) {}
+  }
+  renderStats(attendanceData, attendanceStats);
+  renderExpectedAttendees();
+  renderTable(attendanceData);
+  lastRefreshAt = snap.synced_at || Date.now();
+  updateRelativeRefresh();
+  updateSnapshotFreshnessLabel(snap.synced_at);
+  return true;
 }
 
 function showPanel(name, el) {
@@ -3396,6 +3504,8 @@ async function loadDashboardForOrg(org) {
       applyServerSettingsToLocalState(s);
     }
   } catch (e) {
+    const snap = await loadCurrentOrgSnapshot();
+    if (snap) applySnapshotToDashboard(snap);
     console.warn('Could not load org settings from worker — defaults remain', e);
   }
 
@@ -3660,6 +3770,7 @@ async function saveSettings() {
   updateChromeLogo();
   renderPortalAll();
   setPortalFieldValues();
+  await saveCurrentOrgSnapshot('settings-save');
 
   setThemeSaveStatus('Saved and verified.', 'ok');
   setTimeout(function () { setThemeSaveStatus('', ''); }, 3000);
@@ -3742,9 +3853,17 @@ async function refreshExpectedAttendees() {
   try {
     const payload = await window.IRLidOrgApi.listExpected(currentOrg.api_key);
     expectedAttendees = payload.expected || [];
+    await saveCurrentOrgSnapshot('expected-refresh');
   } catch (err) {
-    expectedAttendees = [];
-    expectedError = err;
+    const snap = await loadCurrentOrgSnapshot();
+    if (snap) {
+      expectedAttendees = Array.isArray(snap.expected) ? snap.expected : [];
+      expectedError = null;
+      updateSnapshotFreshnessLabel(snap.synced_at);
+    } else {
+      expectedAttendees = [];
+      expectedError = err;
+    }
   } finally {
     expectedLoading = false;
     renderExpectedAttendees();
@@ -3991,7 +4110,13 @@ async function refreshAttendance() {
     renderTable(attendanceData);
     lastRefreshAt = Date.now();
     updateRelativeRefresh();
+    await saveCurrentOrgSnapshot('attendance-refresh');
   } catch (err) {
+    const snap = await loadCurrentOrgSnapshot();
+    if (snap && applySnapshotToDashboard(snap)) {
+      showToast('Showing cached attendance snapshot');
+      return;
+    }
     attendanceStats = null;
     attendanceData = [];
     renderStats(attendanceData, attendanceStats);
@@ -4853,6 +4978,12 @@ async function processDashboardScan() {
     const env = await decodeDashboardQrPayload(text);
     console.log('[scan] decoded payload', { type: env.type || 'hello', pub_fp: env.pub_fp || env.fp || null });
     if (env.type === 'device_key') {
+      const recognition = await recogniseDeviceFp(env.pub_fp);
+      if (recognition) {
+        await runRecognisedDeviceKeyCheckin(env, recognition);
+        setDashboardScanStatus(`Recognised ${expectedDisplayName(recognition.row)} (${recognition.source}).`, 'ok');
+        return;
+      }
       openEscalationModal(env);
       setDashboardScanStatus('Device-key QR opened escalation.', 'ok');
     } else {
@@ -4881,6 +5012,21 @@ function renderEscalationRoleTabs() {
 }
 function escalationFpShort(fp) {
   return String(fp || '').trim().slice(0, 8) || 'unknown';
+}
+function expectedRowMatchesDeviceFp(row, fp) {
+  const value = String(fp || '').trim();
+  if (!value || !row) return false;
+  const fps = Array.isArray(row.device_key_fps) ? row.device_key_fps : [];
+  return row.device_key_fp === value || fps.includes(value);
+}
+async function recogniseDeviceFp(fp) {
+  const inMemory = expectedAttendees.find(row => expectedRowMatchesDeviceFp(row, fp));
+  if (inMemory) return { row: inMemory, source: 'live' };
+  if (window.IRLidOfflineSnapshot && currentOrg) {
+    const snapMatch = await window.IRLidOfflineSnapshot.findExpectedByDeviceFp(snapshotOrgCode(currentOrg), fp);
+    if (snapMatch) return { row: snapMatch, source: 'snapshot' };
+  }
+  return null;
 }
 function escalationCandidateRows() {
   return expectedAttendees.map(row => {
@@ -5223,6 +5369,45 @@ function addQueuedCheckinRow(body, queuedResult) {
   renderTable(attendanceData);
   updateOfflineIndicator();
   return row;
+}
+async function runRecognisedDeviceKeyCheckin(env, recognition) {
+  const row = recognition?.row || {};
+  const developerBypass = developerBearerSessionIsActive();
+  const body = {
+    mode: 'device_key_scan',
+    devicePayload: env,
+    deviceHash: env.hash || await hashPayloadToB64url(env),
+    device_pub_fp: env.pub_fp,
+    expected_id: row.id || row.expected_id || null,
+    attendeeLabel: expectedDisplayName(row),
+    name: expectedDisplayName(row),
+    score: settings.minScore || 50,
+    bioVerified: !!settings.bioRequired
+  };
+  if (!developerBypass) {
+    let token = currentStaffSessionToken();
+    if (!token) {
+      const session = await requestStaffHelloSession('record device-key scan');
+      if (!session) throw new Error('Staff HELLO proof cancelled.');
+      token = session.staff_session;
+    }
+    body.staff_session = token;
+  }
+  const result = await window.IRLidOrgApi.createCheckin(
+    currentOrg.api_key,
+    body,
+    developerBypass ? qrLoginSession.session_token : undefined
+  );
+  if (result && result.queued) {
+    addQueuedCheckinRow(body, result);
+    flashDoormanPanel('success');
+    showToast('Recognised from cached snapshot - queued offline.');
+    return;
+  }
+  await refreshAttendance();
+  await refreshExpectedAttendees();
+  flashDoormanPanel('success');
+  showToast(recognition.source === 'snapshot' ? 'Recognised from cached snapshot' : 'Recognised attendee checked in');
 }
 async function runDoormanCheckin(env) {
   const developerBypass = developerBearerSessionIsActive();
@@ -6105,6 +6290,11 @@ function updateOfflineIndicator() {
       indicator.setAttribute('aria-label', offline
         ? 'Working offline - changes will sync when reconnected.'
         : 'Syncing queued changes.');
+      if (offline) {
+        loadCurrentOrgSnapshot().then(snap => updateSnapshotFreshnessLabel(snap?.synced_at));
+      } else {
+        updateSnapshotFreshnessLabel(null);
+      }
       if (n > 0) {
         badge.hidden = false;
         badge.textContent = String(n);
@@ -6117,6 +6307,7 @@ function updateOfflineIndicator() {
         indicator.classList.remove('with-count');
         indicator.querySelector('.label').textContent = 'SYNCED';
         indicator.setAttribute('aria-label', 'Queued changes synced.');
+        updateSnapshotFreshnessLabel(null);
         badge.hidden = true;
         setTimeout(() => {
           indicator.hidden = true;
@@ -6129,6 +6320,12 @@ function updateOfflineIndicator() {
 window.addEventListener('online', updateOfflineIndicator);
 window.addEventListener('offline', updateOfflineIndicator);
 window.addEventListener('irlid:queue-changed', updateOfflineIndicator);
+window.addEventListener('irlid:queue-changed', () => {
+  if (navigator.onLine) setTimeout(() => refreshSnapshotFromWorker('queue-drain'), 250);
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && navigator.onLine) refreshSnapshotFromWorker('visible-online');
+});
 document.addEventListener('DOMContentLoaded', updateOfflineIndicator);
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -6321,6 +6518,19 @@ window.addEventListener('DOMContentLoaded', async () => {
       return; // skip sign-in UI fallthrough below
     } catch (err) {
       // Dashboard load failed — clear stale session and fall through to sign-in.
+      currentOrg = savedOrg;
+      const snap = await loadCurrentOrgSnapshot();
+      if (snap) {
+        saveJson(STORAGE_KEY_ORG, currentOrg);
+        setSignedInUI(true);
+        syncLegacyFromPortal();
+        applySnapshotToDashboard(snap);
+        showPanel('checkin');
+        generateVenueQR();
+        renderPortalAll();
+        showToast('Loaded cached organisation snapshot');
+        return;
+      }
       try { localStorage.removeItem('irlid_login_session'); } catch (_) {}
       try { localStorage.removeItem(STORAGE_KEY_ORG); } catch (_) {}
       qrLoginSession = null;
@@ -6751,7 +6961,16 @@ async function loadThemeFromServer() {
     activeTheme = normalizeThemeForSave(t);
     writeThemeToUI();
     applyThemeVars(activeTheme);
+    await saveCurrentOrgSnapshot('theme-refresh');
   } catch (err) {
+    const snap = await loadCurrentOrgSnapshot();
+    if (snap?.theme) {
+      activeTheme = normalizeThemeForSave(snap.theme);
+      writeThemeToUI();
+      applyThemeVars(activeTheme);
+      updateSnapshotFreshnessLabel(snap.synced_at);
+      return;
+    }
     console.warn('Theme load failed, using defaults', err);
   }
 }
