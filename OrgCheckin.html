@@ -404,6 +404,102 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   .escalation-add-fields label { font-size: 13px; }
   .escalation-add-fields input { padding: 12px 12px; font-size: 15px; min-height: 44px; }
   .escalation-footer { padding: 0 14px 14px; }
+
+  /* v5.7.1j - Mobile dashboard reshape: hide inline Attendance Today in
+     favour of the View Attendance Board button -> audit mode. */
+  body[data-active-panel="dashboard"]:not(.audit-mode) #dashboardAttendanceCard,
+  body[data-active-panel="dashboard"] .prototype-role-dock,
+  body[data-active-panel="dashboard"] .prototype-role-toolbar,
+  body[data-active-panel="dashboard"] .prototype-role-detail,
+  body[data-active-panel="dashboard"] .topbar-action-audit {
+    display: none !important;
+  }
+
+  body[data-active-panel="dashboard"] .stats-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 0;
+  }
+  body[data-active-panel="dashboard"] .stats-row .stat-card {
+    padding: 12px;
+  }
+  body[data-active-panel="dashboard"] .stats-row .stat-label {
+    font-size: 10px;
+  }
+  body[data-active-panel="dashboard"] .stats-row .stat-value {
+    font-size: 32px;
+  }
+  body[data-active-panel="dashboard"] .stats-row .stat-sub {
+    font-size: 10px;
+  }
+
+  .view-board-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    margin: 16px 0 20px;
+    padding: 18px 16px;
+    background: var(--accent, #2563eb);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font: 700 16px/1.2 system-ui, sans-serif;
+    cursor: pointer;
+    min-height: 56px;
+  }
+  .view-board-btn[hidden] { display: none !important; }
+  .view-board-btn:active { transform: scale(0.98); }
+  .view-board-icon { font-size: 20px; }
+
+  body[data-active-panel="dashboard"] #dashboardStaffScanCard[open] {
+    margin-top: 0;
+  }
+
+  body[data-active-panel="dashboard"] .dashboard-expected-dock {
+    margin-top: 14px;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock .expected-list {
+    display: block;
+    max-height: 60vh;
+    overflow-y: auto;
+    margin-bottom: 16px;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock #expectedAttendeeManagement {
+    display: block;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock #expectedAttendeeManagement > summary {
+    display: none;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock .checkin-lower-grid {
+    display: block;
+    margin-top: 0;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock .match-panel {
+    display: none;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock .expected-admin-fields {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock .expected-admin-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock input[type="text"],
+  body[data-active-panel="dashboard"] .dashboard-expected-dock select {
+    min-height: 48px;
+    font-size: 16px;
+    padding: 12px 14px;
+  }
+  body[data-active-panel="dashboard"] .dashboard-expected-dock #expectedAddBtn {
+    min-height: 56px;
+    font-size: 16px;
+    font-weight: 700;
+    width: 100%;
+  }
 }
 .escalation-footer { padding: 0 18px 18px; display: flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }
 .escalation-status { min-height: 18px; color: var(--muted); font-size: 12px; }
@@ -1859,7 +1955,7 @@ body #venueQRWrap.cycle-burst-pattern {
     <div class="topbar-actions">
       <span id="liveStatus" data-developer-only="true" style="display:none;"><span class="live-dot"></span>Debug</span>
       <button class="btn btn-secondary btn-sm" id="refreshBtn" onclick="refreshAttendanceFromUI()" title="Refresh attendance + expected list"><span class="refresh-glyph" aria-hidden="true">↻</span> Refresh</button>
-      <button class="btn btn-secondary btn-sm" id="auditModeBtn" onclick="enterAuditMode()" title="Audit mode — full-screen attendance board (best in landscape)" style="display:none;"><span aria-hidden="true">⛶</span> Audit</button>
+      <button class="btn btn-secondary btn-sm topbar-action-audit" id="auditModeBtn" onclick="enterAuditMode()" title="Audit mode — full-screen attendance board (best in landscape)" style="display:none;"><span aria-hidden="true">⛶</span> Audit</button>
       <button class="btn btn-secondary btn-sm" id="csvBtn" onclick="exportCSV()">↓ CSV</button>
       <button class="btn btn-secondary btn-sm" id="csvUploadBtn" onclick="triggerCsvUpload()">↑ CSV</button>
       <button class="btn btn-secondary btn-sm" id="signOutBtn" onclick="signOutOrg()">Sign out</button>
@@ -1996,6 +2092,10 @@ body #venueQRWrap.cycle-burst-pattern {
         <div class="stat-card"><div class="stat-label">Avg Score</div><div class="stat-value orange" id="statScore">84%</div><div class="stat-sub">Min threshold: <span id="statMin">50%</span></div><div class="threshold-bar" aria-hidden="true"><div class="threshold-bar-fill" id="scoreProgress"></div><div class="threshold-bar-marker" id="scoreThresholdMarker"></div></div></div>
         <div class="stat-card"><div class="stat-label">Bio-metric Verified</div><div class="stat-value purple" id="statBio">7</div></div>
       </div>
+      <button type="button" class="view-board-btn" id="viewBoardBtn" hidden>
+        <span class="view-board-icon">⛶</span>
+        <span class="view-board-label">View Attendance Board</span>
+      </button>
 
       <div class="card" id="dashboardAttendanceCard">
         <div class="card-header">
@@ -2153,7 +2253,7 @@ body #venueQRWrap.cycle-burst-pattern {
                   <div id="expectedAttendeeList"></div>
                 </div>
 
-                <details class="dashboard-collapsible">
+                <details class="dashboard-collapsible" id="expectedAttendeeManagement">
                   <summary>Expected attendee management</summary>
                 <div class="checkin-lower-grid">
                   <div class="expected-admin-panel">
@@ -4893,6 +4993,25 @@ function onPostResolutionStay() {
   hidePostResolutionToast();
   enterAuditMode();
 }
+// v5.7.1j - Mobile dashboard reshape. Phones use audit mode as the
+// primary attendance-board surface and keep dashboard space for scans
+// plus Expected attendee work.
+function syncMobileDashboardShape() {
+  const isPhone = window.innerWidth <= 640;
+  const btn = document.getElementById('viewBoardBtn');
+  if (btn) btn.hidden = !isPhone;
+  if (isPhone) {
+    document.getElementById('dashboardStaffScanCard')?.setAttribute('open', '');
+    document.getElementById('expectedAttendeeManagement')?.setAttribute('open', '');
+  }
+}
+function wireMobileBoardButton() {
+  const btn = document.getElementById('viewBoardBtn');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.addEventListener('click', enterAuditMode);
+  btn.dataset.bound = '1';
+}
+window.addEventListener('resize', syncMobileDashboardShape);
 // v5.7.1h — Audit mode. Full-screen, table-only, landscape-preferred.
 // Captain's "airport arrivals board" view for the door-staff phone.
 // Best-effort: fullscreen + orientation lock. If the browser refuses
@@ -6020,6 +6139,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   setPortalFieldValues();
   wirePortalFields();
   applyCheckinPrototypeLayout();
+  wireMobileBoardButton();
+  syncMobileDashboardShape();
   // Batch B — wire QR-scan login buttons. The handlers no-op gracefully if the
   // panel-setup screen isn't in the DOM yet (auto-login bypassed it).
   document.getElementById('qrLoginStartBtn')?.addEventListener('click', startQrLogin);
