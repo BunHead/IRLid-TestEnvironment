@@ -56,17 +56,25 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; align-items: center; min-height: 76px; }
 .sidebar-logo img { display: block; height: 38px; width: auto; max-width: 160px; object-fit: contain; opacity: 0.95; }
 /* v5.7.1.x — IRLid fallback logo contrast. When no org-specific logo is
-   linked (chromeLogoUrl() falls back to logo.png), invert the logo in
-   light mode so the white-on-dark IRLid mark flips to black-on-light.
-   Org-uploaded logos render as-is — no filter. Mirror of the scan.html
-   treatment. */
+   linked (chromeLogoUrl() falls back to logo.png), apply contrast filter
+   so the IRLid mark is readable against the current theme bg. Org-
+   uploaded logos render as-is — no filter.
+   v5.7.1t — Direction fix. logo.png is naturally black/dark; original
+   v5.7.1.x inverted in LIGHT mode which was backwards (black-on-light is
+   already visible). Now: invert in DARK mode (black logo → white on dark
+   bg), leave alone in LIGHT mode (black-on-light, no change needed).
+   Captain's screenshot showed logo invisible in Test Venue dark mode;
+   this fix makes it the correct white-on-dark. */
 .sidebar-logo img[data-irlid-fallback="true"] {
-  filter: var(--irlid-logo-filter, none);
+  filter: var(--irlid-logo-filter, invert(1));
 }
 @media (prefers-color-scheme: light) {
-  :root { --irlid-logo-filter: invert(1); }
+  :root { --irlid-logo-filter: none; }
 }
 :root[data-theme="light"] .sidebar-logo img[data-irlid-fallback="true"] {
+  filter: none;
+}
+:root[data-theme="dark"] .sidebar-logo img[data-irlid-fallback="true"] {
   filter: invert(1);
 }
 .sidebar-fallback { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
@@ -2117,7 +2125,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1s</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1t</span></div>
   </div>
 </div>
 
