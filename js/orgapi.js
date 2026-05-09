@@ -104,6 +104,16 @@
         body: payload
       });
     },
+    scrapeTheme(sessionToken, orgId) {
+      return request(`/user/orgs/${encodeURIComponent(orgId)}/scrape-theme`, {
+        method: "POST",
+        sessionToken,
+        body: {}
+      });
+    },
+    imageProxyUrl(imageUrl) {
+      return publicBaseUrl() + "/util/image-proxy?url=" + encodeURIComponent(imageUrl);
+    },
 
     registerOrganisation(name) {
       return request("/org/register", {

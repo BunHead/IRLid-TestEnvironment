@@ -61,6 +61,10 @@ function randomToken() { return b64urlEncode(crypto.getRandomValues(new Uint8Arr
 
 const EXPECTED_MEMBER_ROLES = new Set(["attendee", "staff", "manager", "lead_admin", "developer"]);
 const EXPECTED_ROLE_RANK = { attendee: 0, staff: 1, manager: 2, lead_admin: 3, developer: 4 };
+const THEME_SCRAPE_TTL_MS = 24 * 60 * 60 * 1000;
+const THEME_SCRAPE_TIMEOUT_MS = 5000;
+const IMAGE_PROXY_MAX_BYTES = 2 * 1024 * 1024;
+const PUBLIC_HTTP_URL_RE = /^https?:\/\/[a-z0-9.-]+\.[a-z]{2,}(?::\d{2,5})?(?:[/?#]|$)/i;
 
 function expectedMemberRole(value) {
   const role = String(value || "attendee").trim().toLowerCase();
@@ -69,6 +73,31 @@ function expectedMemberRole(value) {
 
 function expectedRoleRank(role) {
   return EXPECTED_ROLE_RANK[expectedMemberRole(role)] ?? 0;
+}
+
+function isInternalHostname(hostname) {
+  const host = String(hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  if (!host || host === "localhost" || host.endsWith(".localhost")) return true;
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return true;
+  if (/^(fc|fd|fe80):/i.test(host)) return true;
+  const ipv4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!ipv4) return false;
+  const parts = ipv4.slice(1).map(Number);
+  if (parts.some(n => n < 0 || n > 255)) return true;
+  const [a, b] = parts;
+  return a === 0 || a === 10 || a === 127 || a === 169 && b === 254 ||
+    a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168;
+}
+
+function parsePublicHttpUrl(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 2048 || !PUBLIC_HTTP_URL_RE.test(trimmed)) return null;
+  let url;
+  try { url = new URL(trimmed); } catch (_) { return null; }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  if (isInternalHostname(url.hostname)) return null;
+  return url;
 }
 
 // Batch C polish 5 — Developer role is bootstrap-only. The /org/expected create
@@ -1284,6 +1313,171 @@ async function userCreateOrg(request, env) {
   }, 201);
 }
 
+async function requireOrgThemeAdmin(request, env, orgId) {
+  const ctx = await requireSession(request, env);
+  if (ctx.error) return { error: ctx.error };
+  const org = await env.DB.prepare("SELECT * FROM organisations WHERE id = ?")
+    .bind(orgId).first();
+  if (!org) return { error: json({ error: "org_not_found" }, 404) };
+
+  const bootstrapFp = (env.BOOTSTRAP_DEVELOPER_FP || "").trim();
+  const isBootstrapDev = bootstrapFp && ctx.user.pub_fp === bootstrapFp;
+  if (isBootstrapDev) return { user: ctx.user, org, role: "developer" };
+
+  const membership = await env.DB.prepare(
+    "SELECT role FROM org_memberships WHERE org_id = ? AND user_id = ? LIMIT 1"
+  ).bind(orgId, ctx.user.id).first();
+  const role = membership && membership.role;
+  if (role !== "lead_admin" && role !== "developer") {
+    return { error: json({ error: "forbidden", reason: "lead_admin_or_developer_required" }, 403) };
+  }
+  return { user: ctx.user, org, role };
+}
+
+function absoluteUrl(value, baseUrl) {
+  if (!value || typeof value !== "string") return "";
+  try { return new URL(value.trim(), baseUrl).href; } catch (_) { return ""; }
+}
+
+function normalizeScrapedThemeColor(value) {
+  const color = String(value || "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(color)) return color.toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(color)) {
+    return "#" + color.slice(1).split("").map(ch => ch + ch).join("").toUpperCase();
+  }
+  return color;
+}
+
+async function userScrapeTheme(request, env, orgId) {
+  const ctx = await requireOrgThemeAdmin(request, env, orgId);
+  if (ctx.error) return ctx.error;
+
+  const org = ctx.org;
+  let settings = {};
+  try { settings = org.settings_json ? JSON.parse(org.settings_json) : {}; } catch (_) {}
+  const websiteValue = settings.websiteUrl || settings.website_url || "";
+  const websiteUrl = parsePublicHttpUrl(websiteValue);
+  if (!websiteUrl) return err("websiteUrl must be a public http(s) URL in org settings");
+
+  const cached = settings.theme_scrape;
+  if (cached && cached.website_url === websiteUrl.href && Date.now() - Number(cached.scraped_at || 0) < THEME_SCRAPE_TTL_MS) {
+    return json({ cached: true, ...cached });
+  }
+
+  let htmlResponse;
+  try {
+    htmlResponse = await fetch(websiteUrl.href, {
+      headers: {
+        "User-Agent": "IRLidThemeScraper/1.0 (+https://github.com/BunHead/IRLid-TestEnvironment)",
+        "Accept": "text/html,application/xhtml+xml"
+      },
+      signal: AbortSignal.timeout(THEME_SCRAPE_TIMEOUT_MS),
+      redirect: "follow"
+    });
+  } catch (e) {
+    return json({ error: "scrape_fetch_failed", detail: e && e.message ? e.message : "fetch failed" }, 502);
+  }
+  if (!htmlResponse.ok) return json({ error: "scrape_fetch_failed", status: htmlResponse.status }, 502);
+
+  const contentType = htmlResponse.headers.get("content-type") || "";
+  if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
+    return json({ error: "scrape_not_html", content_type: contentType }, 415);
+  }
+
+  const found = { theme_color: null, logo_candidates: [], og_image: null, title: "" };
+  const baseUrl = htmlResponse.url || websiteUrl.href;
+  const seenLogos = new Set();
+  const addLogo = (href) => {
+    const absolute = absoluteUrl(href, baseUrl);
+    if (!absolute || seenLogos.has(absolute)) return;
+    seenLogos.add(absolute);
+    if (found.logo_candidates.length < 12) found.logo_candidates.push(absolute);
+  };
+
+  const rewriter = new HTMLRewriter()
+    .on('meta[name="theme-color"]', {
+      element(el) {
+        if (!found.theme_color) found.theme_color = normalizeScrapedThemeColor(el.getAttribute("content"));
+      }
+    })
+    .on('meta[property="og:image"]', {
+      element(el) {
+        if (!found.og_image) found.og_image = absoluteUrl(el.getAttribute("content"), baseUrl);
+      }
+    })
+    .on('link[rel]', {
+      element(el) {
+        const rel = String(el.getAttribute("rel") || "").toLowerCase();
+        if (/(^|\s)(icon|shortcut icon|apple-touch-icon|mask-icon)(\s|$)/.test(rel)) addLogo(el.getAttribute("href"));
+      }
+    })
+    .on("title", {
+      text(text) {
+        if (found.title.length < 240) found.title += text.text;
+      }
+    });
+
+  try {
+    await rewriter.transform(htmlResponse).arrayBuffer();
+  } catch (e) {
+    return json({ error: "scrape_parse_failed", detail: e && e.message ? e.message : "HTML parse failed" }, 502);
+  }
+
+  if (found.og_image) addLogo(found.og_image);
+  const result = {
+    website_url: websiteUrl.href,
+    title: found.title.trim().replace(/\s+/g, " ").slice(0, 160),
+    theme_color: found.theme_color || null,
+    og_image: found.og_image || null,
+    logo_candidates: found.logo_candidates,
+    scraped_at: Date.now()
+  };
+
+  settings.websiteUrl = websiteUrl.href;
+  settings.theme_scrape = result;
+  await env.DB.prepare("UPDATE organisations SET settings_json=?, updated_at=? WHERE id=?")
+    .bind(JSON.stringify(settings), now(), org.id).run();
+  return json({ cached: false, ...result });
+}
+
+async function utilImageProxy(request, env) {
+  const target = parsePublicHttpUrl(new URL(request.url).searchParams.get("url") || "");
+  if (!target) return err("url must be a public http(s) image URL", 400);
+
+  let proxied;
+  try {
+    proxied = await fetch(target.href, {
+      headers: {
+        "User-Agent": "IRLidImageProxy/1.0",
+        "Accept": "image/*"
+      },
+      signal: AbortSignal.timeout(THEME_SCRAPE_TIMEOUT_MS),
+      redirect: "follow"
+    });
+  } catch (e) {
+    return err("image_fetch_failed", 502);
+  }
+  if (!proxied.ok) return err("image_fetch_failed", 502);
+
+  const type = proxied.headers.get("content-type") || "";
+  if (!/^image\//i.test(type)) return err("not_an_image", 415);
+  const declaredLength = Number(proxied.headers.get("content-length") || 0);
+  if (declaredLength && declaredLength > IMAGE_PROXY_MAX_BYTES) return err("image_too_large", 413);
+
+  const bytes = await proxied.arrayBuffer();
+  if (bytes.byteLength > IMAGE_PROXY_MAX_BYTES) return err("image_too_large", 413);
+
+  const response = new Response(bytes, {
+    status: 200,
+    headers: {
+      "Content-Type": type,
+      "Cache-Control": "public, max-age=86400",
+      "X-Content-Type-Options": "nosniff"
+    }
+  });
+  return addCors(response, env, request);
+}
+
 // =====================
 //  ORGANISATION PORTAL
 // =====================
@@ -1328,7 +1522,7 @@ async function orgUpdateSettings(request, env) {
     "returnAllowed","allowSelfSelection","requireDoormanConfirmation","requireAdditionalProof",
     "allowProofRecording","enableIdPhotoCapture",
     // --- Branding ---
-    "logoUrl","welcomeMessage","redirectUrl",
+    "logoUrl","welcomeMessage","redirectUrl","websiteUrl",
     // --- Theme (Batch 6.5 → 6.5f) ---
     "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, bgMode, bgIntensity, bgPattern, bgImageUrl, bgImagePosition, bgImageAlphaCycle, cycleMode, bgAnimDuration, cycleAnimDuration } — validated below
   ];
@@ -1447,6 +1641,7 @@ async function orgUpdateSettings(request, env) {
   }
   // String length sanity — protect against an admin pasting a 1MB welcome message.
   if (body.logoUrl !== undefined && typeof body.logoUrl !== "string") return err("logoUrl must be a string");
+  if (body.websiteUrl !== undefined && (typeof body.websiteUrl !== "string" || (body.websiteUrl.trim() && !parsePublicHttpUrl(body.websiteUrl)))) return err("websiteUrl must be a public http(s) URL or blank");
   if (body.welcomeMessage !== undefined && typeof body.welcomeMessage === "string" && body.welcomeMessage.length > 2000) return err("welcomeMessage too long (max 2000 chars)");
   if (body.redirectUrl !== undefined && typeof body.redirectUrl !== "string") return err("redirectUrl must be a string");
   for (const k of allowed) { if (body[k] !== undefined) current[k] = body[k]; }
@@ -2375,6 +2570,7 @@ export default {
       else if (method === "POST" && path === "/receipts")            response = await uploadReceipt(request, env);
       else if (method === "GET"  && path === "/receipts")             response = await listReceipts(request, env);
       else if (method === "POST" && path === "/verify")              response = await verify(request, env);
+      else if (method === "GET"  && path === "/util/image-proxy")     response = await utilImageProxy(request, env);
 
       // Org Portal — Identity-Bound Sessions (PROTOCOL.md §14, Batch A)
       else if (method === "POST" && path === "/org/login/init")      response = await orgLoginInit(request, env);
@@ -2383,6 +2579,10 @@ export default {
       // User-level endpoints (PROTOCOL.md §14, Batch C) — Bearer session token auth.
       else if (method === "GET"  && path === "/user/orgs")           response = await userListOrgs(request, env);
       else if (method === "POST" && path === "/user/create-org")     response = await userCreateOrg(request, env);
+      else if (method === "POST" && /^\/user\/orgs\/[^/]+\/scrape-theme$/.test(path)) {
+        const mScrapeTheme = path.match(/^\/user\/orgs\/([^/]+)\/scrape-theme$/);
+        response = await userScrapeTheme(request, env, decodeURIComponent(mScrapeTheme[1]));
+      }
 
       // Org Portal
       else if (method === "POST" && path === "/org/register")        response = await orgRegister(request, env);
