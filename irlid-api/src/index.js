@@ -1437,6 +1437,11 @@ async function orgUpdateSettings(request, env) {
     if (t.bgImageAlphaCycle !== undefined && typeof t.bgImageAlphaCycle !== "boolean") {
       return "theme.bgImageAlphaCycle must be a boolean";
     }
+    // v5.7.1u.1 — bgImageFloat: when true AND bgImagePosition is an edge anchor (top/bottom/left/right),
+    // float the image at the visual midpoint (12.5%/87.5%) between QR and edge.
+    if (t.bgImageFloat !== undefined && typeof t.bgImageFloat !== "boolean") {
+      return "theme.bgImageFloat must be a boolean";
+    }
     return null;
   }
   const current = JSON.parse(org.settings_json || "{}");

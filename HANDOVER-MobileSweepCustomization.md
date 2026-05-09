@@ -190,7 +190,7 @@ The class names above are best-guesses based on grep results. Before shipping, l
 - **PR title:** `[codex] [M] v5.7.1v — mobile sweep for customization panel`
 - **Expected PR scope:** Medium (~100–180 lines new CSS in one media-query block, plus selector verification commits if any element class names need updating from the brief's best-guesses).
 - **Single PR. Stop and raise if scope expands.**
-- **Build pill bump:** include `v5.7.1u → v5.7.1v` in the same commit per BOOTSTRAP §4 discipline (the `.sidebar-footer` div around line 2045 of `OrgCheckin.html`).
+- **Build pill bump:** include `v5.7.1w → v5.7.1x` in the same commit per BOOTSTRAP §4 discipline (the `.sidebar-footer` div around line 2279 of `OrgCheckin.html`). *Note: pill numbering has drifted forward as Number One inline patches landed in parallel — current pill at v5.7.1w means next free letter is x. Don't worry about matching the letter to your PR's v5.7.1v label; the pill is just "what's the latest build" not "what's this feature's letter".*
 
 ---
 
