@@ -1855,6 +1855,23 @@ body[data-bg-mode="image"][data-bg-image-position="bottom-right"] .irlid-qr-full
 body[data-bg-mode="image"][data-bg-image-position="bottom-right"] #venueQRWrap {
   background-position: bottom right;
 }
+/* v5.7.1p — Dashboard flat-bg. Captain UX call after the audit-board
+   landing on hardware: the cycling/animated background that's right
+   for the public Check-in surface is friction on the staff Dashboard
+   surface where attention should go to data, not motion. Override
+   bg styling on body[data-active-panel="dashboard"] only — Check-in
+   panel retains the full branding/cycling treatment. Synergy moment:
+   Captain and Number One independently arrived at "off, not just
+   quieter" as the right answer. */
+body[data-active-panel="dashboard"] {
+  background-image: none !important;
+  background-color: var(--page-bg, #0d1117) !important;
+  animation: none !important;
+}
+body[data-active-panel="dashboard"]::before,
+body[data-active-panel="dashboard"]::after {
+  animation: none !important;
+}
 /* v5.7.1m.1 — edge anchors (Top/Bottom/Left/Right) added alongside the
    four corner anchors. Centred along the perpendicular axis, anchored
    to the named edge. Captain's UX call after v5.7.1m ship. */
@@ -2042,7 +2059,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1o</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1p</span></div>
   </div>
 </div>
 
