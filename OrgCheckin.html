@@ -5630,13 +5630,13 @@ async function runRecognisedDeviceKeyCheckin(env, recognition) {
   if (result && result.queued) {
     addQueuedCheckinRow(body, result);
     flashDoormanPanel('success');
-    showToast('Recognised from cached snapshot - queued offline.');
+    console.log('[snapshot] recognised by offline cache:', expectedDisplayName(row), 'fp:', String(env.pub_fp || '').slice(0, 8));
     return;
   }
   await refreshAttendance();
   await refreshExpectedAttendees();
   flashDoormanPanel('success');
-  showToast(recognition.source === 'snapshot' ? 'Recognised from cached snapshot' : 'Recognised attendee checked in');
+  recognition.source === 'snapshot' ? console.log('[snapshot] recognised by offline cache:', expectedDisplayName(row), 'fp:', String(env.pub_fp || '').slice(0, 8)) : showToast('Recognised attendee checked in');
 }
 async function runDoormanCheckin(env) {
   const developerBypass = developerBearerSessionIsActive();
