@@ -2082,6 +2082,36 @@ body[data-bg-mode="image"][data-bg-image-position="right"] .irlid-qr-fullscreen,
 body[data-bg-mode="image"][data-bg-image-position="right"] #venueQRWrap {
   background-position: center right;
 }
+/* v5.7.1u.1 — Image float toggle. Captain UX request: when image is
+   anchored to an edge (Top/Bottom/Left/Right), optionally float it to
+   the visual midpoint between the QR (centred at 50%) and the named
+   edge instead of slamming it flat to the edge. Percentage approximation
+   (12.5% / 87.5%) for the "easy version" — works across most viewports
+   without needing JS measurement of the QR's actual bounding box. If the
+   approximation drifts visibly on edge-case viewports, future v5.7.1u.2
+   could upgrade to a JS-driven CSS-custom-property measurement. Toggle
+   only affects the four edge anchors — corners and centre/tile/cover
+   ignore it (they already have meaningful position semantics). */
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="top"],
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="top"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="top"] #venueQRWrap {
+  background-position: center 12.5%;
+}
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="bottom"],
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="bottom"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="bottom"] #venueQRWrap {
+  background-position: center 87.5%;
+}
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="left"],
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="left"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="left"] #venueQRWrap {
+  background-position: 12.5% center;
+}
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="right"],
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="right"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-float="true"][data-bg-image-position="right"] #venueQRWrap {
+  background-position: 87.5% center;
+}
 @property --theme-pattern-fg {
   syntax: '<color>';
   inherits: true;
@@ -2246,7 +2276,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1v</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1w</span></div>
   </div>
 </div>
 
@@ -2793,6 +2823,13 @@ body #venueQRWrap.cycle-burst-pattern {
                       <span>Alpha cycle</span>
                       <label class="switch-wrap">
                         <input type="checkbox" id="themeBgImageAlphaCycle" />
+                        <span class="switch-slider"></span>
+                      </label>
+                    </label>
+                    <label class="theme-anim-row" data-bg-mode-show="image" title="When image is anchored to an edge, float it midway between the QR and that edge instead of flat against the edge.">
+                      <span>Float in space</span>
+                      <label class="switch-wrap">
+                        <input type="checkbox" id="themeBgImageFloat" />
                         <span class="switch-slider"></span>
                       </label>
                     </label>
@@ -6934,6 +6971,7 @@ const THEME_DEFAULTS = {
   bgImageUrl: null,          // admin-uploaded background image; applies when bgMode === 'image'
   bgImagePosition: 'centre',
   bgImageAlphaCycle: false,
+  bgImageFloat: false,    // v5.7.1u.1 — when true and bgImagePosition is an edge anchor, float midway between QR and edge
   cycleMode: 'glow',         // 'off' | 'page' | 'glow' | 'pattern' (Celebration; replaces legacy acceptCycleEnabled in 6.5f)
   bgAnimDuration: 30,        // seconds for one full background cycle (range 5..120)
   cycleAnimDuration: 1.4     // seconds for one celebration burst (range 0.5..5)
@@ -6972,6 +7010,7 @@ function normalizeThemeForSave(theme) {
     bgImageUrl: bgImageUrl,
     bgImagePosition: BG_IMAGE_POSITIONS.indexOf(t.bgImagePosition) !== -1 ? t.bgImagePosition : THEME_DEFAULTS.bgImagePosition,
     bgImageAlphaCycle: t.bgImageAlphaCycle === true,
+    bgImageFloat: t.bgImageFloat === true,
     cycleMode: cycleMode,
     bgAnimDuration: typeof t.bgAnimDuration === 'number' ? t.bgAnimDuration : THEME_DEFAULTS.bgAnimDuration,
     cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
@@ -7098,6 +7137,7 @@ function applyThemeVars(theme) {
       }
       body.setAttribute('data-bg-image-position', BG_IMAGE_POSITIONS.indexOf(theme.bgImagePosition) !== -1 ? theme.bgImagePosition : THEME_DEFAULTS.bgImagePosition);
       body.setAttribute('data-bg-image-alpha-cycle', theme.bgImageAlphaCycle === true ? 'true' : 'false');
+      body.setAttribute('data-bg-float', theme.bgImageFloat === true ? 'true' : 'false');
       break;
     case 'glow':
     default:
@@ -7373,6 +7413,8 @@ function writeThemeToUI() {
   if (bgImagePositionEl) bgImagePositionEl.value = BG_IMAGE_POSITIONS.indexOf(activeTheme.bgImagePosition) !== -1 ? activeTheme.bgImagePosition : 'centre';
   const bgImageAlphaCycleEl = document.getElementById('themeBgImageAlphaCycle');
   if (bgImageAlphaCycleEl) bgImageAlphaCycleEl.checked = activeTheme.bgImageAlphaCycle === true;
+  const bgImageFloatEl = document.getElementById('themeBgImageFloat');
+  if (bgImageFloatEl) bgImageFloatEl.checked = activeTheme.bgImageFloat === true;
   const bgDur = document.getElementById('themeBgAnimDuration');
   if (bgDur) bgDur.value = activeTheme.bgAnimDuration;
   const bgDurVal = document.getElementById('themeBgAnimDurationValue');
@@ -7548,6 +7590,11 @@ function wireThemePanel() {
   const bgImageAlphaCycleEl = document.getElementById('themeBgImageAlphaCycle');
   if (bgImageAlphaCycleEl) bgImageAlphaCycleEl.addEventListener('change', function (e) {
     activeTheme.bgImageAlphaCycle = e.target.checked === true;
+    applyThemeVars(activeTheme);
+  });
+  const bgImageFloatEl = document.getElementById('themeBgImageFloat');
+  if (bgImageFloatEl) bgImageFloatEl.addEventListener('change', function (e) {
+    activeTheme.bgImageFloat = e.target.checked === true;
     applyThemeVars(activeTheme);
   });
 
