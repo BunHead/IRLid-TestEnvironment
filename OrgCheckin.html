@@ -455,6 +455,32 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   .expected-admin-fields input {
     min-height: 44px;
   }
+  .theme-scrape-actions,
+  .theme-scrape-candidates,
+  .theme-logo-candidate,
+  .theme-color-candidate {
+    grid-template-columns: 1fr;
+  }
+  .theme-scrape-actions {
+    display: grid;
+    gap: 8px;
+  }
+  .theme-scrape-actions .btn,
+  .theme-color-candidate .btn,
+  .theme-logo-candidate .btn,
+  #websiteUrl {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .theme-logo-candidate,
+  .theme-color-candidate {
+    align-items: stretch;
+  }
+  .theme-logo-thumb,
+  .theme-color-swatch {
+    width: 64px;
+    height: 64px;
+  }
 
   /* v5.7.1j - Mobile dashboard reshape: hide inline Attendance Today in
      favour of the View Attendance Board button -> audit mode. */
@@ -799,6 +825,24 @@ body.audit-mode #attendanceBody { overflow-x: hidden; }
 .settings-field input, .settings-field textarea { width: 100%; border: 1px solid rgba(255,255,255,0.12); background: rgba(5,10,20,0.45); color: var(--text); border-radius: 10px; padding: 10px 11px; outline: none; font: inherit; }
 .settings-field textarea { min-height: 52px; resize: vertical; }
 .settings-field input:focus, .settings-field textarea:focus { border-color: rgba(105,168,255,0.6); box-shadow: 0 0 0 3px rgba(105,168,255,0.12); }
+.theme-scrape-panel { margin-top: 12px; display: grid; gap: 10px; }
+.theme-scrape-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.theme-scrape-status { min-height: 18px; color: var(--muted); font-size: 12px; }
+.theme-scrape-status.ok { color: var(--green); }
+.theme-scrape-status.err { color: var(--red); }
+.theme-scrape-results { display: none; border: 1px solid var(--line); border-radius: 8px; background: rgba(11,18,32,0.72); padding: 12px; }
+.theme-scrape-results.visible { display: grid; gap: 12px; }
+.theme-scrape-title { color: #dbe6ff; font-size: 13px; font-weight: 700; }
+.theme-scrape-candidates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.theme-color-candidate, .theme-logo-candidate { border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(255,255,255,0.035); padding: 10px; }
+.theme-color-candidate { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.theme-color-swatch { width: 42px; height: 42px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.28); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.2); }
+.theme-candidate-label { color: var(--muted); font-size: 11px; }
+.theme-candidate-value { color: #f0f6ff; font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-logo-list { display: grid; gap: 8px; }
+.theme-logo-candidate { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.theme-logo-thumb { width: 54px; height: 54px; border-radius: 8px; border: 1px solid var(--line); background: #fff; object-fit: contain; padding: 4px; }
+.theme-scrape-empty { color: var(--muted); font-size: 12px; }
 .switch-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .switch-tile { display: flex; flex-direction: column; justify-content: space-between; min-height: 84px; gap: 8px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); }
 .switch-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
@@ -2150,7 +2194,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1u</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1v</span></div>
   </div>
 </div>
 
@@ -2561,9 +2605,17 @@ body #venueQRWrap.cycle-burst-pattern {
                 <h4>Branding and post-accept behaviour</h4>
                 <div class="settings-grid-3">
                   <label class="settings-field"><span>Logo image URL</span><input id="logoUrl" type="url" placeholder="https://example.com/logo.png"></label>
+                  <label class="settings-field"><span>Website URL</span><input id="websiteUrl" type="url" placeholder="https://example.com"></label>
                   <label class="settings-field"><span>Post-accept redirect URL</span><input id="redirectUrl" type="url" placeholder="https://example.com/welcome"></label>
                   <label class="settings-field"><span>Staff post-accept redirect URL</span><input id="staffRedirectUrl" type="url" placeholder="e.g. https://bunhead.github.io/IRLid-TestEnvironment/OrgCheckin.html (or your org's authenticated staff page)"></label>
                   <label class="settings-field"><span>Custom welcome message</span><textarea id="welcomeMessage" placeholder="Welcome to the venue."></textarea></label>
+                </div>
+                <div class="theme-scrape-panel">
+                  <div class="theme-scrape-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="themeScrapeBtn">Extract from website</button>
+                    <span class="theme-scrape-status" id="themeScrapeStatus"></span>
+                  </div>
+                  <div class="theme-scrape-results" id="themeScrapeResults" aria-live="polite"></div>
                 </div>
               </div>
 
@@ -2964,6 +3016,7 @@ const PORTAL_DEFAULTS = {
   allowProofRecording: false,
   enableIdPhotoCapture: false,
   logoUrl: '',
+  websiteUrl: '',
   redirectUrl: '',
   staffRedirectUrl: '',
   welcomeMessage: '',
@@ -2971,7 +3024,7 @@ const PORTAL_DEFAULTS = {
 };
 const PORTAL_IDS = [
   'orgCode','eventCode','minimumTrustScore','biometricRequired','privacyMode','anonymousMode','checkoutRequired','returnAllowed',
-  'allowSelfSelection','requireDoormanConfirmation','requireAdditionalProof','allowProofRecording','enableIdPhotoCapture','logoUrl','redirectUrl','staffRedirectUrl','welcomeMessage'
+  'allowSelfSelection','requireDoormanConfirmation','requireAdditionalProof','allowProofRecording','enableIdPhotoCapture','logoUrl','websiteUrl','redirectUrl','staffRedirectUrl','welcomeMessage'
 ];
 let currentOrg = null;
 let currentMode = 'attendee_scan';
@@ -2983,6 +3036,7 @@ let settings = {
   returnAllowed: true,
   anonymousMode: false,
   logoUrl: '',
+  websiteUrl: '',
   welcomeMessage: 'Welcome. Please review and confirm your check-in.',
   redirectUrl: '',
   staffRedirectUrl: '',
@@ -3079,6 +3133,8 @@ function applyServerSettingsToLocalState(s) {
   if (typeof src.checkoutEnabled === 'boolean') portalState.checkoutRequired = src.checkoutEnabled;
   if (typeof src.returnAllowed === 'boolean') portalState.returnAllowed = src.returnAllowed;
   if (typeof src.logoUrl === 'string') portalState.logoUrl = src.logoUrl;
+  if (typeof src.websiteUrl === 'string') portalState.websiteUrl = src.websiteUrl;
+  else if (typeof src.website_url === 'string') portalState.websiteUrl = src.website_url;
   if (typeof src.welcomeMessage === 'string') portalState.welcomeMessage = src.welcomeMessage;
   if (typeof src.redirectUrl === 'string') portalState.redirectUrl = src.redirectUrl;
   if (typeof src.staffRedirectUrl === 'string') portalState.staffRedirectUrl = src.staffRedirectUrl;
@@ -3305,6 +3361,180 @@ function handleChromeLogoError() {
   }
   logo.style.display = 'none';
   if (fallback) fallback.style.display = 'block';
+}
+function normalizeThemeHex(value) {
+  const v = String(value || '').trim();
+  if (/^#[0-9a-f]{6}$/i.test(v)) return v.toUpperCase();
+  if (/^#[0-9a-f]{3}$/i.test(v)) return '#' + v.slice(1).split('').map(ch => ch + ch).join('').toUpperCase();
+  return '';
+}
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      default: h = (r - g) / d + 4;
+    }
+    h *= 60;
+  }
+  return { h, s, l };
+}
+function hslBucketKey(hsl) {
+  return [Math.round(hsl.h / 18) * 18, Math.round(hsl.s * 5) / 5, Math.round(hsl.l * 5) / 5].join(':');
+}
+function rgbToHex(r, g, b) {
+  return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+function loadImageForSampling(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('image_load_failed'));
+    img.src = src;
+  });
+}
+async function sampleDominantLogoColour(imageUrl, triedProxy) {
+  const src = triedProxy || !window.IRLidOrgApi?.imageProxyUrl ? imageUrl : imageUrl;
+  let img;
+  try {
+    img = await loadImageForSampling(src);
+  } catch (err) {
+    if (!triedProxy && window.IRLidOrgApi?.imageProxyUrl) return sampleDominantLogoColour(window.IRLidOrgApi.imageProxyUrl(imageUrl), true);
+    throw err;
+  }
+  const canvas = document.getElementById('themeScrapeCanvas') || document.createElement('canvas');
+  canvas.id = 'themeScrapeCanvas';
+  canvas.hidden = true;
+  if (!canvas.parentNode) document.body.appendChild(canvas);
+  const maxSide = 120;
+  const ratio = Math.min(1, maxSide / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height));
+  canvas.width = Math.max(1, Math.round((img.naturalWidth || img.width) * ratio));
+  canvas.height = Math.max(1, Math.round((img.naturalHeight || img.height) * ratio));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  let data;
+  try {
+    data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  } catch (err) {
+    if (!triedProxy && window.IRLidOrgApi?.imageProxyUrl) return sampleDominantLogoColour(window.IRLidOrgApi.imageProxyUrl(imageUrl), true);
+    throw err;
+  }
+  const buckets = new Map();
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a < 128) continue;
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const hsl = rgbToHsl(r, g, b);
+    if (hsl.s < 0.18 || hsl.l < 0.12 || hsl.l > 0.92) continue;
+    const key = hslBucketKey(hsl);
+    const bucket = buckets.get(key) || { count: 0, r: 0, g: 0, b: 0 };
+    bucket.count += 1;
+    bucket.r += r; bucket.g += g; bucket.b += b;
+    buckets.set(key, bucket);
+  }
+  let best = null;
+  for (const bucket of buckets.values()) {
+    if (!best || bucket.count > best.count) best = bucket;
+  }
+  return best ? rgbToHex(best.r / best.count, best.g / best.count, best.b / best.count) : '';
+}
+function setThemeScrapeStatus(message, kind) {
+  const el = document.getElementById('themeScrapeStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = 'theme-scrape-status' + (kind ? ' ' + kind : '');
+}
+function applyScrapedPrimary(hex) {
+  const value = normalizeThemeHex(hex);
+  if (!value) return;
+  activeTheme.primary = value;
+  if (_iroPickers.primary) _iroPickers.primary.color.hexString = value;
+  const input = document.getElementById('themePrimaryHex');
+  if (input) input.value = value;
+  applyThemeVars(activeTheme);
+  setThemeSaveStatus('Primary colour updated. Save settings to persist.', 'ok');
+}
+function applyScrapedLogo(url) {
+  const value = String(url || '').trim();
+  if (!value) return;
+  const input = document.getElementById('logoUrl');
+  if (input) input.value = value;
+  portalState.logoUrl = value;
+  syncLegacyFromPortal();
+  updateChromeLogo();
+  renderPortalAll();
+  setThemeSaveStatus('Logo URL updated. Save settings to persist.', 'ok');
+}
+function renderThemeScrapeResults(result, logoSamples) {
+  const root = document.getElementById('themeScrapeResults');
+  if (!root) return;
+  const metaHex = normalizeThemeHex(result && result.theme_color);
+  const dominant = (logoSamples || []).find(s => s.hex)?.hex || '';
+  const colorRows = [
+    metaHex ? { label: 'Meta theme-colour', hex: metaHex } : null,
+    dominant ? { label: 'Dominant logo colour', hex: dominant } : null
+  ].filter(Boolean);
+  const colorHtml = colorRows.length ? colorRows.map(c => `
+    <div class="theme-color-candidate">
+      <div class="theme-color-swatch" style="background:${escapeHtml(c.hex)}"></div>
+      <div><div class="theme-candidate-label">${escapeHtml(c.label)}</div><div class="theme-candidate-value">${escapeHtml(c.hex)}</div></div>
+      <button type="button" class="btn btn-primary btn-sm" data-scrape-use-colour="${escapeHtml(c.hex)}">Use this</button>
+    </div>`).join('') : '<div class="theme-scrape-empty">No colour candidates found.</div>';
+  const logos = Array.isArray(result?.logo_candidates) ? result.logo_candidates : [];
+  const logoHtml = logos.length ? logos.map(url => `
+    <div class="theme-logo-candidate">
+      <img class="theme-logo-thumb" src="${escapeHtml(url)}" alt="">
+      <div><div class="theme-candidate-label">Logo candidate</div><div class="theme-candidate-value" title="${escapeHtml(url)}">${escapeHtml(url)}</div></div>
+      <button type="button" class="btn btn-secondary btn-sm" data-scrape-use-logo="${escapeHtml(url)}">Use this</button>
+    </div>`).join('') : '<div class="theme-scrape-empty">No logo candidates found.</div>';
+  root.innerHTML = `
+    <div class="theme-scrape-title">${escapeHtml(result?.title || 'Website theme candidates')}</div>
+    <div class="theme-scrape-candidates">${colorHtml}</div>
+    <div class="theme-logo-list">${logoHtml}</div>`;
+  root.classList.add('visible');
+}
+async function extractThemeFromWebsite() {
+  const btn = document.getElementById('themeScrapeBtn');
+  const websiteInput = document.getElementById('websiteUrl');
+  const websiteUrl = (websiteInput?.value || '').trim();
+  if (!currentOrg?.id) return showToast('Select a signed-in organisation first', true);
+  if (!qrLoginSession?.session_token) return showToast('Sign in with an Org Portal session first', true);
+  if (!/^https?:\/\/[^\s]{3,}$/i.test(websiteUrl)) return showToast('Enter a website URL first', true);
+
+  if (btn) btn.disabled = true;
+  setThemeScrapeStatus('Saving website URL...', '');
+  try {
+    if (portalState.websiteUrl !== websiteUrl) {
+      portalState.websiteUrl = websiteUrl;
+      syncLegacyFromPortal();
+      await window.IRLidOrgApi.updateOrgSettings(currentOrg.api_key, { websiteUrl });
+    }
+    setThemeScrapeStatus('Extracting theme...', '');
+    const result = await window.IRLidOrgApi.scrapeTheme(qrLoginSession.session_token, currentOrg.id);
+    setThemeScrapeStatus('Sampling logo colours...', '');
+    const logos = (result.logo_candidates || []).slice(0, 6);
+    const samples = [];
+    for (const logo of logos) {
+      try { samples.push({ url: logo, hex: await sampleDominantLogoColour(logo) }); }
+      catch (err) { samples.push({ url: logo, hex: '' }); }
+    }
+    renderThemeScrapeResults(result, samples);
+    setThemeScrapeStatus(result.cached ? 'Loaded cached extraction.' : 'Extraction complete.', 'ok');
+  } catch (err) {
+    console.error('[theme scrape] failed', err);
+    setThemeScrapeStatus('Extraction failed: ' + (err.message || 'unknown error'), 'err');
+    showToast('Theme extraction failed: ' + (err.message || 'unknown error'), true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 function setSignedInUI(isSignedIn) {
   document.getElementById('navDashboard').classList.toggle('hidden', !isSignedIn);
@@ -3864,6 +4094,7 @@ function collectSettingsFromCanonical() {
     returnAllowed: !!document.getElementById('returnAllowed')?.checked,
     anonymousMode: !!document.getElementById('anonymousMode')?.checked,
     logoUrl: document.getElementById('logoUrl')?.value.trim() || '',
+    websiteUrl: document.getElementById('websiteUrl')?.value.trim() || '',
     welcomeMessage: document.getElementById('welcomeMessage')?.value.trim() || '',
     redirectUrl: document.getElementById('redirectUrl')?.value.trim() || '',
     staffRedirectUrl: document.getElementById('staffRedirectUrl')?.value.trim() || '',
@@ -3914,6 +4145,7 @@ async function saveSettings() {
     returnAllowed: !!document.getElementById('returnAllowed')?.checked,
     anonymousMode: !!document.getElementById('anonymousMode')?.checked,
     logoUrl: (document.getElementById('logoUrl')?.value || '').trim(),
+    websiteUrl: (document.getElementById('websiteUrl')?.value || '').trim(),
     welcomeMessage: (document.getElementById('welcomeMessage')?.value || '').trim(),
     redirectUrl: (document.getElementById('redirectUrl')?.value || '').trim(),
     staffRedirectUrl: (document.getElementById('staffRedirectUrl')?.value || '').trim(),
@@ -3981,6 +4213,7 @@ async function saveSettings() {
   // Compare — empty string and undefined both treated as "no value".
   function eq(a, b) { return (a || '') === (b || ''); }
   if (!eq(payload.logoUrl, r.logoUrl)) lost.push('logoUrl');
+  if (!eq(payload.websiteUrl, r.websiteUrl || r.website_url)) lost.push('websiteUrl');
   if (!eq(payload.redirectUrl, r.redirectUrl)) lost.push('redirectUrl');
   if (!eq(payload.staffRedirectUrl, r.staffRedirectUrl)) lost.push('staffRedirectUrl');
   if (!eq(payload.welcomeMessage, r.welcomeMessage)) lost.push('welcomeMessage');
@@ -4009,7 +4242,7 @@ async function saveSettings() {
   showToast('✓ Settings saved and verified');
 }
 function resetSettingsToDefaults() {
-  settings = { minScore: 50, bioRequired: false, privacyMode: true, checkoutEnabled: true, returnAllowed: true, anonymousMode: false, logoUrl: '', welcomeMessage: 'Welcome. Please review and confirm your check-in.', redirectUrl: '', allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true, allowProofRecording: true, allowIdPhotoCapture: false };
+  settings = { minScore: 50, bioRequired: false, privacyMode: true, checkoutEnabled: true, returnAllowed: true, anonymousMode: false, logoUrl: '', websiteUrl: '', welcomeMessage: 'Welcome. Please review and confirm your check-in.', redirectUrl: '', allowSelfSelect: true, requireDoormanConfirm: true, requireProof: true, allowProofRecording: true, allowIdPhotoCapture: false };
   saveJson(STORAGE_KEY_SETTINGS, settings); applySettingsToUI(); syncPortalFromLegacy(); renderPortalAll(); generateVenueQR(); showToast('Settings reset to defaults');
 }
 function renderExpectedAttendees() {
@@ -6101,6 +6334,7 @@ function buildPortalSummaryText() {
     `Allow proof recording: ${portalState.allowProofRecording ? 'Yes' : 'No'}`,
     `Enable ID photo capture: ${portalState.enableIdPhotoCapture ? 'Yes' : 'No'}`,
     `Logo image URL: ${portalState.logoUrl || '(none)'}`,
+    `Website URL: ${portalState.websiteUrl || '(none)'}`,
     `Custom welcome message: ${portalState.welcomeMessage || '(none)'}`,
     `Post-accept redirect URL: ${portalState.redirectUrl || '(none)'}`,
     `Staff post-accept redirect URL: ${portalState.staffRedirectUrl || '(none)'}`
@@ -6127,6 +6361,7 @@ function syncPortalFromLegacy() {
   portalState.allowProofRecording = !!settings.allowProofRecording;
   portalState.enableIdPhotoCapture = !!settings.allowIdPhotoCapture;
   portalState.logoUrl = settings.logoUrl || '';
+  portalState.websiteUrl = settings.websiteUrl || '';
   portalState.redirectUrl = settings.redirectUrl || '';
   portalState.staffRedirectUrl = settings.staffRedirectUrl || '';
   portalState.welcomeMessage = settings.welcomeMessage || '';
@@ -6147,6 +6382,7 @@ function syncLegacyFromPortal() {
   settings.allowProofRecording = !!portalState.allowProofRecording;
   settings.allowIdPhotoCapture = !!portalState.enableIdPhotoCapture;
   settings.logoUrl = portalState.logoUrl || '';
+  settings.websiteUrl = portalState.websiteUrl || '';
   settings.redirectUrl = portalState.redirectUrl || '';
   settings.staffRedirectUrl = portalState.staffRedirectUrl || '';
   settings.welcomeMessage = portalState.welcomeMessage || '';
@@ -6206,6 +6442,7 @@ function buildPortalSummaryItems() {
     ['Proof recording', portalState.allowProofRecording ? 'Yes' : 'No'],
     ['ID photo',        portalState.enableIdPhotoCapture ? 'Yes' : 'No'],
     ['Logo URL',        displayValue(portalState.logoUrl)],
+    ['Website URL',     displayValue(portalState.websiteUrl)],
     ['Welcome',         displayValue(portalState.welcomeMessage)],
     ['Redirect URL',    displayValue(portalState.redirectUrl)]
   ];
@@ -6228,6 +6465,16 @@ function wirePortalFields() {
   // flow: read DOM → mirror to in-memory + localStorage → POST → readback →
   // verify round-trip → toast. No more pre-sync that could prime stale state.
   document.getElementById('savePortalSettingsBtn').addEventListener('click', saveSettings);
+  document.getElementById('themeScrapeBtn')?.addEventListener('click', extractThemeFromWebsite);
+  document.getElementById('themeScrapeResults')?.addEventListener('click', (event) => {
+    const colourBtn = event.target.closest('[data-scrape-use-colour]');
+    if (colourBtn) {
+      applyScrapedPrimary(colourBtn.getAttribute('data-scrape-use-colour'));
+      return;
+    }
+    const logoBtn = event.target.closest('[data-scrape-use-logo]');
+    if (logoBtn) applyScrapedLogo(logoBtn.getAttribute('data-scrape-use-logo'));
+  });
   document.getElementById('copyOutcomeUrlBtn').addEventListener('click', () => copyText(buildOutcomeUrl(portalState.activeMode)));
   document.getElementById('copyScanUrlBtn').addEventListener('click', () => copyText(SCAN_URL));
   document.getElementById('copySettingsBtn').addEventListener('click', () => copyText(buildPortalSummaryText()));
