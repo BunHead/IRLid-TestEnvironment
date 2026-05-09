@@ -4314,7 +4314,23 @@ function renderStats(rows, stats) {
   hasRenderedStats = true;
 }
 function renderTable(rows) {
-  const attendanceNames = new Set(rows.map(r => String(r.name || '').trim().toLowerCase()).filter(Boolean));
+  // v5.7.1.x — Prototype-role badge fix. Worker's /org/attendance returns
+  // org_checkins rows which DO NOT carry prototype_role (the column lives
+  // on org_expected, not org_checkins). Without enrichment, every attendee
+  // row defaults to 'A' (Attendee) regardless of staff tier — Spencer/
+  // Kerry both showed 'A' on the audit board for two days despite being
+  // staff-tier. Fix: client-side join via expected_id → expectedAttendees
+  // → prototype_role. Cheap, no Worker change, makes the audit board
+  // truthful about who's working the door.
+  const expectedById = new Map(
+    expectedAttendees.map(e => [String(e.id), e])
+  );
+  const enrichedRows = rows.map(r => {
+    if (r.prototype_role) return r;
+    const exp = r.expected_id != null ? expectedById.get(String(r.expected_id)) : null;
+    return exp ? Object.assign({}, r, { prototype_role: exp.prototype_role || 'attendee' }) : r;
+  });
+  const attendanceNames = new Set(enrichedRows.map(r => String(r.name || '').trim().toLowerCase()).filter(Boolean));
   const expectedRows = expectedAttendees
     .filter(row => !attendanceNames.has(expectedDisplayName(row).toLowerCase()))
     .map(row => ({
@@ -4329,7 +4345,7 @@ function renderTable(rows) {
       pending_sync: !!row.pending_sync,
       prototype_role: row.prototype_role || 'attendee'
     }));
-  const displayRows = rows.concat(expectedRows);
+  const displayRows = enrichedRows.concat(expectedRows);
   if (!displayRows.length) { document.getElementById('attendanceBody').innerHTML = '<div class="empty-state">No attendees returned from irlid-api-test</div>'; return; }
   document.getElementById('attendanceBody').innerHTML = `<table class="att-table"><thead><tr><th>Name / ID</th><th>First seen</th><th>Last seen</th><th>Scan count</th><th>Status</th><th class="att-role-col">Role</th><th>Action</th></tr></thead><tbody id="attendanceRows"></tbody></table>`;
   const liveTbody = document.getElementById('attendanceRows');
