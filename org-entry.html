@@ -122,6 +122,14 @@
     justify-content:center;
   }
 
+  /* v5.7.1k — bumped sizing for non-orange gateway states. Orange keeps its
+     v5.7.1g QR-first overrides below. */
+  body:not(.status-orange) .title{ font-size:clamp(40px, 8vw, 96px); }
+  body:not(.status-orange) .subtitle{ font-size:clamp(22px, 4vw, 40px); }
+  body:not(.status-orange) .icon-shell{ width:min(54vw, 340px); height:min(54vw, 340px); }
+  body:not(.status-orange) .logo{ width:min(70vw, 320px); max-height:240px; }
+  body:not(.status-orange) .brand-fallback{ width:min(56vw, 200px); height:min(56vw, 200px); }
+
   .icon-svg{
     width:100%;
     height:100%;
@@ -474,6 +482,14 @@
     }
     .identity-list{
       max-height:38vh;
+    }
+  }
+
+  /* v5.7.1k — site-wide mobile touch-target floor for the gateway. */
+  @media (max-width: 640px){
+    button, .btn, [role="button"]{
+      min-width:44px;
+      min-height:44px;
     }
   }
 
