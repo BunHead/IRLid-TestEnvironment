@@ -436,6 +436,26 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   .escalation-add-fields input { padding: 12px 12px; font-size: 15px; min-height: 44px; }
   .escalation-footer { padding: 0 14px 14px; }
 
+  /* v5.7.1k — site-wide mobile touch-target floor. Applies only on
+     viewports <=640px so desktop density stays unchanged. */
+  button, .btn, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .att-action-cell button,
+  .checkout-actions button,
+  .conflict-actions button,
+  .topbar-actions button,
+  .expected-admin-actions button {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+  .expected-role-select,
+  .expected-admin-fields input {
+    min-height: 44px;
+  }
+
   /* v5.7.1j - Mobile dashboard reshape: hide inline Attendance Today in
      favour of the View Attendance Board button -> audit mode. */
   body[data-active-panel="dashboard"]:not(.audit-mode) #dashboardAttendanceCard,
@@ -692,6 +712,9 @@ body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
 .audit-exit-btn { position: fixed; top: 12px; right: 12px; z-index: 1200; display: none; padding: 10px 14px; border: 1px solid var(--green); border-radius: 8px; background: rgba(13,17,23,0.85); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; backdrop-filter: blur(6px); }
 .audit-exit-btn:hover { background: rgba(13,17,23,0.96); }
 body.audit-mode .audit-exit-btn { display: inline-flex; align-items: center; gap: 6px; }
+.audit-refresh-btn { position: fixed; bottom: 16px; right: 16px; z-index: 1200; display: none; align-items: center; justify-content: center; gap: 6px; padding: 12px 18px; min-height: 44px; background: rgba(255,149,0,0.92); color: #03120a; border: none; border-radius: 10px; font: 700 14px/1 system-ui, sans-serif; cursor: pointer; box-shadow: 0 8px 18px rgba(0,0,0,0.35); }
+.audit-refresh-btn:active { transform: scale(0.97); }
+body.audit-mode .audit-refresh-btn { display: inline-flex; }
 body.audit-mode .sidebar,
 body.audit-mode .topbar,
 body.audit-mode .panel:not(#panel-dashboard),
@@ -2899,6 +2922,7 @@ body #venueQRWrap.cycle-burst-pattern {
      audit-mode class. Tap to drop fullscreen, release orientation lock, and
      restore the standard dashboard chrome. -->
 <button class="audit-exit-btn" id="auditExitBtn" type="button" onclick="exitAuditMode()" aria-label="Exit audit mode" title="Exit audit mode">↩ Exit audit</button>
+<button class="audit-refresh-btn" id="auditRefreshBtn" type="button" aria-label="Refresh audit board" title="Refresh audit board">↻ Refresh</button>
 <input type="file" id="csvFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" style="display:none">
 
 <script>
@@ -5432,6 +5456,13 @@ async function exitAuditMode() {
     console.warn('[audit] exit failed:', err);
   }
 }
+document.getElementById('auditRefreshBtn')?.addEventListener('click', () => {
+  if (typeof refreshAttendanceFromUI === 'function') {
+    refreshAttendanceFromUI();
+  } else if (typeof refreshAttendance === 'function') {
+    refreshAttendance();
+  }
+});
 // If the user presses Escape (which Chrome treats as exit-fullscreen) drop
 // the audit-mode class too so the chrome comes back. Without this hook,
 // staff would end up in audit-styling without fullscreen — the worst of
