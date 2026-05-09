@@ -456,6 +456,102 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
     min-height: 44px;
   }
 
+  /* v5.7.1v — Mobile sweep for Settings -> Theme customization. These
+     selectors are the live Settings DOM: theme-pickers, palette swatches,
+     animation rows, switches, and portal action buttons. */
+  body[data-active-panel="settings"] .theme-pickers {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+  }
+  body[data-active-panel="settings"] .theme-hex-input {
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  body[data-active-panel="settings"] .theme-palette-swatch .swatch-remove {
+    top: -10px;
+    right: -10px;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+  }
+  body[data-active-panel="settings"] .theme-palette-actions button,
+  body[data-active-panel="settings"] .theme-anim-duplicators .dup-btn,
+  body[data-active-panel="settings"] .theme-anim-panel > button,
+  body[data-active-panel="settings"] .theme-actions button,
+  body[data-active-panel="settings"] .settings-actions button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  body[data-active-panel="settings"] #themeSaveBtn,
+  body[data-active-panel="settings"] #savePortalSettingsBtn {
+    min-height: 48px;
+    padding: 12px 18px;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  body[data-active-panel="settings"] #themeBgPaletteReset,
+  body[data-active-panel="settings"] #themePaletteReset,
+  body[data-active-panel="settings"] #resetPortalSettingsBtn {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+  body[data-active-panel="settings"] .theme-anim-row {
+    align-items: stretch;
+    gap: 10px;
+  }
+  body[data-active-panel="settings"] .theme-anim-row > span:first-child {
+    display: flex;
+    align-items: center;
+  }
+  body[data-active-panel="settings"] .theme-anim-select,
+  body[data-active-panel="settings"] .expected-role-select {
+    min-height: 48px;
+    max-width: 100%;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  body[data-active-panel="settings"] .theme-anim-speed input[type="range"] {
+    height: 44px;
+  }
+  body[data-active-panel="settings"] .theme-anim-speed input[type="range"]::-webkit-slider-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  body[data-active-panel="settings"] .theme-anim-speed input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+  }
+  body[data-active-panel="settings"] #themeBgImageUpload {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  body[data-active-panel="settings"] .switch-tile,
+  body[data-active-panel="settings"] .switch-top,
+  body[data-active-panel="settings"] .theme-mode-options label {
+    min-height: 44px;
+  }
+  body[data-active-panel="settings"] .switch-wrap {
+    width: 52px;
+    height: 32px;
+  }
+  body[data-active-panel="settings"] .switch-slider::before {
+    width: 24px;
+    height: 24px;
+  }
+  body[data-active-panel="settings"] .settings-field input,
+  body[data-active-panel="settings"] .settings-field textarea {
+    min-height: 48px;
+    padding: 12px 14px;
+    font-size: 16px;
+  }
+  body[data-active-panel="settings"] .settings-group h4 {
+    margin-top: 24px;
+    margin-bottom: 12px;
+  }
+
   /* v5.7.1j - Mobile dashboard reshape: hide inline Attendance Today in
      favour of the View Attendance Board button -> audit mode. */
   body[data-active-panel="dashboard"]:not(.audit-mode) #dashboardAttendanceCard,
@@ -2150,7 +2246,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1u</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1v</span></div>
   </div>
 </div>
 
