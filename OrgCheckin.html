@@ -1858,18 +1858,25 @@ body[data-bg-mode="image"][data-bg-image-position="bottom-right"] #venueQRWrap {
 /* v5.7.1p — Dashboard flat-bg. Captain UX call after the audit-board
    landing on hardware: the cycling/animated background that's right
    for the public Check-in surface is friction on the staff Dashboard
-   surface where attention should go to data, not motion. Override
-   bg styling on body[data-active-panel="dashboard"] only — Check-in
-   panel retains the full branding/cycling treatment. Synergy moment:
+   surface where attention should go to data, not motion. Synergy moment:
    Captain and Number One independently arrived at "off, not just
-   quieter" as the right answer. */
-body[data-active-panel="dashboard"] {
+   quieter" as the right answer.
+
+   v5.7.1q — Extended to ALL staff/admin surfaces per Captain follow-up:
+   "still very blue around the edges" on Check-in tab. The cycling body
+   bg behind the panel cards looked too loud everywhere, not just on
+   Dashboard. Body now flat dark across the whole OrgCheckin.html surface;
+   the inner Check-in PUBLIC QR card retains its own card-level branding
+   (not body-level), so the public attendee QR display keeps its full
+   blue gradient as designed. Captain's directive: "(remembering to not
+   do it to the Check-in panel background :))" — honoured. */
+body {
   background-image: none !important;
   background-color: var(--page-bg, #0d1117) !important;
   animation: none !important;
 }
-body[data-active-panel="dashboard"]::before,
-body[data-active-panel="dashboard"]::after {
+body::before,
+body::after {
   animation: none !important;
 }
 /* v5.7.1m.1 — edge anchors (Top/Bottom/Left/Right) added alongside the
@@ -2059,7 +2066,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1p</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1q</span></div>
   </div>
 </div>
 
