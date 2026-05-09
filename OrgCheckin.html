@@ -600,6 +600,42 @@ body[data-prototype-role="staff"] .att-table .att-role-col { display: none; }
 .role-mini.staff { border-color: rgba(88,166,255,0.5); color: var(--blue); }
 .role-mini.manager { border-color: rgba(210,153,34,0.58); color: var(--orange); }
 .role-mini.lead_admin, .role-mini.developer { border-color: rgba(63,185,80,0.62); color: var(--green); }
+/* v5.7.1s — Inverted role badges for attendees currently checked IN.
+   Captain visual-cue request: at a glance, "who's in the building right
+   now" should be obvious. Inverted = role colour fills the badge, letter
+   punches through in the bg colour. Normal badges (expected, OUT) stay
+   as-is. Drives off a .inverted class added by renderTable() when the
+   row has active_checkin_id and status is not expected/conflict/invalid. */
+.role-mini.inverted { background: currentColor; }
+.role-mini.inverted::after {
+  /* Use the letter as a CSS-only inverted display — but simpler is just
+     to flip color: dark text on coloured bg. */
+}
+.role-mini.inverted.attendee { color: var(--muted); }
+.role-mini.inverted.staff,
+.role-mini.inverted.manager,
+.role-mini.inverted.lead_admin,
+.role-mini.inverted.developer {
+  /* The letter inside needs to flip to dark so it's readable on the
+     filled coloured background. We can't change child color separately
+     because the letter is a text node. Trick: use a transparent text-
+     fill with a contrasting text-stroke, OR override color and rely on
+     contrast. Cleanest: keep currentColor as bg via a custom property. */
+}
+/* Cleaner approach using a CSS custom property for the role colour: */
+.role-mini.staff      { --role-c: var(--blue); }
+.role-mini.manager    { --role-c: var(--orange); }
+.role-mini.lead_admin { --role-c: var(--green); }
+.role-mini.developer  { --role-c: var(--green); }
+.role-mini.attendee   { --role-c: var(--muted); }
+.role-mini.inverted {
+  background: var(--role-c, var(--muted));
+  color: var(--bg, #0b1220);
+  border-color: var(--role-c, var(--muted));
+}
+:root[data-theme="light"] .role-mini.inverted {
+  color: #ffffff;
+}
 .score-pill { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
 .score-high { background: #1a4731; color: var(--green); }
 .score-med { background: #2d2a0f; color: var(--orange); }
@@ -2081,7 +2117,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1r</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1s</span></div>
   </div>
 </div>
 
@@ -4404,15 +4440,20 @@ function renderTable(rows) {
     // v5.7.0k — Role badge moves to its own column; Action holds only the
     // verbs (Initiate check-out / Delete record / Delete expected / etc.).
     const actionHtml = r.expected_only ? buildExpectedRowAction(r) : buildCheckoutAction(r);
-    const roleHtml = expectedRoleBadge(r.prototype_role);
+    // v5.7.1s — Pass IN flag so role badge inverts when attendee is
+    // currently checked in (active_checkin_id + not expected/conflict/invalid).
+    const isCurrentlyIn = !!checkinId && r.status !== 'expected' && r.status !== 'expected_linked' && r.status !== 'invalid' && r.status !== 'conflict';
+    const roleHtml = expectedRoleBadge(r.prototype_role, isCurrentlyIn);
     return `<tr${rowClass}><td>${escapeHtml(displayLabel)}${pendingPill}</td><td>${formatTimestamp(r.first_seen)}</td><td>${formatTimestamp(r.last_seen)}</td><td>${r.scan_count || 0}</td><td>${rowStatus}</td><td class="att-role-col">${roleHtml}</td><td><div class="att-action-cell">${actionHtml}</div></td></tr>`;
   }).join('');
 }
-function expectedRoleBadge(role) {
+function expectedRoleBadge(role, isCurrentlyIn) {
   const normalized = roleLabelFor(role) === 'Attendee' ? 'attendee' : String(role || 'attendee').trim().toLowerCase();
   const label = roleLabelFor(normalized);
   const short = { attendee: 'A', staff: 'S', manager: 'M', lead_admin: 'L', developer: 'D' }[normalized] || 'A';
-  return `<span class="role-mini ${escapeHtml(normalized)}" title="${escapeHtml(label)}">${short}</span>`;
+  // v5.7.1s — Add 'inverted' class when attendee is currently checked in.
+  const invertedClass = isCurrentlyIn ? ' inverted' : '';
+  return `<span class="role-mini ${escapeHtml(normalized)}${invertedClass}" title="${escapeHtml(label)}${isCurrentlyIn ? ' · currently in' : ''}">${short}</span>`;
 }
 function buildDeleteRecordButton(row) {
   // v5.7.0g — Lead Admin+ secondary action that cascades to remove the
