@@ -1428,9 +1428,10 @@ async function orgUpdateSettings(request, env) {
       if (!/^(https:\/\/|data:image\/)/i.test(t.bgImageUrl)) return "theme.bgImageUrl must be an https:// URL or data:image/ URI";
     }
     if (t.bgImagePosition !== undefined) {
-      const POSITIONS = ["centre","tile","cover","top-left","top-right","bottom-left","bottom-right"];
+      // v5.7.1m.1 — added edge anchors top/bottom/left/right alongside the four corner anchors.
+      const POSITIONS = ["centre","tile","cover","top","top-left","top-right","bottom","bottom-left","bottom-right","left","right"];
       if (typeof t.bgImagePosition !== "string" || POSITIONS.indexOf(t.bgImagePosition) === -1) {
-        return "theme.bgImagePosition must be one of: centre, tile, cover, top-left, top-right, bottom-left, bottom-right";
+        return "theme.bgImagePosition must be one of: centre, tile, cover, top, top-left, top-right, bottom, bottom-left, bottom-right, left, right";
       }
     }
     if (t.bgImageAlphaCycle !== undefined && typeof t.bgImageAlphaCycle !== "boolean") {

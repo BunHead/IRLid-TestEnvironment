@@ -55,6 +55,20 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .sidebar { width: 220px; max-height: 100dvh; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; overflow-y: auto; }
 .sidebar-logo { padding: 18px 16px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: flex-start; align-items: center; min-height: 76px; }
 .sidebar-logo img { display: block; height: 38px; width: auto; max-width: 160px; object-fit: contain; opacity: 0.95; }
+/* v5.7.1.x — IRLid fallback logo contrast. When no org-specific logo is
+   linked (chromeLogoUrl() falls back to logo.png), invert the logo in
+   light mode so the white-on-dark IRLid mark flips to black-on-light.
+   Org-uploaded logos render as-is — no filter. Mirror of the scan.html
+   treatment. */
+.sidebar-logo img[data-irlid-fallback="true"] {
+  filter: var(--irlid-logo-filter, none);
+}
+@media (prefers-color-scheme: light) {
+  :root { --irlid-logo-filter: invert(1); }
+}
+:root[data-theme="light"] .sidebar-logo img[data-irlid-fallback="true"] {
+  filter: invert(1);
+}
 .sidebar-fallback { font-size: 22px; font-weight: 800; letter-spacing: 1px; }
 .org-badge { margin: 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .org-badge .org-name { font-size: 13px; font-weight: 600; }
@@ -1841,6 +1855,29 @@ body[data-bg-mode="image"][data-bg-image-position="bottom-right"] .irlid-qr-full
 body[data-bg-mode="image"][data-bg-image-position="bottom-right"] #venueQRWrap {
   background-position: bottom right;
 }
+/* v5.7.1m.1 — edge anchors (Top/Bottom/Left/Right) added alongside the
+   four corner anchors. Centred along the perpendicular axis, anchored
+   to the named edge. Captain's UX call after v5.7.1m ship. */
+body[data-bg-mode="image"][data-bg-image-position="top"],
+body[data-bg-mode="image"][data-bg-image-position="top"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top"] #venueQRWrap {
+  background-position: top center;
+}
+body[data-bg-mode="image"][data-bg-image-position="bottom"],
+body[data-bg-mode="image"][data-bg-image-position="bottom"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom"] #venueQRWrap {
+  background-position: bottom center;
+}
+body[data-bg-mode="image"][data-bg-image-position="left"],
+body[data-bg-mode="image"][data-bg-image-position="left"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="left"] #venueQRWrap {
+  background-position: center left;
+}
+body[data-bg-mode="image"][data-bg-image-position="right"],
+body[data-bg-mode="image"][data-bg-image-position="right"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="right"] #venueQRWrap {
+  background-position: center right;
+}
 @property --theme-pattern-fg {
   syntax: '<color>';
   inherits: true;
@@ -2538,10 +2575,14 @@ body #venueQRWrap.cycle-burst-pattern {
                         <option value="centre">Centre</option>
                         <option value="tile">Tile</option>
                         <option value="cover">Cover</option>
+                        <option value="top">Top</option>
                         <option value="top-left">Top left</option>
                         <option value="top-right">Top right</option>
+                        <option value="bottom">Bottom</option>
                         <option value="bottom-left">Bottom left</option>
                         <option value="bottom-right">Bottom right</option>
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
                       </select>
                     </label>
                     <label class="theme-anim-row" data-bg-mode-show="image">
@@ -3133,8 +3174,13 @@ function updateChromeLogo() {
   const fallback = document.querySelector('.sidebar-fallback');
   if (!logo) return;
   const src = chromeLogoUrl();
+  const isIrlidFallback = (src === 'logo.png');
   logo.alt = currentOrg?.name ? `${currentOrg.name} logo` : 'IRLid logo';
-  logo.dataset.fallbackTried = src === 'logo.png' ? '1' : '0';
+  logo.dataset.fallbackTried = isIrlidFallback ? '1' : '0';
+  // v5.7.1.x — mark IRLid fallback so CSS can apply the
+  // theme-aware contrast filter (mirror of scan.html treatment).
+  // Org-uploaded logos render as-is, no invert.
+  logo.dataset.irlidFallback = isIrlidFallback ? 'true' : 'false';
   logo.style.display = 'block';
   if (fallback) fallback.style.display = 'none';
   if (logo.getAttribute('src') !== src) logo.src = src;
@@ -6663,7 +6709,7 @@ const PAGE_CYCLE_BASE = '#06070C';     // base canvas colour we blend palette in
 const PAGE_MUTED_RATIO = 0.18;          // 18% palette / 82% base — tinted but stays moody
 const PAGE_VIBRANT_RATIO = 0.78;        // 78% palette / 22% base — saturated but slightly shaded
 const BG_PATTERNS = ['dots','hex','diag','checker','grid','weave','chevron','iso'];
-const BG_IMAGE_POSITIONS = ['centre','tile','cover','top-left','top-right','bottom-left','bottom-right'];
+const BG_IMAGE_POSITIONS = ['centre','tile','cover','top','top-left','top-right','bottom','bottom-left','bottom-right','left','right']; // v5.7.1m.1 — added edge anchors top/bottom/left/right
 let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette], bgPalette: [...THEME_DEFAULTS.bgPalette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
