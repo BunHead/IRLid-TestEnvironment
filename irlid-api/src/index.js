@@ -1330,7 +1330,7 @@ async function orgUpdateSettings(request, env) {
     // --- Branding ---
     "logoUrl","welcomeMessage","redirectUrl",
     // --- Theme (Batch 6.5 → 6.5f) ---
-    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, bgMode, bgIntensity, bgPattern, bgImageUrl, cycleMode, bgAnimDuration, cycleAnimDuration } — validated below
+    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, bgMode, bgIntensity, bgPattern, bgImageUrl, bgImagePosition, bgImageAlphaCycle, cycleMode, bgAnimDuration, cycleAnimDuration } — validated below
   ];
   // Theme validators — defensive, applied before merge.
   function isHex6(v) { return typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v); }
@@ -1388,8 +1388,8 @@ async function orgUpdateSettings(request, env) {
     }
     // Batch 6.5d → 6.5e — background mode + intensity + bgPalette array + pattern + Tier-3
     if (t.bgMode !== undefined) {
-      if (typeof t.bgMode !== "string" || ["off","page","glow","pattern"].indexOf(t.bgMode) === -1) {
-        return "theme.bgMode must be one of: off, page, glow, pattern";
+      if (typeof t.bgMode !== "string" || ["off","page","glow","pattern","image"].indexOf(t.bgMode) === -1) {
+        return "theme.bgMode must be one of: off, page, glow, pattern, image";
       }
     }
     // bgIntensity — Batch 6.5e canonical name for muted/vibrant page-cycle.
@@ -1426,6 +1426,15 @@ async function orgUpdateSettings(request, env) {
       if (typeof t.bgImageUrl !== "string") return "theme.bgImageUrl must be a string or null";
       if (t.bgImageUrl.length > 300000) return "theme.bgImageUrl too long (max 300000 chars ≈ 225KB binary)";
       if (!/^(https:\/\/|data:image\/)/i.test(t.bgImageUrl)) return "theme.bgImageUrl must be an https:// URL or data:image/ URI";
+    }
+    if (t.bgImagePosition !== undefined) {
+      const POSITIONS = ["centre","tile","cover","top-left","top-right","bottom-left","bottom-right"];
+      if (typeof t.bgImagePosition !== "string" || POSITIONS.indexOf(t.bgImagePosition) === -1) {
+        return "theme.bgImagePosition must be one of: centre, tile, cover, top-left, top-right, bottom-left, bottom-right";
+      }
+    }
+    if (t.bgImageAlphaCycle !== undefined && typeof t.bgImageAlphaCycle !== "boolean") {
+      return "theme.bgImageAlphaCycle must be a boolean";
     }
     return null;
   }
