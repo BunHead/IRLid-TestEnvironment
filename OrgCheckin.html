@@ -1726,8 +1726,15 @@ button.theme-preview-button:focus-visible {
    to visualise the Outer/Centre/Inner anchor offset. */
 .theme-anim-row--stacked { align-items: flex-start; }
 .theme-anim-row--stacked > span { padding-top: 6px; }
-.bg-pos-controls { display: flex; flex-direction: column; gap: 10px; }
-.bg-pos-mode-chips { display: inline-flex; gap: 4px; background: var(--surface-2, #1a1f29); border-radius: 8px; padding: 3px; }
+/* v5.7.1z — Captain's "align left AND right" call: stretch all three
+   controls (chip row, grid, anchor segmented) to the same width so their
+   left AND right edges align. Grid is naturally widest (3×48 + 2×6 gap =
+   156px); chips and anchor stretch to match via width: 100% + justify-
+   content: space-between to spread their buttons evenly. */
+.bg-pos-controls { display: flex; flex-direction: column; gap: 10px; align-items: stretch; width: max-content; }
+/* v5.7.1z — display: flex (was inline-flex) + justify-content: space-between
+   so chips stretch to fill .bg-pos-controls width (matching the grid below). */
+.bg-pos-mode-chips { display: flex; justify-content: space-between; gap: 4px; background: var(--surface-2, #1a1f29); border-radius: 8px; padding: 3px; }
 .bg-pos-mode-chip {
   background: transparent;
   border: 1px solid transparent;
@@ -1793,17 +1800,21 @@ button.theme-preview-button:focus-visible {
 .bg-pos-cell[data-pos="bottom-left"]  .bg-pos-dot { top: auto; bottom: 4px; left: 4px;  transform: none; }
 .bg-pos-cell[data-pos="bottom"]       .bg-pos-dot { top: auto; bottom: 4px; left: 50%;  transform: translateX(-50%); }
 .bg-pos-cell[data-pos="bottom-right"] .bg-pos-dot { top: auto; bottom: 4px; left: auto; right: 4px; transform: none; }
-/* v5.7.1y — Centre offset bumped 12px → 16px to give clearer visual
-   travel between the three anchor states on a 48px cell:
-   Outer (4px from edge) → Centre (16px) → Inner (cell middle, 24px). */
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot { top: 16px; left: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot { top: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot { top: 16px; right: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="left"]         .bg-pos-dot { left: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="right"]        .bg-pos-dot { right: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-left"]  .bg-pos-dot { bottom: 16px; left: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom"]       .bg-pos-dot { bottom: 16px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot { bottom: 16px; right: 16px; }
+/* v5.7.1z — Centre anchor rewritten to use percentage + transform so the
+   dot CENTER (not top-left corner) lands at 33%/67% positions. Combined
+   with Inner (50%/50% transform-centred), this gives even 8px steps
+   between Outer → Centre → Inner dot centers on a 48px cell:
+   Outer dot centre at ~8px from edge, Centre at 16px, Inner at 24px.
+   v5.7.1y's 16px pixel offset put Centre's dot center at ~20px, only
+   ~4px from Inner's 24px — visually indistinguishable per Captain. */
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot { top: 33%; left: 33%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot { top: 33%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot { top: 33%; left: 67%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="left"]         .bg-pos-dot { top: 50%; left: 33%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="right"]        .bg-pos-dot { top: 50%; left: 67%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-left"]  .bg-pos-dot { top: 67%; left: 33%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom"]       .bg-pos-dot { top: 67%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot { top: 67%; left: 67%; right: auto; bottom: auto; transform: translate(-50%, -50%); }
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot,
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot,
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot,
@@ -1814,7 +1825,9 @@ button.theme-preview-button:focus-visible {
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot {
   top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%);
 }
-.bg-anchor-seg { display: inline-flex; gap: 0; background: var(--surface-2, #1a1f29); border-radius: 8px; padding: 3px; }
+/* v5.7.1z — display: flex (was inline-flex) + justify-content: space-between
+   so anchor buttons stretch to fill .bg-pos-controls width (matching grid above). */
+.bg-anchor-seg { display: flex; justify-content: space-between; gap: 0; background: var(--surface-2, #1a1f29); border-radius: 8px; padding: 3px; }
 .bg-anchor-btn {
   background: transparent;
   border: 1px solid transparent;
@@ -2368,7 +2381,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1y</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1z</span></div>
   </div>
 </div>
 
