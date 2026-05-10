@@ -1524,7 +1524,7 @@ async function orgUpdateSettings(request, env) {
     // --- Branding ---
     "logoUrl","welcomeMessage","redirectUrl","websiteUrl",
     // --- Theme (Batch 6.5 → 6.5f) ---
-    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, bgMode, bgIntensity, bgPattern, bgImageUrl, bgImagePosition, bgImageAlphaCycle, cycleMode, bgAnimDuration, cycleAnimDuration } — validated below
+    "theme"  // { primary, accent, qrFg, palette[], bgPalette[], darkMode, bgMode, bgIntensity, bgPattern, bgImageUrl, bgImagePosition, bgImageAnchor, bgImageAlphaCycle, cycleMode, bgAnimDuration, cycleAnimDuration } — validated below
   ];
   // Theme validators — defensive, applied before merge.
   function isHex6(v) { return typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v); }
@@ -1626,6 +1626,15 @@ async function orgUpdateSettings(request, env) {
       const POSITIONS = ["centre","tile","cover","top","top-left","top-right","bottom","bottom-left","bottom-right","left","right"];
       if (typeof t.bgImagePosition !== "string" || POSITIONS.indexOf(t.bgImagePosition) === -1) {
         return "theme.bgImagePosition must be one of: centre, tile, cover, top, top-left, top-right, bottom, bottom-left, bottom-right, left, right";
+      }
+    }
+    // v5.7.1w — bgImageAnchor: outer (flush, default) | centre (~12.5% inset) | inner (~25% inset).
+    // Visualised in the dashboard's 9-button position grid by sliding the dot inside
+    // the active cell. Only meaningful for non-centre positions.
+    if (t.bgImageAnchor !== undefined) {
+      const ANCHORS = ["outer","centre","inner"];
+      if (typeof t.bgImageAnchor !== "string" || ANCHORS.indexOf(t.bgImageAnchor) === -1) {
+        return "theme.bgImageAnchor must be one of: outer, centre, inner";
       }
     }
     if (t.bgImageAlphaCycle !== undefined && typeof t.bgImageAlphaCycle !== "boolean") {
