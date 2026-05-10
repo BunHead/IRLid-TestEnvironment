@@ -1744,16 +1744,21 @@ button.theme-preview-button:focus-visible {
   background: var(--accent, #2f81f7);
   color: #fff;
 }
+/* v5.7.1y — Cell sizing bumped 36px → 48px so the grid widens to match
+   the chip row above (Position/Tile/Cover) and the anchor row below
+   (Outer/Centre/Inner) for visual alignment, AND so the dot has clearer
+   travel between Outer/Centre/Inner anchor states (was ~3px Centre→Inner
+   on a 36px cell, now ~8px). Captain UX call after smoke testing v5.7.1x. */
 .bg-pos-grid {
   display: grid;
-  grid-template-columns: repeat(3, 36px);
-  grid-template-rows: repeat(3, 36px);
-  gap: 4px;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 6px;
   width: max-content;
 }
 .bg-pos-cell {
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   background: var(--surface-2, #1a1f29);
   border: 1px solid var(--border, #30363d);
   border-radius: 6px;
@@ -1788,14 +1793,17 @@ button.theme-preview-button:focus-visible {
 .bg-pos-cell[data-pos="bottom-left"]  .bg-pos-dot { top: auto; bottom: 4px; left: 4px;  transform: none; }
 .bg-pos-cell[data-pos="bottom"]       .bg-pos-dot { top: auto; bottom: 4px; left: 50%;  transform: translateX(-50%); }
 .bg-pos-cell[data-pos="bottom-right"] .bg-pos-dot { top: auto; bottom: 4px; left: auto; right: 4px; transform: none; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot { top: 12px; left: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot { top: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot { top: 12px; right: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="left"]         .bg-pos-dot { left: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="right"]        .bg-pos-dot { right: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-left"]  .bg-pos-dot { bottom: 12px; left: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom"]       .bg-pos-dot { bottom: 12px; }
-.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot { bottom: 12px; right: 12px; }
+/* v5.7.1y — Centre offset bumped 12px → 16px to give clearer visual
+   travel between the three anchor states on a 48px cell:
+   Outer (4px from edge) → Centre (16px) → Inner (cell middle, 24px). */
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot { top: 16px; left: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot { top: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot { top: 16px; right: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="left"]         .bg-pos-dot { left: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="right"]        .bg-pos-dot { right: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-left"]  .bg-pos-dot { bottom: 16px; left: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom"]       .bg-pos-dot { bottom: 16px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot { bottom: 16px; right: 16px; }
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot,
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot,
 .bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot,
@@ -1824,8 +1832,10 @@ button.theme-preview-button:focus-visible {
   color: #fff;
 }
 @media (max-width: 640px) {
-  .bg-pos-grid { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); }
-  .bg-pos-cell { width: 48px; height: 48px; }
+  /* v5.7.1y — Mobile cells bumped 48px → 56px to keep headroom over the
+     new 48px desktop default and give thumbs more comfortable targets. */
+  .bg-pos-grid { grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(3, 56px); gap: 8px; }
+  .bg-pos-cell { width: 56px; height: 56px; }
   .bg-pos-mode-chip, .bg-anchor-btn { min-height: 44px; padding: 10px 16px; font-size: 14px; }
 }
 :root[data-theme="light"] .bg-pos-dot { background: var(--text, #1f2328); }
@@ -2358,7 +2368,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1x</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1y</span></div>
   </div>
 </div>
 
@@ -2893,6 +2903,18 @@ body #venueQRWrap.cycle-burst-pattern {
                         <option value="iso">Isometric</option>
                       </select>
                     </label>
+                    <!-- v5.7.1y — Upload image + Notes moved up to sit immediately after
+                         the Mode dropdown when in Image mode (Captain UX call after smoke-
+                         testing v5.7.1x: pick Image, immediately upload, THEN configure
+                         position/anchor/alpha). Same DOM nodes as before, just relocated. -->
+                    <div class="theme-anim-row" data-bg-mode-show="image" id="themeBgImageUploadRow">
+                      <span>Upload image</span>
+                      <input type="file" id="themeBgImageUpload" accept="image/png,image/svg+xml,image/jpeg" class="theme-anim-select" />
+                    </div>
+                    <div class="theme-bg-image-note" data-bg-mode-show="image" id="themeBgImageNote" style="font-size:11px; color:var(--muted); margin-top:4px; line-height:1.4;">
+                      PNG, SVG, or JPEG up to <strong>200&nbsp;KB</strong>. Smaller is better, especially in Tile mode. Larger files inflate per-org storage.
+                      <br><strong>Responsibility:</strong> upload only images you own or have rights to. IRLid does not pre-screen uploads; abuse is your responsibility under the test-env terms.
+                    </div>
                     <!-- v5.7.1w - Background image position picker.
                          Three modes (Position / Tile / Cover) via chip row; when Position is
                          active, a 3x3 grid of 9 buttons picks one of the directional positions
@@ -2935,19 +2957,8 @@ body #venueQRWrap.cycle-burst-pattern {
                         <span class="switch-slider"></span>
                       </label>
                     </label>
-                    <!-- Custom-image upload (revealed when Background mode = Image).
-                         Inline data URI; max 200KB binary. Captain's 4 May feedback:
-                         "lets start small and add a note about needing to be the
-                         right size and a legal thing about it being the responsibility
-                         if abused." -->
-                    <div class="theme-anim-row" data-bg-mode-show="image" id="themeBgImageUploadRow">
-                      <span>Upload image</span>
-                      <input type="file" id="themeBgImageUpload" accept="image/png,image/svg+xml,image/jpeg" class="theme-anim-select" />
-                    </div>
-                    <div class="theme-bg-image-note" data-bg-mode-show="image" id="themeBgImageNote" style="font-size:11px; color:var(--muted); margin-top:4px; line-height:1.4;">
-                      PNG, SVG, or JPEG up to <strong>200&nbsp;KB</strong>. Smaller is better, especially in Tile mode. Larger files inflate per-org storage.
-                      <br><strong>Responsibility:</strong> upload only images you own or have rights to. IRLid does not pre-screen uploads; abuse is your responsibility under the test-env terms.
-                    </div>
+                    <!-- v5.7.1y — Upload image + Notes were here originally; relocated to
+                         sit immediately after the Mode dropdown above for better flow. -->
                     <div class="theme-anim-speed" data-bg-mode-hide="off">
                       <label>
                         <span>Cycle duration</span>
