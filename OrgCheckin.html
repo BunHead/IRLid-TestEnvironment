@@ -421,7 +421,7 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   .escalation-head h3 { font-size: 18px; }
   .escalation-meta { font-size: 13px; }
   .escalation-meta code { font-size: 12px; padding: 3px 7px; }
-  .escalation-close { width: 40px; height: 40px; font-size: 22px; }
+  .escalation-close { width: 44px; height: 44px; font-size: 22px; }
   .escalation-body { grid-template-columns: 1fr; gap: 12px; padding: 14px; }
   .escalation-section { padding: 14px; }
   .escalation-section h4 { font-size: 16px; margin-bottom: 6px; }
@@ -432,7 +432,7 @@ body.developer-bearer-active .dashboard-staff-scan-card .staff-auth-panel { disp
   .escalation-row strong { font-size: 15px; }
   .escalation-row span { font-size: 12px; margin-top: 4px; }
   .escalation-tabs { gap: 8px; margin-bottom: 14px; }
-  .escalation-tab { padding: 10px 14px; font-size: 14px; min-height: 40px; }
+  .escalation-tab { padding: 10px 14px; font-size: 14px; min-height: 44px; }
   .escalation-add-fields { grid-template-columns: 1fr; gap: 12px; }
   .escalation-add-fields label { font-size: 13px; }
   .escalation-add-fields input { padding: 12px 12px; font-size: 15px; min-height: 44px; }
@@ -6839,6 +6839,43 @@ if ('serviceWorker' in navigator) {
 // Hash fragment is used (not query string) because hash isn't sent to
 // the server, isn't logged, and isn't preserved in referrers.
 let __staffScanPending = null;
+const STAFF_SCAN_PENDING_PAYLOAD_KEY = 'irlid_pending_staff_scan_payload';
+const STAFF_SCAN_PENDING_NONCE_KEY = 'irlid_pending_login_nonce';
+const STAFF_SCAN_PENDING_WORKER_KEY = 'irlid_pending_login_worker';
+const ORG_LOGIN_URL_BASE = 'https://irlid.co.uk/org-login.html';
+
+function staffScanPayloadLooksValid(value) {
+  const text = String(value || '').trim();
+  if (!text) return false;
+  if (/^(H|HZ|D|DZ):/.test(text)) return true;
+  try {
+    const url = new URL(text);
+    const path = (url.pathname || '').toLowerCase();
+    return (path.endsWith('/scan.html') || path.endsWith('scan.html'))
+      && (url.searchParams.has('payload') || url.searchParams.has('h') || url.searchParams.has('hz') || url.searchParams.has('d') || url.searchParams.has('dz'));
+  } catch (_) {
+    return false;
+  }
+}
+
+function stashPendingStaffScan(value) {
+  if (!staffScanPayloadLooksValid(value)) return;
+  try { localStorage.setItem(STAFF_SCAN_PENDING_PAYLOAD_KEY, value); } catch (_) {}
+}
+
+function readPendingStaffScan() {
+  try {
+    const value = localStorage.getItem(STAFF_SCAN_PENDING_PAYLOAD_KEY);
+    return staffScanPayloadLooksValid(value) ? value : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearPendingStaffScan() {
+  try { localStorage.removeItem(STAFF_SCAN_PENDING_PAYLOAD_KEY); } catch (_) {}
+}
+
 (function captureStaffScanFromHash() {
   // v5.7.1d — Verbose diagnostic. We log the IIFE entry and the raw hash
   // unconditionally so we can prove the script reaches this point (and
@@ -6848,8 +6885,16 @@ let __staffScanPending = null;
     const hash = window.location.hash || '';
     const m = hash.match(/[#&]staff_scan=([^&]+)/);
     console.log('[staff_scan] regex match result:', m ? ('captured ' + m[1].length + ' chars') : 'no match');
-    if (!m) return;
+    if (!m) {
+      const recovered = readPendingStaffScan();
+      if (recovered) {
+        __staffScanPending = recovered;
+        console.log('[staff_scan] recovered pending QR from localStorage, length:', recovered.length, 'starts with:', recovered.slice(0, 50));
+      }
+      return;
+    }
     __staffScanPending = decodeURIComponent(m[1]);
+    stashPendingStaffScan(__staffScanPending);
     console.log('[staff_scan] captured pending QR from hash, length:', __staffScanPending.length, 'starts with:', __staffScanPending.slice(0, 50));
     // Clean the hash from the URL bar so the QR data isn't visible after
     // first read. Keep any other hash params if present.
@@ -6867,9 +6912,6 @@ let __staffScanPending = null;
 // On return, if pending nonce is present → poll once for the claimed
 // session, restore as authenticated, then continue. If still pending
 // (claim hasn't happened) → fall through to the normal sign-in screen.
-const STAFF_SCAN_PENDING_NONCE_KEY = 'irlid_pending_login_nonce';
-const STAFF_SCAN_PENDING_WORKER_KEY = 'irlid_pending_login_worker';
-const ORG_LOGIN_URL_BASE = 'https://irlid.co.uk/org-login.html';
 // v5.7.1f — also handles return-from-org-login when triggered by org-entry's
 // auto staff sign-in (no staff_scan hash, but pending nonce exists in
 // localStorage). The function now runs unconditionally and exits cleanly
@@ -6897,6 +6939,7 @@ async function tryStaffScanRedirectOrPoll() {
 
   if (pendingNonce) {
     // Return path: poll the Worker once with the stored nonce.
+    if (!__staffScanPending) __staffScanPending = readPendingStaffScan();
     const ctx = __staffScanPending ? '[staff_scan]' : '[staff_signin]';
     console.log(ctx, 'returning from org-login, polling for session with nonce', pendingNonce.slice(0, 8) + '...');
     try {
@@ -6942,6 +6985,7 @@ async function tryStaffScanRedirectOrPoll() {
       : 'https://irlid-api-test.irlid-bunhead.workers.dev';
     try { localStorage.setItem(STAFF_SCAN_PENDING_NONCE_KEY, nonce); } catch (_) {}
     try { localStorage.setItem(STAFF_SCAN_PENDING_WORKER_KEY, workerBase); } catch (_) {}
+    stashPendingStaffScan(__staffScanPending);
     // Re-encode the staff_scan into the return URL so we come back to the
     // exact same page state (the hash was already consumed by captureStaff…).
     const dashboardUrl = window.location.origin + window.location.pathname + window.location.search + '#staff_scan=' + encodeURIComponent(__staffScanPending);
@@ -6983,7 +7027,10 @@ async function tryProcessStaffScanIfPending() {
     setDashboardScanStatus('Could not auto-process the staff scan: ' + (err?.message || err), 'error');
     // Restore so user can retry manually.
     __staffScanPending = captured;
+    stashPendingStaffScan(captured);
+    return true;
   }
+  clearPendingStaffScan();
   return true;
 }
 
