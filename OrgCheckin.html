@@ -1718,6 +1718,116 @@ button.theme-preview-button:focus-visible {
   font-family: inherit;
   font-size: 12px;
 }
+/* v5.7.1w - Background image position grid + anchor segmented control.
+   Replaces the 11-option position dropdown with a spatial 3x3 button grid
+   plus a 3-chip mode row. The dot inside each non-centre button slides
+   to visualise the Outer/Centre/Inner anchor offset. */
+.theme-anim-row--stacked { align-items: flex-start; }
+.theme-anim-row--stacked > span { padding-top: 6px; }
+.bg-pos-controls { display: flex; flex-direction: column; gap: 10px; }
+.bg-pos-mode-chips { display: inline-flex; gap: 4px; background: var(--surface-2, #1a1f29); border-radius: 8px; padding: 3px; }
+.bg-pos-mode-chip {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted, #9aa3b2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.bg-pos-mode-chip:hover { color: var(--text, #e6edf3); }
+.bg-pos-mode-chip[aria-pressed="true"] {
+  background: var(--accent, #2f81f7);
+  color: #fff;
+}
+.bg-pos-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 36px);
+  grid-template-rows: repeat(3, 36px);
+  gap: 4px;
+  width: max-content;
+}
+.bg-pos-cell {
+  width: 36px;
+  height: 36px;
+  background: var(--surface-2, #1a1f29);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color 120ms, background 120ms;
+}
+.bg-pos-cell:hover { border-color: var(--accent, #2f81f7); }
+.bg-pos-cell[aria-pressed="true"] {
+  border-color: var(--accent, #2f81f7);
+  background: rgba(47,129,247,0.15);
+}
+.bg-pos-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text, #e6edf3);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: top 200ms ease, left 200ms ease, right 200ms ease, bottom 200ms ease;
+}
+.bg-pos-cell[aria-pressed="true"] .bg-pos-dot { background: var(--accent, #2f81f7); width: 8px; height: 8px; }
+.bg-pos-cell[data-pos="top-left"]     .bg-pos-dot { top: 4px;  left: 4px;  transform: none; }
+.bg-pos-cell[data-pos="top"]          .bg-pos-dot { top: 4px;  left: 50%;  transform: translateX(-50%); }
+.bg-pos-cell[data-pos="top-right"]    .bg-pos-dot { top: 4px;  left: auto; right: 4px; transform: none; }
+.bg-pos-cell[data-pos="left"]         .bg-pos-dot { top: 50%;  left: 4px;  transform: translateY(-50%); }
+.bg-pos-cell[data-pos="centre"]       .bg-pos-dot { /* base centred is fine */ }
+.bg-pos-cell[data-pos="right"]        .bg-pos-dot { top: 50%;  left: auto; right: 4px; transform: translateY(-50%); }
+.bg-pos-cell[data-pos="bottom-left"]  .bg-pos-dot { top: auto; bottom: 4px; left: 4px;  transform: none; }
+.bg-pos-cell[data-pos="bottom"]       .bg-pos-dot { top: auto; bottom: 4px; left: 50%;  transform: translateX(-50%); }
+.bg-pos-cell[data-pos="bottom-right"] .bg-pos-dot { top: auto; bottom: 4px; left: auto; right: 4px; transform: none; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot { top: 12px; left: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot { top: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot { top: 12px; right: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="left"]         .bg-pos-dot { left: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="right"]        .bg-pos-dot { right: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-left"]  .bg-pos-dot { bottom: 12px; left: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom"]       .bg-pos-dot { bottom: 12px; }
+.bg-pos-grid[data-anchor="centre"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot { bottom: 12px; right: 12px; }
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top-left"]     .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top"]          .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="top-right"]    .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="left"]         .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="right"]        .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-left"]  .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom"]       .bg-pos-dot,
+.bg-pos-grid[data-anchor="inner"] .bg-pos-cell[aria-pressed="true"][data-pos="bottom-right"] .bg-pos-dot {
+  top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%);
+}
+.bg-anchor-seg { display: inline-flex; gap: 0; background: var(--surface-2, #1a1f29); border-radius: 8px; padding: 3px; }
+.bg-anchor-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted, #9aa3b2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.bg-anchor-btn:hover { color: var(--text, #e6edf3); }
+.bg-anchor-btn[aria-pressed="true"] {
+  background: var(--accent, #2f81f7);
+  color: #fff;
+}
+@media (max-width: 640px) {
+  .bg-pos-grid { grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); }
+  .bg-pos-cell { width: 48px; height: 48px; }
+  .bg-pos-mode-chip, .bg-anchor-btn { min-height: 44px; padding: 10px 16px; font-size: 14px; }
+}
+:root[data-theme="light"] .bg-pos-dot { background: var(--text, #1f2328); }
+:root[data-theme="light"] .bg-pos-cell[aria-pressed="true"] .bg-pos-dot { background: var(--accent, #0969da); }
 /* Mode-aware visibility on the bg panel */
 .theme-anim-panel[data-bg-mode] [data-bg-mode-show] { display: none; }
 .theme-anim-panel[data-bg-mode="page"] [data-bg-mode-show="page"] { display: flex; }
@@ -2030,6 +2140,58 @@ body[data-bg-mode="image"][data-bg-image-position="right"] .irlid-qr-fullscreen,
 body[data-bg-mode="image"][data-bg-image-position="right"] #venueQRWrap {
   background-position: center right;
 }
+/* v5.7.1w - anchor offsets the image inward by about 12.5% (centre) or 25% (inner)
+   from the position dictated by data-bg-image-position. Outer = flush, the
+   default that already exists. Centre position ignores anchor entirely. */
+body[data-bg-mode="image"][data-bg-image-position="top-left"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="top-left"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top-left"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 12.5% 12.5%; }
+body[data-bg-mode="image"][data-bg-image-position="top"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="top"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 50% 12.5%; }
+body[data-bg-mode="image"][data-bg-image-position="top-right"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="top-right"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top-right"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 87.5% 12.5%; }
+body[data-bg-mode="image"][data-bg-image-position="left"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="left"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="left"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 12.5% 50%; }
+body[data-bg-mode="image"][data-bg-image-position="right"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="right"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="right"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 87.5% 50%; }
+body[data-bg-mode="image"][data-bg-image-position="bottom-left"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="bottom-left"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom-left"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 12.5% 87.5%; }
+body[data-bg-mode="image"][data-bg-image-position="bottom"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="bottom"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 50% 87.5%; }
+body[data-bg-mode="image"][data-bg-image-position="bottom-right"][data-bg-image-anchor="centre"],
+body[data-bg-mode="image"][data-bg-image-position="bottom-right"][data-bg-image-anchor="centre"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom-right"][data-bg-image-anchor="centre"] #venueQRWrap { background-position: 87.5% 87.5%; }
+
+body[data-bg-mode="image"][data-bg-image-position="top-left"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="top-left"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top-left"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 25% 25%; }
+body[data-bg-mode="image"][data-bg-image-position="top"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="top"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 50% 25%; }
+body[data-bg-mode="image"][data-bg-image-position="top-right"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="top-right"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="top-right"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 75% 25%; }
+body[data-bg-mode="image"][data-bg-image-position="left"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="left"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="left"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 25% 50%; }
+body[data-bg-mode="image"][data-bg-image-position="right"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="right"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="right"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 75% 50%; }
+body[data-bg-mode="image"][data-bg-image-position="bottom-left"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="bottom-left"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom-left"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 25% 75%; }
+body[data-bg-mode="image"][data-bg-image-position="bottom"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="bottom"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 50% 75%; }
+body[data-bg-mode="image"][data-bg-image-position="bottom-right"][data-bg-image-anchor="inner"],
+body[data-bg-mode="image"][data-bg-image-position="bottom-right"][data-bg-image-anchor="inner"] .irlid-qr-fullscreen,
+body[data-bg-mode="image"][data-bg-image-position="bottom-right"][data-bg-image-anchor="inner"] #venueQRWrap { background-position: 75% 75%; }
 @property --theme-pattern-fg {
   syntax: '<color>';
   inherits: true;
@@ -2194,7 +2356,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1v</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1w</span></div>
   </div>
 </div>
 
@@ -2729,22 +2891,41 @@ body #venueQRWrap.cycle-burst-pattern {
                         <option value="iso">Isometric</option>
                       </select>
                     </label>
-                    <label class="theme-anim-row" data-bg-mode-show="image">
+                    <!-- v5.7.1w - Background image position picker.
+                         Three modes (Position / Tile / Cover) via chip row; when Position is
+                         active, a 3x3 grid of 9 buttons picks one of the directional positions
+                         (4 corners + 4 edges + centre). Replaces the previous 11-option
+                         dropdown with a spatial picker that looks like what it does. -->
+                    <div class="theme-anim-row theme-anim-row--stacked" data-bg-mode-show="image">
                       <span>Image position</span>
-                      <select id="themeBgImagePosition" class="theme-anim-select">
-                        <option value="centre">Centre</option>
-                        <option value="tile">Tile</option>
-                        <option value="cover">Cover</option>
-                        <option value="top">Top</option>
-                        <option value="top-left">Top left</option>
-                        <option value="top-right">Top right</option>
-                        <option value="bottom">Bottom</option>
-                        <option value="bottom-left">Bottom left</option>
-                        <option value="bottom-right">Bottom right</option>
-                        <option value="left">Left</option>
-                        <option value="right">Right</option>
-                      </select>
-                    </label>
+                      <div class="bg-pos-controls">
+                        <div class="bg-pos-mode-chips" role="tablist" aria-label="Image fit mode">
+                          <button type="button" class="bg-pos-mode-chip" data-bg-pos-mode="position" aria-pressed="true">Position</button>
+                          <button type="button" class="bg-pos-mode-chip" data-bg-pos-mode="tile" aria-pressed="false">Tile</button>
+                          <button type="button" class="bg-pos-mode-chip" data-bg-pos-mode="cover" aria-pressed="false">Cover</button>
+                        </div>
+                        <div class="bg-pos-grid" id="themeBgPositionGrid" data-anchor="outer" data-active-position="centre" role="radiogroup" aria-label="Image position">
+                          <button type="button" class="bg-pos-cell" data-pos="top-left"     aria-label="Top left"     aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="top"          aria-label="Top"          aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="top-right"    aria-label="Top right"    aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="left"         aria-label="Left"         aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell bg-pos-cell--centre" data-pos="centre" aria-label="Centre" aria-pressed="true"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="right"        aria-label="Right"        aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="bottom-left"  aria-label="Bottom left"  aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="bottom"       aria-label="Bottom"       aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                          <button type="button" class="bg-pos-cell" data-pos="bottom-right" aria-label="Bottom right" aria-pressed="false"><span class="bg-pos-dot"></span></button>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Anchor row: only meaningful when Position mode is active AND a non-centre cell is selected. JS hides this row otherwise. -->
+                    <div class="theme-anim-row" data-bg-mode-show="image" id="themeBgAnchorRow">
+                      <span>Anchor</span>
+                      <div class="bg-anchor-seg" role="radiogroup" aria-label="Anchor offset for the selected position">
+                        <button type="button" class="bg-anchor-btn" data-bg-anchor="outer"  aria-pressed="true" >Outer</button>
+                        <button type="button" class="bg-anchor-btn" data-bg-anchor="centre" aria-pressed="false">Centre</button>
+                        <button type="button" class="bg-anchor-btn" data-bg-anchor="inner"  aria-pressed="false">Inner</button>
+                      </div>
+                    </div>
                     <label class="theme-anim-row" data-bg-mode-show="image">
                       <span>Alpha cycle</span>
                       <label class="switch-wrap">
@@ -7084,6 +7265,7 @@ const THEME_DEFAULTS = {
   bgPattern: 'dots',         // pattern id — applies when bgMode === 'pattern'
   bgImageUrl: null,          // admin-uploaded background image; applies when bgMode === 'image'
   bgImagePosition: 'centre',
+  bgImageAnchor: 'outer',
   bgImageAlphaCycle: false,
   cycleMode: 'glow',         // 'off' | 'page' | 'glow' | 'pattern' (Celebration; replaces legacy acceptCycleEnabled in 6.5f)
   bgAnimDuration: 30,        // seconds for one full background cycle (range 5..120)
@@ -7094,6 +7276,7 @@ const PAGE_MUTED_RATIO = 0.18;          // 18% palette / 82% base — tinted but
 const PAGE_VIBRANT_RATIO = 0.78;        // 78% palette / 22% base — saturated but slightly shaded
 const BG_PATTERNS = ['dots','hex','diag','checker','grid','weave','chevron','iso'];
 const BG_IMAGE_POSITIONS = ['centre','tile','cover','top','top-left','top-right','bottom','bottom-left','bottom-right','left','right']; // v5.7.1m.1 — added edge anchors top/bottom/left/right
+const BG_IMAGE_ANCHORS = ['outer','centre','inner'];
 let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette], bgPalette: [...THEME_DEFAULTS.bgPalette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
@@ -7122,6 +7305,7 @@ function normalizeThemeForSave(theme) {
     bgPattern: BG_PATTERNS.indexOf(t.bgPattern) !== -1 ? t.bgPattern : THEME_DEFAULTS.bgPattern,
     bgImageUrl: bgImageUrl,
     bgImagePosition: BG_IMAGE_POSITIONS.indexOf(t.bgImagePosition) !== -1 ? t.bgImagePosition : THEME_DEFAULTS.bgImagePosition,
+    bgImageAnchor: BG_IMAGE_ANCHORS.indexOf(t.bgImageAnchor) !== -1 ? t.bgImageAnchor : THEME_DEFAULTS.bgImageAnchor,
     bgImageAlphaCycle: t.bgImageAlphaCycle === true,
     cycleMode: cycleMode,
     bgAnimDuration: typeof t.bgAnimDuration === 'number' ? t.bgAnimDuration : THEME_DEFAULTS.bgAnimDuration,
@@ -7209,6 +7393,7 @@ function applyThemeVars(theme) {
   body.classList.remove('theme-bg-cycling', 'theme-bg-page-cycle', 'theme-bg-pattern');
   body.removeAttribute('data-pattern');
   body.removeAttribute('data-bg-image-position');
+  body.removeAttribute('data-bg-image-anchor');
   body.removeAttribute('data-bg-image-alpha-cycle');
   root.style.removeProperty('--theme-pattern-image');
   root.style.removeProperty('--theme-bg-image');
@@ -7248,6 +7433,7 @@ function applyThemeVars(theme) {
         root.style.setProperty('--theme-bg-image', 'url("' + theme.bgImageUrl + '")');
       }
       body.setAttribute('data-bg-image-position', BG_IMAGE_POSITIONS.indexOf(theme.bgImagePosition) !== -1 ? theme.bgImagePosition : THEME_DEFAULTS.bgImagePosition);
+      body.setAttribute('data-bg-image-anchor', BG_IMAGE_ANCHORS.indexOf(theme.bgImageAnchor) !== -1 ? theme.bgImageAnchor : THEME_DEFAULTS.bgImageAnchor);
       body.setAttribute('data-bg-image-alpha-cycle', theme.bgImageAlphaCycle === true ? 'true' : 'false');
       break;
     case 'glow':
@@ -7520,8 +7706,7 @@ function writeThemeToUI() {
   if (bgIntensityEl) bgIntensityEl.value = activeTheme.bgIntensity || 'muted';
   const bgPatternEl = document.getElementById('themeBgPattern');
   if (bgPatternEl) bgPatternEl.value = BG_PATTERNS.indexOf(activeTheme.bgPattern) !== -1 ? activeTheme.bgPattern : 'dots';
-  const bgImagePositionEl = document.getElementById('themeBgImagePosition');
-  if (bgImagePositionEl) bgImagePositionEl.value = BG_IMAGE_POSITIONS.indexOf(activeTheme.bgImagePosition) !== -1 ? activeTheme.bgImagePosition : 'centre';
+  if (typeof window.syncBgPosUI === 'function') window.syncBgPosUI();
   const bgImageAlphaCycleEl = document.getElementById('themeBgImageAlphaCycle');
   if (bgImageAlphaCycleEl) bgImageAlphaCycleEl.checked = activeTheme.bgImageAlphaCycle === true;
   const bgDur = document.getElementById('themeBgAnimDuration');
@@ -7675,6 +7860,7 @@ function wireThemePanel() {
     const v = e.target.value;
     activeTheme.bgMode = ['off','page','glow','pattern','image'].indexOf(v) !== -1 ? v : 'glow';
     applyThemeVars(activeTheme);
+    if (typeof window.syncBgPosUI === 'function') window.syncBgPosUI();
   });
   // Page-cycle intensity (Batch 6.5e — renamed from bgPalette to bgIntensity).
   // Vibrant uses palette colours direct; Muted blends them with the dark canvas.
@@ -7690,17 +7876,74 @@ function wireThemePanel() {
     activeTheme.bgPattern = BG_PATTERNS.indexOf(v) !== -1 ? v : THEME_DEFAULTS.bgPattern;
     applyThemeVars(activeTheme);
   });
-  const bgImagePositionEl = document.getElementById('themeBgImagePosition');
-  if (bgImagePositionEl) bgImagePositionEl.addEventListener('change', function (e) {
-    const v = e.target.value;
-    activeTheme.bgImagePosition = BG_IMAGE_POSITIONS.indexOf(v) !== -1 ? v : THEME_DEFAULTS.bgImagePosition;
+  // v5.7.1w - Position grid wiring.
+  // Three modes (position/tile/cover) gate which control surface is interactive.
+  // In "position" mode, the 9-button grid drives the directional values
+  // (top-left, top, top-right, left, centre, right, bottom-left, bottom, bottom-right).
+  // "tile" and "cover" map directly to the legacy dropdown values 'tile' / 'cover'.
+  const bgPosGrid     = document.getElementById('themeBgPositionGrid');
+  const bgPosModeBtns = document.querySelectorAll('.bg-pos-mode-chip');
+  const bgPosCells    = document.querySelectorAll('.bg-pos-cell');
+  const bgAnchorRow   = document.getElementById('themeBgAnchorRow');
+  const bgAnchorBtns  = document.querySelectorAll('.bg-anchor-btn');
+
+  function syncBgPosUI() {
+    const isTile  = activeTheme.bgImagePosition === 'tile';
+    const isCover = activeTheme.bgImagePosition === 'cover';
+    const mode = isTile ? 'tile' : isCover ? 'cover' : 'position';
+    bgPosModeBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.bgPosMode === mode ? 'true' : 'false'));
+
+    if (bgPosGrid) {
+      bgPosGrid.style.opacity = (mode === 'position') ? '1' : '0.4';
+      bgPosGrid.style.pointerEvents = (mode === 'position') ? 'auto' : 'none';
+
+      const activePos = (mode === 'position') ? (activeTheme.bgImagePosition || 'centre') : null;
+      bgPosCells.forEach(c => c.setAttribute('aria-pressed', c.dataset.pos === activePos ? 'true' : 'false'));
+      bgPosGrid.setAttribute('data-active-position', activePos || '');
+      bgPosGrid.setAttribute('data-anchor', activeTheme.bgImageAnchor || 'outer');
+    }
+
+    if (bgAnchorRow) {
+      const showAnchor = (mode === 'position') && (activeTheme.bgImagePosition && activeTheme.bgImagePosition !== 'centre');
+      bgAnchorRow.style.display = showAnchor ? '' : 'none';
+      bgAnchorBtns.forEach(b => b.setAttribute('aria-pressed', b.dataset.bgAnchor === (activeTheme.bgImageAnchor || 'outer') ? 'true' : 'false'));
+    }
+  }
+  window.syncBgPosUI = syncBgPosUI;
+
+  bgPosModeBtns.forEach(btn => btn.addEventListener('click', function () {
+    const mode = btn.dataset.bgPosMode;
+    const wasDirectional = activeTheme.bgImagePosition !== 'tile' && activeTheme.bgImagePosition !== 'cover';
+    if (wasDirectional) activeTheme._lastDirectionalBgImagePosition = activeTheme.bgImagePosition || 'centre';
+    if (mode === 'tile') activeTheme.bgImagePosition = 'tile';
+    else if (mode === 'cover') activeTheme.bgImagePosition = 'cover';
+    else {
+      if (activeTheme.bgImagePosition === 'tile' || activeTheme.bgImagePosition === 'cover') {
+        activeTheme.bgImagePosition = activeTheme._lastDirectionalBgImagePosition || 'centre';
+      }
+    }
+    syncBgPosUI();
     applyThemeVars(activeTheme);
-  });
+  }));
+
+  bgPosCells.forEach(cell => cell.addEventListener('click', function () {
+    activeTheme.bgImagePosition = cell.dataset.pos;
+    activeTheme._lastDirectionalBgImagePosition = cell.dataset.pos;
+    syncBgPosUI();
+    applyThemeVars(activeTheme);
+  }));
+
+  bgAnchorBtns.forEach(btn => btn.addEventListener('click', function () {
+    activeTheme.bgImageAnchor = btn.dataset.bgAnchor;
+    syncBgPosUI();
+    applyThemeVars(activeTheme);
+  }));
   const bgImageAlphaCycleEl = document.getElementById('themeBgImageAlphaCycle');
   if (bgImageAlphaCycleEl) bgImageAlphaCycleEl.addEventListener('change', function (e) {
     activeTheme.bgImageAlphaCycle = e.target.checked === true;
     applyThemeVars(activeTheme);
   });
+  syncBgPosUI();
 
   // Custom-background image upload (4 May tidy 2). Reads file → validates type/size
   // → converts to data URI → stores in activeTheme.bgImageUrl → applies. Worker
