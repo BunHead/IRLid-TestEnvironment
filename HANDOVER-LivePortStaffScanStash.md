@@ -198,7 +198,7 @@ return true;
 
 ## Pill bump
 
-Bump `Build v5.9.0.7` → `Build v5.9.0.8` in `OrgCheckin.html`'s sidebar footer (look for `Build v5.9.0.7`). Per BOOTSTRAP §4: version letter changes mean pill bumps in the same commit.
+Bump `Build v5.9.0.8` → `Build v5.9.0.9` in `OrgCheckin.html`'s sidebar footer (look for `Build v5.9.0.8`). Note: Number One landed v5.9.0.8 inline (irlid_mock_* localStorage namespace cleanup) before this brief lands, so the pre-bump state will be `v5.9.0.8`. Per BOOTSTRAP §4: version letter changes mean pill bumps in the same commit.
 
 ---
 
@@ -211,7 +211,7 @@ Bump `Build v5.9.0.7` → `Build v5.9.0.8` in `OrgCheckin.html`'s sidebar footer
 - [ ] `tryStaffScanRedirectOrPoll` stashes before redirecting to org-login (inside the fresh-redirect path).
 - [ ] `tryProcessStaffScanIfPending` clears stash on success, restashes on retry.
 - [ ] Live's `workerBase` fallback still says `irlid-api-org` (not `irlid-api-test`).
-- [ ] Build pill in sidebar footer reads `Build v5.9.0.8`.
+- [ ] Build pill in sidebar footer reads `Build v5.9.0.9`.
 - [ ] No new test-env URLs introduced (run a grep for `bunhead.github.io` after the change — should only show comments and the existing pre-existing references).
 
 ---
@@ -247,9 +247,9 @@ If steps 1-11 all green, PR is shippable.
 
 ## PR title
 
-`[codex] v5.9.0.8 — Forward-port PR #104 staff_scan localStorage stash/recovery to live OrgCheckin`
+`[codex] v5.9.0.9 — Forward-port PR #104 staff_scan localStorage stash/recovery to live OrgCheckin`
 
-Branch: `codex/v5.9.0.8-staff-scan-stash-recovery-live`.
+Branch: `codex/v5.9.0.9-staff-scan-stash-recovery-live`.
 
 Expected PR scope: Medium (~100-120 lines including the stash helpers + IIFE changes + two function patches + pill bump).
 
