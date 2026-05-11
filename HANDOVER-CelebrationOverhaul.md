@@ -118,7 +118,7 @@ These are decisions Captain didn't pin down — make a call and ship:
 - [ ] Settings page "Preview celebration" button now produces a visibly clear burst.
 - [ ] Add a "Preview deny" button next to the existing Preview celebration so Captain can visually compare both side-by-side without faking a real check-in.
 - [ ] Mode dropdown preserved (off/glow/page/pattern still work) — just the visuals behind each mode are improved.
-- [ ] Build pill bump to next version letter (probably `v5.9.0.10` if no other Number One work has landed before this; if it has, check current pill and bump from there).
+- [ ] Build pill bump `v5.9.0.10 → v5.9.0.11`. Note: Number One landed `v5.9.0.10` inline (Organisation Terms display field — adds an `orgTerms` setting persisted to Worker settings_json + rendered on `org-entry.html` as an informational footer) before this brief lands, so the pre-bump pill state is `v5.9.0.10`. If it shows anything different when you start, check `git log` for an intervening Number One commit and bump from whatever pill actually shows.
 
 ---
 
@@ -143,9 +143,9 @@ These are decisions Captain didn't pin down — make a call and ship:
 
 ## PR title
 
-`[codex] v5.9.0.10 — Celebration overhaul: accept on venue QR + new deny animation`
+`[codex] v5.9.0.11 — Celebration overhaul: accept on venue QR + new deny animation`
 
-Branch: `codex/v5.9.0.10-celebration-overhaul`.
+Branch: `codex/v5.9.0.11-celebration-overhaul`.
 
 Expected PR scope: Medium-Large (~200-400 lines: CSS animations, new triggerDenyCycleAnimation function, fire-site wiring, Settings panel Preview Deny button, pill bump).
 
