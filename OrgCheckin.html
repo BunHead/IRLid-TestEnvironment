@@ -1893,6 +1893,22 @@ button.theme-preview-button:focus-visible {
 .celebration-text-burst.size-small { font-size: clamp(18px, 3.5vmin, 42px); }
 .celebration-text-burst.size-medium { font-size: clamp(28px, 5.6vmin, 68px); }
 .celebration-text-burst.size-large { font-size: clamp(38px, 7.8vmin, 96px); }
+body[data-accept-intensity="muted"] .cycling,
+body[data-accept-intensity="muted"] .cycle-burst-page,
+body[data-accept-intensity="muted"] .cycle-burst-pattern {
+  filter: saturate(0.72) brightness(0.86);
+}
+body[data-accept-intensity="vivid"] .cycling,
+body[data-accept-intensity="vivid"] .cycle-burst-page,
+body[data-accept-intensity="vivid"] .cycle-burst-pattern {
+  filter: saturate(1.28) brightness(1.12);
+}
+body[data-deny-intensity="muted"] .cycle-deny {
+  filter: saturate(0.75) brightness(0.9);
+}
+body[data-deny-intensity="vivid"] .cycle-deny {
+  filter: saturate(1.35) brightness(1.16);
+}
 @keyframes celebrationTextPop {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.78); filter: blur(2px); }
   18% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); filter: blur(0); }
@@ -2304,6 +2320,19 @@ body #venueQRWrap.cycle-burst-pattern {
   background-size: 24px 24px;
   animation: themeAcceptPatternFlash var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
 }
+@keyframes themeDenyCycle {
+  0%   { box-shadow: 0 0 0 0 rgba(248,81,73,0), 0 0 0 rgba(248,81,73,0); transform: translateX(0) scale(1); }
+  16%  { box-shadow: 0 0 0 8px rgba(248,81,73,0.78), 0 0 34px rgba(248,81,73,0.9); transform: translateX(-4px) scale(1.015); }
+  32%  { box-shadow: 0 0 0 16px rgba(248,81,73,0.42), 0 0 58px rgba(248,81,73,0.72); transform: translateX(4px) scale(1.02); }
+  52%  { box-shadow: 0 0 0 9px rgba(255,190,190,0.48), 0 0 42px rgba(248,81,73,0.58); transform: translateX(-2px) scale(1.01); }
+  100% { box-shadow: 0 0 0 0 rgba(248,81,73,0), 0 0 0 rgba(248,81,73,0); transform: translateX(0) scale(1); }
+}
+body .irlid-qr-fullscreen.cycle-deny,
+body .irlid-qr-fullscreen-holder.cycle-deny,
+body #venueQRWrap.cycle-deny,
+body .scan-panel.cycle-deny {
+  animation: themeDenyCycle 0.9s ease-out 1;
+}
 /* ============== /Batch 6.5f ============== */
 /* ============== /Batch 6.5d → 6.5e ============== */
 /* ============== /Batch 6.5b ============== */
@@ -2417,7 +2446,7 @@ body #venueQRWrap.cycle-burst-pattern {
 
   <div class="nav-bottom">
     <div class="nav-item" id="navSettings" data-min-role="lead_admin" onclick="showPanel('settings', this)">⚙ <span>Settings</span></div>
-    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.7.1z.1</span></div>
+    <div class="sidebar-footer">IRLid Protocol v4<br>Test Environment / Offline-safe<br><span style="color: var(--accent, #58a6ff); font-weight: 600;">Build v5.9.0.13.16</span></div>
   </div>
 </div>
 
@@ -3072,7 +3101,26 @@ body #venueQRWrap.cycle-burst-pattern {
                         </select>
                       </label>
                     </div>
-                    <button type="button" class="btn btn-secondary btn-sm" id="themePreviewAcceptCycle" data-cycle-mode-hide="off">Preview celebration</button>
+                    <div class="settings-grid settings-grid-2" data-cycle-mode-hide="off">
+                      <label class="settings-field">
+                        <span>Accept intensity</span>
+                        <select id="themeAcceptIntensity">
+                          <option value="muted">Muted</option>
+                          <option value="vivid">Vivid</option>
+                        </select>
+                      </label>
+                      <label class="settings-field">
+                        <span>Deny intensity</span>
+                        <select id="themeDenyIntensity">
+                          <option value="muted">Muted</option>
+                          <option value="vivid">Vivid</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="mini-actions" data-cycle-mode-hide="off">
+                      <button type="button" class="btn btn-secondary btn-sm" id="themePreviewAcceptCycle">Preview celebration</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="themePreviewDenyCycle">Preview deny</button>
+                    </div>
                   </div>
 
                 </div>
@@ -6357,6 +6405,7 @@ async function manualCheckin() {
     showToast('Check-in recorded');
   } catch (err) {
     flashDoormanPanel('error');
+    try { if (typeof triggerDenyCycleAnimation === 'function') triggerDenyCycleAnimation(); } catch(_) {}
     if (err.status === 401 && /staff/i.test(err.message || '')) {
       clearStaffAuthSession(err.message || 'Staff authentication required.');
     }
@@ -7423,7 +7472,9 @@ const THEME_DEFAULTS = {
   cycleAnimDuration: 1.4,    // seconds for one celebration burst (range 0.5..5)
   celebrationTextTemplate: 'outcome',
   celebrationTextPosition: 'center',
-  celebrationTextSize: 'medium'
+  celebrationTextSize: 'medium',
+  acceptIntensity: 'vivid',
+  denyIntensity: 'vivid'
 };
 const PAGE_CYCLE_BASE = '#06070C';     // base canvas colour we blend palette into for muted page mode
 const PAGE_MUTED_RATIO = 0.18;          // 18% palette / 82% base — tinted but stays moody
@@ -7434,6 +7485,7 @@ const BG_IMAGE_ANCHORS = ['outer','centre','inner'];
 const CELEBRATION_TEXT_TEMPLATES = ['none','outcome','checked_in','welcome'];
 const CELEBRATION_TEXT_POSITIONS = ['top','center','bottom'];
 const CELEBRATION_TEXT_SIZES = ['small','medium','large'];
+const CELEBRATION_INTENSITIES = ['muted','vivid'];
 let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette], bgPalette: [...THEME_DEFAULTS.bgPalette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
@@ -7468,6 +7520,8 @@ function normalizeThemeForSave(theme) {
     celebrationTextTemplate: CELEBRATION_TEXT_TEMPLATES.indexOf(t.celebrationTextTemplate) !== -1 ? t.celebrationTextTemplate : THEME_DEFAULTS.celebrationTextTemplate,
     celebrationTextPosition: CELEBRATION_TEXT_POSITIONS.indexOf(t.celebrationTextPosition) !== -1 ? t.celebrationTextPosition : THEME_DEFAULTS.celebrationTextPosition,
     celebrationTextSize: CELEBRATION_TEXT_SIZES.indexOf(t.celebrationTextSize) !== -1 ? t.celebrationTextSize : THEME_DEFAULTS.celebrationTextSize,
+    acceptIntensity: CELEBRATION_INTENSITIES.indexOf(t.acceptIntensity) !== -1 ? t.acceptIntensity : THEME_DEFAULTS.acceptIntensity,
+    denyIntensity: CELEBRATION_INTENSITIES.indexOf(t.denyIntensity) !== -1 ? t.denyIntensity : THEME_DEFAULTS.denyIntensity,
     bgAnimDuration: typeof t.bgAnimDuration === 'number' ? t.bgAnimDuration : THEME_DEFAULTS.bgAnimDuration,
     cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
   };
@@ -7609,6 +7663,8 @@ function applyThemeVars(theme) {
   if (cyclePanel) cyclePanel.setAttribute('data-cycle-mode', theme.cycleMode || 'glow');
   body.setAttribute('data-celebration-text-position', theme.celebrationTextPosition || THEME_DEFAULTS.celebrationTextPosition);
   body.setAttribute('data-celebration-text-size', theme.celebrationTextSize || THEME_DEFAULTS.celebrationTextSize);
+  body.setAttribute('data-accept-intensity', theme.acceptIntensity || THEME_DEFAULTS.acceptIntensity);
+  body.setAttribute('data-deny-intensity', theme.denyIntensity || THEME_DEFAULTS.denyIntensity);
 
   // Batch 6.5f — write the dynamic pattern colour keyframe so patterns drift
   // through the bgPalette in sync with the cycle. CSS @property + JS-injected
@@ -7766,6 +7822,10 @@ function previewAcceptCycle() {
   triggerAcceptCycleAnimation();
 }
 
+function previewDenyCycle() {
+  triggerDenyCycleAnimation();
+}
+
 function celebrationTextFor(kind) {
   const template = (activeTheme && activeTheme.celebrationTextTemplate) || THEME_DEFAULTS.celebrationTextTemplate;
   if (template === 'none') return '';
@@ -7843,6 +7903,23 @@ function triggerAcceptCycleAnimation() {
   });
 }
 
+function triggerDenyCycleAnimation() {
+  const ms = 1100;
+  const targets = [
+    document.querySelector('.irlid-qr-fullscreen.active'),
+    document.querySelector('.irlid-qr-fullscreen.active .irlid-qr-fullscreen-holder'),
+    document.getElementById('venueQRWrap'),
+    document.querySelector('.scan-panel')
+  ].filter(Boolean);
+  triggerCelebrationText('deny', targets, ms);
+  targets.forEach(function (el) {
+    el.classList.remove('cycle-deny');
+    void el.offsetWidth;
+    el.classList.add('cycle-deny');
+    setTimeout(function () { el.classList.remove('cycle-deny'); }, ms);
+  });
+}
+
 async function loadThemeFromServer() {
   if (typeof currentOrg === 'undefined' || !currentOrg || !currentOrg.api_key) return;
   if (!window.IRLidOrgApi || typeof window.IRLidOrgApi.getOrgSettings !== 'function') return;
@@ -7892,6 +7969,8 @@ function writeThemeToUI() {
   setVal('themeCelebrationTextTemplate', activeTheme.celebrationTextTemplate || THEME_DEFAULTS.celebrationTextTemplate);
   setVal('themeCelebrationTextPosition', activeTheme.celebrationTextPosition || THEME_DEFAULTS.celebrationTextPosition);
   setVal('themeCelebrationTextSize', activeTheme.celebrationTextSize || THEME_DEFAULTS.celebrationTextSize);
+  setVal('themeAcceptIntensity', activeTheme.acceptIntensity || THEME_DEFAULTS.acceptIntensity);
+  setVal('themeDenyIntensity', activeTheme.denyIntensity || THEME_DEFAULTS.denyIntensity);
   const modeRadios = document.querySelectorAll('input[name="themeMode"]');
   const v = activeTheme.darkMode === 'auto' ? 'auto' : (activeTheme.darkMode ? 'dark' : 'light');
   modeRadios.forEach(function (r) { r.checked = (r.value === v); });
@@ -7988,7 +8067,9 @@ function wireThemePanel() {
   [
     ['themeCelebrationTextTemplate', 'celebrationTextTemplate', CELEBRATION_TEXT_TEMPLATES],
     ['themeCelebrationTextPosition', 'celebrationTextPosition', CELEBRATION_TEXT_POSITIONS],
-    ['themeCelebrationTextSize', 'celebrationTextSize', CELEBRATION_TEXT_SIZES]
+    ['themeCelebrationTextSize', 'celebrationTextSize', CELEBRATION_TEXT_SIZES],
+    ['themeAcceptIntensity', 'acceptIntensity', CELEBRATION_INTENSITIES],
+    ['themeDenyIntensity', 'denyIntensity', CELEBRATION_INTENSITIES]
   ].forEach(function (cfg) {
     const el = document.getElementById(cfg[0]);
     if (!el) return;
@@ -8051,6 +8132,8 @@ function wireThemePanel() {
 
   const previewBtn = document.getElementById('themePreviewAcceptCycle');
   if (previewBtn) previewBtn.addEventListener('click', previewAcceptCycle);
+  const previewDenyBtn = document.getElementById('themePreviewDenyCycle');
+  if (previewDenyBtn) previewDenyBtn.addEventListener('click', previewDenyCycle);
 
   const saveBtn = document.getElementById('themeSaveBtn');
   if (saveBtn) saveBtn.addEventListener('click', saveSettings);
