@@ -1581,6 +1581,21 @@ async function orgUpdateSettings(request, env) {
       }
     }
     // Batch 6.5d → 6.5e — background mode + intensity + bgPalette array + pattern + Tier-3
+    if (t.celebrationTextTemplate !== undefined) {
+      if (typeof t.celebrationTextTemplate !== "string" || ["none","outcome","checked_in","welcome"].indexOf(t.celebrationTextTemplate) === -1) {
+        return "theme.celebrationTextTemplate must be one of: none, outcome, checked_in, welcome";
+      }
+    }
+    if (t.celebrationTextPosition !== undefined) {
+      if (typeof t.celebrationTextPosition !== "string" || ["top","center","bottom"].indexOf(t.celebrationTextPosition) === -1) {
+        return "theme.celebrationTextPosition must be one of: top, center, bottom";
+      }
+    }
+    if (t.celebrationTextSize !== undefined) {
+      if (typeof t.celebrationTextSize !== "string" || ["small","medium","large"].indexOf(t.celebrationTextSize) === -1) {
+        return "theme.celebrationTextSize must be one of: small, medium, large";
+      }
+    }
     if (t.bgMode !== undefined) {
       if (typeof t.bgMode !== "string" || ["off","page","glow","pattern","image"].indexOf(t.bgMode) === -1) {
         return "theme.bgMode must be one of: off, page, glow, pattern, image";
