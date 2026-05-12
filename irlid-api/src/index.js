@@ -1596,6 +1596,16 @@ async function orgUpdateSettings(request, env) {
         return "theme.celebrationTextSize must be one of: small, medium, large";
       }
     }
+    if (t.acceptIntensity !== undefined) {
+      if (typeof t.acceptIntensity !== "string" || ["muted","vivid"].indexOf(t.acceptIntensity) === -1) {
+        return "theme.acceptIntensity must be one of: muted, vivid";
+      }
+    }
+    if (t.denyIntensity !== undefined) {
+      if (typeof t.denyIntensity !== "string" || ["muted","vivid"].indexOf(t.denyIntensity) === -1) {
+        return "theme.denyIntensity must be one of: muted, vivid";
+      }
+    }
     if (t.bgMode !== undefined) {
       if (typeof t.bgMode !== "string" || ["off","page","glow","pattern","image"].indexOf(t.bgMode) === -1) {
         return "theme.bgMode must be one of: off, page, glow, pattern, image";
