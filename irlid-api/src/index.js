@@ -36,6 +36,11 @@ function json(data, status = 200) {
 }
 
 function err(message, status = 400) { return json({ error: message }, status); }
+function authErr(message, status = 401) {
+  const response = err(message, status);
+  response.error = true;
+  return response;
+}
 
 function randomToken() { return b64urlEncode(crypto.getRandomValues(new Uint8Array(32))); }
 
@@ -857,9 +862,9 @@ async function orgExpectedUpdate(request, env, id) {
 
 async function orgAuth(request, env) {
   const key = request.headers.get("X-Org-Key") || new URL(request.url).searchParams.get("key");
-  if (!key) return err("X-Org-Key header required", 401);
+  if (!key) return authErr("X-Org-Key header required", 401);
   const org = await env.DB.prepare("SELECT * FROM organisations WHERE api_key=?").bind(key).first();
-  if (!org) return err("Invalid API key", 401);
+  if (!org) return authErr("Invalid API key", 401);
   return org;
 }
 
