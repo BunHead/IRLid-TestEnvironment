@@ -440,10 +440,19 @@ async function register(request, env) {
   const pkId = await pubKeyId(pub_jwk);
   const existing = await env.DB.prepare("SELECT d.id as device_id, d.user_id FROM devices d WHERE d.pub_key_id = ?").bind(pkId).first();
 
+  // ── SECURITY FIX (7 Sep 2026) — REGISTRATION IS NOT AUTHENTICATION ──────────
+  // pubKeyId() is derived solely from PUBLIC JWK fields, and the full public JWK is
+  // readable by anyone from a public receipt (GET /receipts/<hash>). Minting a session
+  // here created the chain:
+  //   public receipt -> public JWK -> pub_key_id -> 30-day session -> account takeover
+  // with no proof of private-key possession. A public value must NEVER authenticate.
+  // An already-registered device signs in via the normal authenticated path (Google),
+  // never by re-presenting its own public key here.
   if (existing) {
-    const token = randomToken(); const ts = now();
-    await env.DB.prepare("INSERT INTO sessions (id, user_id, device_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)").bind(token, existing.user_id, existing.device_id, ts, ts + 30 * 86400).run();
-    return json({ user_id: existing.user_id, device_id: existing.device_id, pub_key_id: pkId, session_token: token, existing: true });
+    return json({
+      error: "This device is already registered. Please sign in instead.",
+      code: "already_registered"
+    }, 409);
   }
 
   const userId = uuid(); const deviceId = uuid(); const ts = now(); const token = randomToken();
@@ -568,18 +577,10 @@ async function googleAuth(request, env) {
 //  OTHER AUTH
 // =====================
 
-async function login(request, env) {
-  let body;
-  try { body = await request.json(); } catch { return err("Invalid JSON body"); }
-  const { pub_key_id } = body;
-  if (!pub_key_id) return err("pub_key_id required");
-  const device = await env.DB.prepare("SELECT id, user_id, revoked_at FROM devices WHERE pub_key_id = ?").bind(pub_key_id).first();
-  if (!device) return err("Device not found.", 404);
-  if (device.revoked_at) return err("Device key revoked.", 403);
-  const token = randomToken(); const ts = now();
-  await env.DB.prepare("INSERT INTO sessions (id, user_id, device_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)").bind(token, device.user_id, device.id, ts, ts + 30 * 86400).run();
-  return json({ session_token: token, user_id: device.user_id, device_id: device.id });
-}
+// /auth/login REMOVED (7 Sep 2026 security fix): it granted a 30-day session from a bare
+// pub_key_id — a PUBLIC value derivable from any public receipt — with no proof of
+// private-key possession. It was called by zero client code. Registration is not
+// authentication; a public value must never authenticate anyone.
 
 async function logout(request, env) {
   const session = await getSession(request, env);
@@ -878,17 +879,9 @@ async function verify(request, env) {
 //  USER LOOKUP BY KEY
 // =====================
 
-async function lookupByKey(request, env, pubKeyIdParam) {
-  const device = await env.DB.prepare(
-    "SELECT user_id FROM devices WHERE pub_key_id = ? AND revoked_at IS NULL"
-  ).bind(pubKeyIdParam).first();
-  if (!device) return json({ found: false });
-  const user = await env.DB.prepare(
-    "SELECT display_name, google_picture FROM users WHERE id = ?"
-  ).bind(device.user_id).first();
-  if (!user) return json({ found: false });
-  return json({ found: true, display_name: user.display_name || null, google_picture: user.google_picture || null });
-}
+// lookupByKey() REMOVED (7 Sep 2026 security fix): it answered "whose key is this?" with
+// a real name + Google photo to ANY unauthenticated caller. receipt.html gated the call
+// client-side only, which is cosmetic, not security.
 
 // =====================
 //  IDENTITY-BOUND SESSIONS — PROTOCOL.md §14 — Batch A
@@ -2564,7 +2557,6 @@ export default {
       if (path === "/" || path === "/health") response = json({ status: "ok", service: "irlid-api", version: 7 });
 
       else if (method === "POST" && path === "/auth/register")       response = await register(request, env);
-      else if (method === "POST" && path === "/auth/login")          response = await login(request, env);
       else if (method === "POST" && path === "/auth/logout")         response = await logout(request, env);
       else if (method === "GET"  && path === "/auth/me")              response = await me(request, env);
       else if (method === "POST" && path === "/auth/profile")        response = await updateProfile(request, env);
@@ -2632,9 +2624,10 @@ export default {
           const m = path.match(/^\/receipts\/([A-Za-z0-9\-_]+)$/);
           if (method === "GET" && m) response = await getReceipt(request, env, m[1]);
           else {
-            const mKey = path.match(/^\/users\/by-key\/([A-Za-z0-9\-_]+)$/);
-            if (method === "GET" && mKey) response = await lookupByKey(request, env, mKey[1]);
-            else response = err("Not found", 404);
+            // /users/by-key/:id REMOVED (7 Sep 2026): unauthenticated identity oracle —
+            // returned display_name + google_picture to ANY caller with no login. The
+            // party_info snapshot taken at upload already covers legitimate display.
+            response = err("Not found", 404);
           }
         }
       }

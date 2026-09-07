@@ -152,12 +152,8 @@
 
     getReceipt: async function (hash) {
       return await api("GET", "/receipts/" + encodeURIComponent(hash));
-    },
-
-    // ===== User Lookup =====
-
-    lookupByKey: async function (pubKeyId) {
-      return await api("GET", "/users/by-key/" + encodeURIComponent(pubKeyId));
     }
+    // lookupByKey REMOVED (7 Sep 2026): server endpoint /users/by-key/ was an
+    // unauthenticated identity oracle and has been deleted.
   };
 })();

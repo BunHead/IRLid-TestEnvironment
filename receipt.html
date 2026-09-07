@@ -768,36 +768,10 @@
     const bResolved = resolveB();
     if (aResolved && bResolved) return;
 
-    // Fall through to live lookups for any unresolved sides
-    let keyIdA = null, keyIdB = null;
-    try { if (pubA) keyIdA = await pubKeyId(pubA); } catch{}
-    try { if (pubB) keyIdB = await pubKeyId(pubB); } catch{}
-
-    // Only do live key lookups when the user is logged in
-    // Non-logged-in users see serverPartyInfo snapshot only (set at upload time)
-    const isLoggedIn = window.IRLBackend && window.IRLBackend.hasSession();
-
-    if (isLoggedIn) {
-      if (!aResolved && keyIdA && typeof window.IRLBackend.lookupByKey === "function") {
-        try {
-          const res = await window.IRLBackend.lookupByKey(keyIdA);
-          if (res.ok && res.data && res.data.found) {
-            if (res.data.display_name) selfNameEl.textContent = res.data.display_name;
-            if (res.data.google_picture) renderAvatar(selfAvatarWrap, res.data.google_picture);
-          }
-        } catch{}
-      }
-
-      if (!bResolved && keyIdB && typeof window.IRLBackend.lookupByKey === "function") {
-        try {
-          const res = await window.IRLBackend.lookupByKey(keyIdB);
-          if (res.ok && res.data && res.data.found) {
-            if (res.data.display_name) guestNameEl.textContent = res.data.display_name;
-            if (res.data.google_picture) renderAvatar(guestAvatarWrap, res.data.google_picture);
-          }
-        } catch{}
-      }
-    }
+    // Live key lookups REMOVED (7 Sep 2026 security fix): /users/by-key/ was an
+    // unauthenticated identity oracle (name + photo to any caller) and has been deleted.
+    // Identity now comes only from the serverPartyInfo snapshot captured at upload,
+    // or from cachedUserInfo when the receipt side is this device.
   }
 
   // =========================
