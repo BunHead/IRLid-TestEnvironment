@@ -1864,6 +1864,42 @@ button.theme-preview-button:focus-visible {
 .theme-anim-panel[data-cycle-mode="off"] [data-cycle-mode-hide="off"] { display: none; }
 /* End mode-aware visibility */
 
+.celebration-text-burst {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  max-width: min(88%, 720px);
+  padding: 0.18em 0.46em;
+  border-radius: 10px;
+  color: #ffffff;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.62), 0 0 22px currentColor;
+  background: rgba(5, 10, 20, 0.28);
+  border: 1px solid rgba(255,255,255,0.26);
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.88);
+  opacity: 0;
+  animation: celebrationTextPop var(--theme-cycle-anim-duration, 1.4s) ease-out 1;
+}
+.celebration-text-burst.accept { color: var(--theme-cycle-4, #34C759); }
+.celebration-text-burst.deny { color: #ff6b6b; animation-duration: 0.9s; }
+.celebration-text-burst.pos-top { top: 18%; }
+.celebration-text-burst.pos-center { top: 50%; }
+.celebration-text-burst.pos-bottom { top: 82%; }
+.celebration-text-burst.size-small { font-size: clamp(18px, 3.5vmin, 42px); }
+.celebration-text-burst.size-medium { font-size: clamp(28px, 5.6vmin, 68px); }
+.celebration-text-burst.size-large { font-size: clamp(38px, 7.8vmin, 96px); }
+@keyframes celebrationTextPop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.78); filter: blur(2px); }
+  18% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); filter: blur(0); }
+  62% { opacity: 0.96; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.12); }
+}
+
 /* Background animation — continuous subtle glow on QR boxes when enabled */
 @keyframes themeBackgroundCycle {
   0%   { box-shadow: 0 0 0 0 rgba(0,0,0,0), 0 0 14px 2px var(--theme-cycle-1, var(--theme-primary)); }
@@ -3008,6 +3044,33 @@ body #venueQRWrap.cycle-burst-pattern {
                         <span>Quick (0.5s)</span>
                         <span>Slow (5s)</span>
                       </div>
+                    </div>
+                    <div class="settings-grid settings-grid-3" data-cycle-mode-hide="off">
+                      <label class="settings-field">
+                        <span>Text template</span>
+                        <select id="themeCelebrationTextTemplate">
+                          <option value="none">None</option>
+                          <option value="outcome">Outcome</option>
+                          <option value="checked_in">Checked in</option>
+                          <option value="welcome">Welcome</option>
+                        </select>
+                      </label>
+                      <label class="settings-field">
+                        <span>Text position</span>
+                        <select id="themeCelebrationTextPosition">
+                          <option value="top">Top</option>
+                          <option value="center">Centre</option>
+                          <option value="bottom">Bottom</option>
+                        </select>
+                      </label>
+                      <label class="settings-field">
+                        <span>Text size</span>
+                        <select id="themeCelebrationTextSize">
+                          <option value="small">Small</option>
+                          <option value="medium">Medium</option>
+                          <option value="large">Large</option>
+                        </select>
+                      </label>
                     </div>
                     <button type="button" class="btn btn-secondary btn-sm" id="themePreviewAcceptCycle" data-cycle-mode-hide="off">Preview celebration</button>
                   </div>
@@ -7357,7 +7420,10 @@ const THEME_DEFAULTS = {
   bgImageAlphaCycle: false,
   cycleMode: 'glow',         // 'off' | 'page' | 'glow' | 'pattern' (Celebration; replaces legacy acceptCycleEnabled in 6.5f)
   bgAnimDuration: 30,        // seconds for one full background cycle (range 5..120)
-  cycleAnimDuration: 1.4     // seconds for one celebration burst (range 0.5..5)
+  cycleAnimDuration: 1.4,    // seconds for one celebration burst (range 0.5..5)
+  celebrationTextTemplate: 'outcome',
+  celebrationTextPosition: 'center',
+  celebrationTextSize: 'medium'
 };
 const PAGE_CYCLE_BASE = '#06070C';     // base canvas colour we blend palette into for muted page mode
 const PAGE_MUTED_RATIO = 0.18;          // 18% palette / 82% base — tinted but stays moody
@@ -7365,6 +7431,9 @@ const PAGE_VIBRANT_RATIO = 0.78;        // 78% palette / 22% base — saturated 
 const BG_PATTERNS = ['dots','hex','diag','checker','grid','weave','chevron','iso'];
 const BG_IMAGE_POSITIONS = ['centre','tile','cover','top','top-left','top-right','bottom','bottom-left','bottom-right','left','right']; // v5.7.1m.1 — added edge anchors top/bottom/left/right
 const BG_IMAGE_ANCHORS = ['outer','centre','inner'];
+const CELEBRATION_TEXT_TEMPLATES = ['none','outcome','checked_in','welcome'];
+const CELEBRATION_TEXT_POSITIONS = ['top','center','bottom'];
+const CELEBRATION_TEXT_SIZES = ['small','medium','large'];
 let activeTheme = { ...THEME_DEFAULTS, palette: [...THEME_DEFAULTS.palette], bgPalette: [...THEME_DEFAULTS.bgPalette] };
 let _iroPickers = { primary: null, accent: null, qrFg: null };
 
@@ -7396,6 +7465,9 @@ function normalizeThemeForSave(theme) {
     bgImageAnchor: BG_IMAGE_ANCHORS.indexOf(t.bgImageAnchor) !== -1 ? t.bgImageAnchor : THEME_DEFAULTS.bgImageAnchor,
     bgImageAlphaCycle: t.bgImageAlphaCycle === true,
     cycleMode: cycleMode,
+    celebrationTextTemplate: CELEBRATION_TEXT_TEMPLATES.indexOf(t.celebrationTextTemplate) !== -1 ? t.celebrationTextTemplate : THEME_DEFAULTS.celebrationTextTemplate,
+    celebrationTextPosition: CELEBRATION_TEXT_POSITIONS.indexOf(t.celebrationTextPosition) !== -1 ? t.celebrationTextPosition : THEME_DEFAULTS.celebrationTextPosition,
+    celebrationTextSize: CELEBRATION_TEXT_SIZES.indexOf(t.celebrationTextSize) !== -1 ? t.celebrationTextSize : THEME_DEFAULTS.celebrationTextSize,
     bgAnimDuration: typeof t.bgAnimDuration === 'number' ? t.bgAnimDuration : THEME_DEFAULTS.bgAnimDuration,
     cycleAnimDuration: typeof t.cycleAnimDuration === 'number' ? t.cycleAnimDuration : THEME_DEFAULTS.cycleAnimDuration
   };
@@ -7535,6 +7607,8 @@ function applyThemeVars(theme) {
   if (bgPanel) bgPanel.setAttribute('data-bg-mode', bgMode);
   const cyclePanel = document.getElementById('themeCycleAnimPanel');
   if (cyclePanel) cyclePanel.setAttribute('data-cycle-mode', theme.cycleMode || 'glow');
+  body.setAttribute('data-celebration-text-position', theme.celebrationTextPosition || THEME_DEFAULTS.celebrationTextPosition);
+  body.setAttribute('data-celebration-text-size', theme.celebrationTextSize || THEME_DEFAULTS.celebrationTextSize);
 
   // Batch 6.5f — write the dynamic pattern colour keyframe so patterns drift
   // through the bgPalette in sync with the cycle. CSS @property + JS-injected
@@ -7692,6 +7766,35 @@ function previewAcceptCycle() {
   triggerAcceptCycleAnimation();
 }
 
+function celebrationTextFor(kind) {
+  const template = (activeTheme && activeTheme.celebrationTextTemplate) || THEME_DEFAULTS.celebrationTextTemplate;
+  if (template === 'none') return '';
+  if (template === 'checked_in') return kind === 'deny' ? 'Denied' : 'Checked in';
+  if (template === 'welcome') return kind === 'deny' ? 'Try again' : 'Welcome';
+  return kind === 'deny' ? 'Denied' : 'Accepted';
+}
+
+function triggerCelebrationText(kind, targets, durationMs) {
+  const text = celebrationTextFor(kind);
+  if (!text) return;
+  const pos = CELEBRATION_TEXT_POSITIONS.indexOf(activeTheme.celebrationTextPosition) !== -1 ? activeTheme.celebrationTextPosition : THEME_DEFAULTS.celebrationTextPosition;
+  const size = CELEBRATION_TEXT_SIZES.indexOf(activeTheme.celebrationTextSize) !== -1 ? activeTheme.celebrationTextSize : THEME_DEFAULTS.celebrationTextSize;
+  targets.forEach(function (target) {
+    if (!target) return;
+    const cs = window.getComputedStyle(target);
+    if (cs.position === 'static') target.style.position = 'relative';
+    const existing = Array.from(target.children || []).find(function (child) {
+      return child.classList && child.classList.contains('celebration-text-burst');
+    });
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.className = 'celebration-text-burst ' + (kind === 'deny' ? 'deny' : 'accept') + ' pos-' + pos + ' size-' + size;
+    el.textContent = text;
+    target.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.remove(); }, durationMs || 1600);
+  });
+}
+
 function triggerAcceptCycleAnimation() {
   // Public hook — call this from check-in success paths to fire the celebration.
   // Batch 6.5f — branches on cycleMode rather than acceptCycleEnabled boolean.
@@ -7712,6 +7815,7 @@ function triggerAcceptCycleAnimation() {
       document.querySelector('.scan-panel'),
       document.querySelector('.irlid-qr-fullscreen.active .irlid-qr-fullscreen-holder')
     ].filter(Boolean);
+    triggerCelebrationText('accept', candidates, ms);
     candidates.forEach(function (el) {
       el.classList.remove('cycling');
       void el.offsetWidth;
@@ -7730,6 +7834,7 @@ function triggerAcceptCycleAnimation() {
     document.getElementById('venueQRWrap')
   ].filter(Boolean);
   const burstClass = 'cycle-burst-' + mode; // 'cycle-burst-page' or 'cycle-burst-pattern'
+  triggerCelebrationText('accept', canvasTargets, ms);
   canvasTargets.forEach(function (el) {
     el.classList.remove(burstClass);
     void el.offsetWidth;
@@ -7784,6 +7889,9 @@ function writeThemeToUI() {
   // Batch 6.5f — Celebration Mode select replaces the old Enabled checkbox.
   const cycleModeEl = document.getElementById('themeCycleMode');
   if (cycleModeEl) cycleModeEl.value = activeTheme.cycleMode || 'glow';
+  setVal('themeCelebrationTextTemplate', activeTheme.celebrationTextTemplate || THEME_DEFAULTS.celebrationTextTemplate);
+  setVal('themeCelebrationTextPosition', activeTheme.celebrationTextPosition || THEME_DEFAULTS.celebrationTextPosition);
+  setVal('themeCelebrationTextSize', activeTheme.celebrationTextSize || THEME_DEFAULTS.celebrationTextSize);
   const modeRadios = document.querySelectorAll('input[name="themeMode"]');
   const v = activeTheme.darkMode === 'auto' ? 'auto' : (activeTheme.darkMode ? 'dark' : 'light');
   modeRadios.forEach(function (r) { r.checked = (r.value === v); });
@@ -7877,6 +7985,20 @@ function wireThemePanel() {
   // Toasts surface what changed since the change is now visible AT the buttons
   // (4-quad layout puts both palette and animation panels on each side of the
   // duplicators, so the visual feedback is co-located with the action).
+  [
+    ['themeCelebrationTextTemplate', 'celebrationTextTemplate', CELEBRATION_TEXT_TEMPLATES],
+    ['themeCelebrationTextPosition', 'celebrationTextPosition', CELEBRATION_TEXT_POSITIONS],
+    ['themeCelebrationTextSize', 'celebrationTextSize', CELEBRATION_TEXT_SIZES]
+  ].forEach(function (cfg) {
+    const el = document.getElementById(cfg[0]);
+    if (!el) return;
+    el.addEventListener('change', function (e) {
+      const v = e.target.value;
+      activeTheme[cfg[1]] = cfg[2].indexOf(v) !== -1 ? v : THEME_DEFAULTS[cfg[1]];
+      applyThemeVars(activeTheme);
+    });
+  });
+
   const dupBgToCel = document.getElementById('themeDupBgToCel');
   if (dupBgToCel) dupBgToCel.addEventListener('click', function () {
     activeTheme.cycleMode = ['off','page','glow','pattern'].indexOf(activeTheme.bgMode) !== -1 ? activeTheme.bgMode : 'glow';
