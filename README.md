@@ -1,5 +1,15 @@
 # IRLid TestEnvironment
 
+> **RETIRED TEST SITE (12 Nov 2026). Do not add real people here.**
+> A person added here ended up on a live organisation's dashboard: the
+> orange staff QR opened live `irlid.co.uk/scan.html`, which hands staff
+> scans to the live dashboard. `org-entry.html` now keeps that QR on this
+> site, and every page shows a red "OLD TEST SITE" bar. Sign-in still goes
+> through live `irlid.co.uk/org-login.html` (passkeys are tied to
+> irlid.co.uk) but posts only to `irlid-api-test`.
+> The replacement is the staging setup in `BunHead/IRLid`
+> (`docs/test-environment.md`).
+
 ## What This Is
 
 This repository is the IRLid test environment for trying website, organisation portal, and Worker changes before they affect the production project. The live static frontend is published from `BunHead/IRLid-TestEnvironment` to GitHub Pages, and the test backend is the `irlid-api-test` Cloudflare Worker. That Worker uses the test D1 database configured in `irlid-api/wrangler.toml`, with database id `b7d7ccc9-a7b9-46e6-8690-385545d547f1`.
