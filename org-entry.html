@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script src="js/test-env-banner.js"></script><!-- 12 Nov 2026: OLD TEST SITE bar -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -700,7 +701,12 @@
 	}
 
   function scanUrlBase() {
-    return "https://irlid.co.uk/scan.html";
+    // 12 Nov 2026 — was "https://irlid.co.uk/scan.html" (LIVE). A staff phone
+    // that scanned this orange QR landed on live scan.html, which hands the
+    // scan to the LIVE dashboard and checks the person in to the org open
+    // there. That put a test person on a live org. Now it stays on this test
+    // site. Staff process it with OrgCheckin.html's "Process attendee scan".
+    return new URL("scan.html", location.href).href;
   }
 
   function returnTargetFor(state) {

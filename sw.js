@@ -12,12 +12,13 @@
 // this any time HTML/JS changes need to be guaranteed-fresh on phones.
 // Also: switched HTML strategy to network-first below so this manual
 // bump is the *backstop*, not the only path to a fresh shell.
-const CACHE_VERSION = 'irlid-shell-v2';
+const CACHE_VERSION = 'irlid-shell-v3'; // 12 Nov 2026: orange QR stays on the test site; OLD TEST SITE bar (js/test-env-banner.js)
 
 // Static shell assets — pre-cached on first install. Same-origin only.
 const SHELL_ASSETS = [
   './OrgCheckin.html',
   './org-entry.html',
+  './js/test-env-banner.js',
   './js/orgapi.js',
   './js/qr-fullscreen.js',
   './js/sign.js',
